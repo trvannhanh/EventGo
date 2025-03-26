@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
-from .models import Category, Event
+from .models import *
 from django import forms
 from ckeditor_uploader.widgets import CKEditorUploadingWidget
 
@@ -15,9 +15,9 @@ class EventForm(forms.ModelForm):
 
 #tùy chỉnh phân hệ admin ( bổ sung thêm các tùy chỉnh khác sau này)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ["id", "event_name", "created_date"] #chỉ định các thuộc tính muốn hiển thị
-    search_fields = ["event_name"] # chỉ định các trường dùng để tra cứu
-    list_filter = ['id', 'created_date', 'event_name'] #tạo các bộ lọc
+    list_display = ["id", "name"] #chỉ định các thuộc tính muốn hiển thị
+    search_fields = ["name"] # chỉ định các trường dùng để tra cứu
+    list_filter = ['id', 'name'] #tạo các bộ lọc
     readonly_fields = ['my_image']
     form = EventForm
 
@@ -32,5 +32,5 @@ class EventAdmin(admin.ModelAdmin):
         }
         js = ('/static/js/script.js', )
 
-admin.site.register(Category)
+
 admin.site.register(Event, EventAdmin)
