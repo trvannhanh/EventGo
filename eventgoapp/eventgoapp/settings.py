@@ -37,7 +37,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'events.apps.EventsConfig',
+    'ckeditor',
+    'ckeditor_uploader',
 ]
+
+CKEDITOR_UPLOAD_PATH = 'ckeditor/images/'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -49,7 +54,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+AUTH_USER_MODEL = 'events.User'
+
 ROOT_URLCONF = 'eventgoapp.urls'
+
+MEDIA_ROOT = f'{BASE_DIR}/events/static/'
 
 TEMPLATES = [
     {
@@ -75,8 +84,11 @@ WSGI_APPLICATION = 'eventgoapp.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'eventdb',
+        'USER': 'root',
+        'PASSWORD': 'Admin@123',
+        'HOST': '',
     }
 }
 
