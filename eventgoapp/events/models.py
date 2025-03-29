@@ -4,12 +4,12 @@ from ckeditor.fields import RichTextField
 from django.utils.timezone import now
 
 class User(AbstractUser):
-    ROLE_CHOICES = [
-        ('admin', 'Admin'),
-        ('organizer', 'Organizer'),
-        ('attendee', 'Attendee'),
-    ]
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='attendee')
+    class Role(models.TextChoices):
+        ADMIN = 'admin', 'Admin'
+        ORGANIZER = 'organizer', 'Organizer'
+        ATTENDEE = 'attendee', 'Attendee'
+
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.ATTENDEE)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
@@ -25,35 +25,49 @@ class User(AbstractUser):
 
 class BaseModel(models.Model):
     active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(default=now, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         abstract = True
         ordering = ['-created_at']
 
+class EventCategory(BaseModel):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Event Category"
+        verbose_name_plural = "Event Categories"
+        ordering = ['name']
+
 class Event(BaseModel):
-    EVENT_TYPES = [
-        ('music', 'Music'),
-        ('conference', 'Conference'),
-        ('sports', 'Sports'),
-        ('workshop', 'Workshop'),
-    ]
+    class EventStatus(models.TextChoices):
+        UPCOMING = 'upcoming', 'Upcoming'
+        ONGOING = 'ongoing', 'Ongoing'
+        COMPLETED = 'completed', 'Completed'
+        CANCELED = 'canceled', 'Canceled'
+
     organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True)
+    category = models.ForeignKey(EventCategory, on_delete=models.SET_NULL, null=True, related_name='events')
     name = models.CharField(max_length=100, unique=True, null=True)
     description = RichTextField(blank=True, null=True)
     date = models.DateTimeField(default=now)
     location = models.CharField(max_length=255, blank=True, null=True)
     google_maps_link = models.URLField(blank=True, null=True)
     ticket_limit = models.PositiveIntegerField(null=True)
-    event_type = models.CharField(max_length=20, choices=EVENT_TYPES, default='music') 
+    status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.UPCOMING)
     image = models.ImageField(upload_to='events/%Y/%m/%d/', blank=True, null=True)
 
     def __str__(self):
-        return f"{self.name}"
+        return self.name
 
     class Meta:
-        unique_together = ('name', 'event_type')
+        constraints = [
+            models.UniqueConstraint(fields=['name', 'date'], name='unique_event_name_date')
+        ]
         verbose_name = "Event"
         verbose_name_plural = "Events"
         ordering = ['date']
@@ -74,21 +88,21 @@ class Ticket(BaseModel):
 
 
 class Order(BaseModel):
-    PAYMENT_STATUS = [
-        ('pending', 'Pending'),
-        ('paid', 'Paid'),
-        ('failed', 'Failed'),
-    ]
-    PAYMENT_METHOD = [
-        ('MoMo', 'MoMo'),
-        ('VNPAY', 'VNPAY'),
-        ('credit_card', 'Credit Card'),
-    ]
+    class PaymentStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        PAID = 'paid', 'Paid'
+        FAILED = 'failed', 'Failed'
+
+    class PaymentMethod(models.TextChoices):
+        MOMO = 'MoMo', 'MoMo'
+        VNPAY = 'VNPAY', 'VNPAY'
+        CREDIT_CARD = 'credit_card', 'Credit Card'
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     tickets = models.ManyToManyField(Ticket, through='OrderDetail')
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS, default='pending')
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD)
+    payment_status = models.CharField(max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices)
 
     def __str__(self):
         return f"Order #{self.id} by {self.user.username}"
