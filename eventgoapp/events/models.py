@@ -10,7 +10,6 @@ class User(AbstractUser):
         ATTENDEE = 'attendee', 'Attendee'
 
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.ATTENDEE)
-    email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     avatar = models.ImageField(upload_to='users/%Y/%m/%d/', blank=True, null=True)

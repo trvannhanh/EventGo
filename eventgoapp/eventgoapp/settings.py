@@ -9,8 +9,11 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-
+import os
 from pathlib import Path
+
+import oauth2_provider.contrib.rest_framework
+from oauth2_provider.contrib import rest_framework
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,7 +43,33 @@ INSTALLED_APPS = [
     'events.apps.EventsConfig',
     'ckeditor',
     'ckeditor_uploader',
+    'rest_framework', #29/3
+    'oauth2_provider' #29/3
 ]
+
+#29/3
+# không thể dùng email vì không có money mua gg cloud tạo API
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'trvannhanh@gmail.com'
+# EMAIL_HOST_PASSWORD = '@Giidavibe2004'
+
+#Lỗi r đau đầu quá đ chạy đc
+# # Dùng Mailgun thay vì
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.mailgun.org'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'postmaster@sandbox9870d6bed4c74fe084eb0ba5d3ed2721.mailgun.org'  # Thay bằng tài khoản Mailgun của bạn
+# EMAIL_HOST_PASSWORD = '@Giidavibe2004'  # Thay bằng mật khẩu Mailgun
+# DEFAULT_FROM_EMAIL = 'trvannhanh@gmail.com'  # Địa chỉ email gửi
+
+#29/3
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['oauth2_provider.contrib.rest_framework.OAuth2Authentication']
+}
 
 CKEDITOR_UPLOAD_PATH = 'ckeditor/images/'
 
@@ -133,3 +162,8 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+#29/3
+CLIENT_ID = 'LugOVBYQ40AG5gX2rZLrJ06QwMfURLu53KMZ5uUR'
+CLIENT_SECRET = 'UhLGgZO3EUw2TjWsTH9pj0ZIghx4geIwIcQX3dBe7BJaCwMkVgZJEKKEKcbhWyDOcm1fDnGowDdAo086zXO1wtEIVAuwmbtiH6sWwRBVPYxJ0c3U8wuYtriI8ZjoklAM'
