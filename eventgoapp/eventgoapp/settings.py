@@ -47,6 +47,24 @@ INSTALLED_APPS = [
     'oauth2_provider' #29/3
 ]
 
+#29/3
+# không thể dùng email vì không có money mua gg cloud tạo API
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'trvannhanh@gmail.com'
+# EMAIL_HOST_PASSWORD = '@Giidavibe2004'
+
+#Lỗi r đau đầu quá đ chạy đc
+# # Dùng Mailgun thay vì
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.mailgun.org'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'postmaster@sandbox9870d6bed4c74fe084eb0ba5d3ed2721.mailgun.org'  # Thay bằng tài khoản Mailgun của bạn
+# EMAIL_HOST_PASSWORD = '@Giidavibe2004'  # Thay bằng mật khẩu Mailgun
+# DEFAULT_FROM_EMAIL = 'trvannhanh@gmail.com'  # Địa chỉ email gửi
 
 #29/3
 REST_FRAMEWORK = {
