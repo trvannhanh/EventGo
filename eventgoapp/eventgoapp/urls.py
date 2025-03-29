@@ -20,5 +20,6 @@ from django.urls import path, include, re_path
 urlpatterns = [
     path('', include('events.urls')),
     path('admin/', admin.site.urls),
-    re_path(r'^ckeditor/', include('ckeditor_uploader.urls'))
+    re_path(r'^ckeditor/', include('ckeditor_uploader.urls')),
+    path('o/', include('oauth2_provider.urls')) #29/3
 ]
