@@ -9,13 +9,18 @@ from django.core.mail import send_mail
 
 
 from events.models import User
-from events.serializers import UserSerializer, ForgotPasswordSerializer, ResetPasswordSerializer
+from events.serializers import UserSerializer
 
 #29/3
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
     parser_classes = [parsers.MultiPartParser]
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.IsAdminUser()]  # Chỉ Admin có thể xem danh sách Users
+        return [permissions.AllowAny()]  # Ai cũng có thể đăng ký
 
     @action(methods=['get'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
