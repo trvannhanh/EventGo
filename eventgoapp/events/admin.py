@@ -22,7 +22,7 @@ class EventAdmin(admin.ModelAdmin):
     form = EventForm
 
     def my_image(self, event):
-        if event.image:
+        if event:
             return mark_safe(f"<img src='/static/{event.image.name}' width='120'/>")
 
     class Media:
