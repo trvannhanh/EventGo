@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'ckeditor_uploader',
     'rest_framework', #29/3
     'oauth2_provider', #29/3
+    'corsheaders', #1/4
     #30/3
     'django.contrib.sites',  # Bắt buộc cho allauth
     'allauth',
@@ -118,7 +119,9 @@ REST_FRAMEWORK = {
 
 CKEDITOR_UPLOAD_PATH = 'ckeditor/images/'
 
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', #đặt ở đầu để kiểm tra domain trước
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -129,6 +132,8 @@ MIDDLEWARE = [
 
     'allauth.account.middleware.AccountMiddleware',
 ]
+
+CORS_ALLOWED_ALL_ORIGINS = True #cho phép hết (ALL)
 
 AUTH_USER_MODEL = 'events.User'
 

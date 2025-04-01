@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from events.models import User
+from events.models import User, Event, Ticket, Order, OrderDetail
+
 
 #29/3
 class UserSerializer(serializers.ModelSerializer):
@@ -41,3 +42,36 @@ class UserSerializer(serializers.ModelSerializer):
 #         if data['new_password'] != data['confirm_password']:
 #             raise serializers.ValidationError("Mật khẩu không khớp.")
 #         return data
+
+
+class EventSerializer(serializers.ModelSerializer):
+    """Serializer cho sự kiện"""
+    class Meta:
+        model = Event
+        fields = ['id', 'name', 'category', 'date', 'location', 'status']
+
+class TicketSerializer(serializers.ModelSerializer):
+    """Serializer cho vé sự kiện"""
+    event = EventSerializer(read_only=True)
+
+    class Meta:
+        model = Ticket
+        fields = ['id', 'event', 'type', 'price', 'quantity']
+
+class OrderDetailSerializer(serializers.ModelSerializer):
+    """Serializer chi tiết đơn hàng"""
+    ticket = TicketSerializer(read_only=True)
+
+    class Meta:
+        model = OrderDetail
+        fields = ['id', 'ticket', 'quantity', 'qr_code']
+
+class OrderSerializer(serializers.ModelSerializer):
+    """Serializer đơn hàng"""
+
+    user = serializers.StringRelatedField(read_only=True)  # Hiển thị username thay vì ID
+    details = OrderDetailSerializer(source='order_details', many=True, read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ['id', 'user', 'total_amount', 'payment_method', 'payment_status', 'created_at', 'details']
