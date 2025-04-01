@@ -44,8 +44,54 @@ INSTALLED_APPS = [
     'ckeditor',
     'ckeditor_uploader',
     'rest_framework', #29/3
-    'oauth2_provider' #29/3
+    'oauth2_provider', #29/3
+    'corsheaders', #1/4
+    #30/3
+    'django.contrib.sites',  # Bắt buộc cho allauth
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 ]
+
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'events', 'static'),  # Chỉ định đúng đường dẫn
+]
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Cấu hình URL chuyển hướng sau khi đăng nhập thành công
+LOGIN_REDIRECT_URL = '/'
+
+# Cấu hình URL chuyển hướng sau khi đăng xuất
+LOGOUT_REDIRECT_URL = '/'
+
+#30/3
+SITE_ID = 1
+
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+)
+
+#Tạm thời tắt đi
+# OAUTH2_PROVIDER = {
+#     'ACCESS_TOKEN_EXPIRE_SECONDS': 3600,  # Token hết hạn sau 1 giờ
+# }
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP': {
+            'client_id': '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com',
+            'secret': '<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>',
+            'key': '',
+        }
+    }
+}
+
+ACCOUNT_LOGIN_METHODS = {'email', 'username'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+ACCOUNT_EMAIL_VERIFICATION = "optional"
 
 #29/3
 # không thể dùng email vì không có money mua gg cloud tạo API
@@ -73,7 +119,9 @@ REST_FRAMEWORK = {
 
 CKEDITOR_UPLOAD_PATH = 'ckeditor/images/'
 
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', #đặt ở đầu để kiểm tra domain trước
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -81,7 +129,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+
+    'allauth.account.middleware.AccountMiddleware',
 ]
+
+CORS_ALLOWED_ALL_ORIGINS = True #cho phép hết (ALL)
 
 AUTH_USER_MODEL = 'events.User'
 
@@ -167,3 +219,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #29/3
 CLIENT_ID = 'LugOVBYQ40AG5gX2rZLrJ06QwMfURLu53KMZ5uUR'
 CLIENT_SECRET = 'UhLGgZO3EUw2TjWsTH9pj0ZIghx4geIwIcQX3dBe7BJaCwMkVgZJEKKEKcbhWyDOcm1fDnGowDdAo086zXO1wtEIVAuwmbtiH6sWwRBVPYxJ0c3U8wuYtriI8ZjoklAM'
+
+GOOGLE_CLIENT_ID = '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com'
+GOOGLE_CLIENT_SECRET = '<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>'
+
+
+# https://accounts.google.com/o/oauth2/auth?
+# client_id=782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com&
+# redirect_uri=http://localhost:8000/auth/complete/google/&
+# response_type=code&
+# scope=email%20profile&
+# access_type=offline
