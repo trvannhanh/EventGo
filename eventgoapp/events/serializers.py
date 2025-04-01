@@ -3,8 +3,6 @@ from rest_framework import serializers
 from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory, Review, Notification, Discount
 
 
-#29/3
-User = get_user_model() #30/3
 class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
