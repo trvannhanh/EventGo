@@ -1,9 +1,10 @@
 from rest_framework import serializers
 
-from events.models import User, Event, Ticket, Order, OrderDetail
+from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory, Review, Notification, Discount
 
 
 #29/3
+User = get_user_model() #30/3
 class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
@@ -16,13 +17,14 @@ class UserSerializer(serializers.ModelSerializer):
 
         # băm mật khẩu ra trước khi lên api xử lý
         u = User(**validated_data)
-        u.set_password(u.password)
+        u.set_password(validated_data['password'])
         u.save()
 
         return u
 
     class Meta:
         model = User
+        
         fields = ["id", "username", "email", "password", "role", "phone", "address", "avatar"]
         extra_kwargs = {'password': {'write_only': True}}
 
@@ -43,12 +45,18 @@ class UserSerializer(serializers.ModelSerializer):
 #             raise serializers.ValidationError("Mật khẩu không khớp.")
 #         return data
 
+class EventCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EventCategory
+        fields = '__all__'
 
 class EventSerializer(serializers.ModelSerializer):
-    """Serializer cho sự kiện"""
+    organizer = UserSerializer(read_only=True)
+    category = EventCategorySerializer(read_only=True)
+
     class Meta:
         model = Event
-        fields = ['id', 'name', 'category', 'date', 'location', 'status']
+        fields = '__all__'
 
 class TicketSerializer(serializers.ModelSerializer):
     """Serializer cho vé sự kiện"""

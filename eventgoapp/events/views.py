@@ -10,9 +10,8 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from unicodedata import category
 
-from events.models import User, Event, Ticket, Order, OrderDetail
-from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer
-
+from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory
+from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, EventCategorySerializer
 
 #29/3
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
@@ -28,7 +27,8 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     @action(methods=['get'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
-
+    
+    
 #     @action(methods=['post'], url_path='forgot-password', detail=False)
 #     def forgot_password(self, request):
 #         """ Xử lý quên mật khẩu: Gửi email chứa link reset """
@@ -84,9 +84,16 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
 #     )
 
 class EventViewSet(viewsets.ModelViewSet):
-    queryset = Event.objects.all()
+    queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+#     def get_queryset(self): 
+#         queryset = self.queryset
+#         search = self.request.query_params.get('search', None)
+#         if search:
+#             queryset = queryset.filter(name__icontains=search)
+#         return queryset
 
 class BookingViewSet(viewsets.ViewSet):
 
@@ -144,3 +151,24 @@ class BookingViewSet(viewsets.ViewSet):
             ticket.save()
 
         return Response(OrderSerializer(order).data ,status=status.HTTP_201_CREATED)
+      
+      
+# class EventCategoryViewSet(viewsets.ModelViewSet):
+#     queryset = EventCategory.objects.filter(active=True)
+#     serializer_class = EventCategorySerializer
+#     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+#     def get_queryset(self):
+#         queryset = self.queryset
+#         search = self.request.query_params.get('search', None)
+#         if search:
+#             queryset = queryset.filter(name__icontains=search)
+#         return queryset
+
+#     # API để lấy danh sách sự kiện thuộc danh mục
+#     @action(methods=['get'], detail=True, url_path='events')
+#     def get_events(self, request, pk=None):
+#         category = self.get_object()
+#         events = category.events.filter(active=True)  # Lọc các event còn hoạt động
+#         serializer = EventSerializer(events, many=True)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
