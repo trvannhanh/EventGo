@@ -1,15 +1,18 @@
+from django.db import transaction
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+from unicodedata import category
 
+from events.models import User, Event, Ticket, Order, OrderDetail
+from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer
 
-from events.models import User
-from events.serializers import UserSerializer
 
 #29/3
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
@@ -79,3 +82,65 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
 #         ['trvannhanh@gmail.com'],  # Địa chỉ email nhận
 #         fail_silently=False,
 #     )
+
+class EventViewSet(viewsets.ModelViewSet):
+    queryset = Event.objects.all()
+    serializer_class = EventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class BookingViewSet(viewsets.ViewSet):
+
+    @action(methods=['get'], url_path='search-events', detail=False)
+    def search_events(self, request):
+        category = request.query_params.get('category')
+        if not category:
+            return Response({"error": "Vui lòng cung cấp category"}, status=status.HTTP_400_BAD_REQUEST)
+
+        events = Event.objects.filter(category__name__icontains=category, status=Event.EventStatus.UPCOMING) #Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
+        serializer = EventSerializer(events, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['get'], url_path='tickets', detail=True) #Nếu detail=False, URL sẽ là /booking/tickets/ (không cần id sự kiện).
+    def get_tickets(self, request, pk=None): #pk là id của sự kiện
+        event = get_object_or_404(Event, id=pk) # Tìm sự kiện theo id, nếu không có thì báo lỗi 404.
+        tickets = Ticket.objects.filter(event=event)
+        serializer = TicketSerializer(tickets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['post'], url_path='book-ticket', permission_classes=[permissions.IsAuthenticated], detail=False)
+    def book_ticket(self, request):
+        user = request.user
+        event_id = request.data.get('event_id')
+        ticket_id = request.data.get('ticket_id')
+        quantity = int(request.data.get('quantity', 1))
+        payment_method = request.data.get('payment_method')
+
+        if not all([event_id, ticket_id, quantity, payment_method]):
+            return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
+
+        event = get_object_or_404(Event, id=event_id)
+        ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
+
+        if ticket.quantity < quantity:
+            return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        total_price = ticket.price * quantity
+
+        with transaction.atomic():
+            order = Order.objects.create(
+                user=user,
+                total_amount=total_price,
+                payment_status=Order.PaymentStatus.PENDING,
+                payment_method=payment_method
+            )
+            OrderDetail.objects.create(
+                order=order,
+                ticket=ticket,
+                quantity=quantity,
+                qr_code=f"QR_{order.id}_{ticket.id}"
+            )
+
+            ticket.quantity -= quantity
+            ticket.save()
+
+        return Response(OrderSerializer(order).data ,status=status.HTTP_201_CREATED)
