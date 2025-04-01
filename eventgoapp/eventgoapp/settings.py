@@ -53,7 +53,10 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.google',
 ]
 
-STATICFILES_DIRS = [BASE_DIR / "static"]
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'events', 'static'),  # Chỉ định đúng đường dẫn
+]
+
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Cấu hình URL chuyển hướng sau khi đăng nhập thành công
@@ -85,8 +88,8 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-ACCOUNT_AUTHENTICATION_METHOD = "username_email"
-ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {'email', 'username'}
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = "optional"
 
 #29/3

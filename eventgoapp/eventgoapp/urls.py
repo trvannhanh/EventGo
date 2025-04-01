@@ -23,4 +23,5 @@ urlpatterns = [
     re_path(r'^ckeditor/', include('ckeditor_uploader.urls')),
     path('o/', include('oauth2_provider.urls')), #29/3
     path('accounts/', include('allauth.urls')),
+    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
 ]
