@@ -8,12 +8,19 @@ from rest_framework.response import Response
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+from rest_framework.utils.mediatypes import order_by_precedence
 from unicodedata import category
+import json
+import requests
+import hashlib
+import hmac
 
 from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory
-from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, EventCategorySerializer
+from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
+    EventCategorySerializer
 
-#29/3
+
+# 29/3
 class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
@@ -27,8 +34,8 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     @action(methods=['get'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
-    
-    
+
+
 #     @action(methods=['post'], url_path='forgot-password', detail=False)
 #     def forgot_password(self, request):
 #         """ Xử lý quên mật khẩu: Gửi email chứa link reset """
@@ -87,7 +94,8 @@ class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+
+
 #     def get_queryset(self): 
 #         queryset = self.queryset
 #         search = self.request.query_params.get('search', None)
@@ -103,13 +111,15 @@ class BookingViewSet(viewsets.ViewSet):
         if not category:
             return Response({"error": "Vui lòng cung cấp category"}, status=status.HTTP_400_BAD_REQUEST)
 
-        events = Event.objects.filter(category__name__icontains=category, status=Event.EventStatus.UPCOMING) #Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
+        events = Event.objects.filter(category__name__icontains=category,
+                                      status=Event.EventStatus.UPCOMING)  # Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
         serializer = EventSerializer(events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(methods=['get'], url_path='tickets', detail=True) #Nếu detail=False, URL sẽ là /booking/tickets/ (không cần id sự kiện).
-    def get_tickets(self, request, pk=None): #pk là id của sự kiện
-        event = get_object_or_404(Event, id=pk) # Tìm sự kiện theo id, nếu không có thì báo lỗi 404.
+    @action(methods=['get'], url_path='tickets',
+            detail=True)  # Nếu detail=False, URL sẽ là /booking/tickets/ (không cần id sự kiện).
+    def get_tickets(self, request, pk=None):  # pk là id của sự kiện
+        event = get_object_or_404(Event, id=pk)  # Tìm sự kiện theo id, nếu không có thì báo lỗi 404.
         tickets = Ticket.objects.filter(event=event)
         serializer = TicketSerializer(tickets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -126,6 +136,8 @@ class BookingViewSet(viewsets.ViewSet):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
 
         event = get_object_or_404(Event, id=event_id)
+        if event.status != Event.EventStatus.UPCOMING:
+            return Response({"error": "Sự kiện không khả dụng để đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
         ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
 
         if ticket.quantity < quantity:
@@ -150,9 +162,88 @@ class BookingViewSet(viewsets.ViewSet):
             ticket.quantity -= quantity
             ticket.save()
 
-        return Response(OrderSerializer(order).data ,status=status.HTTP_201_CREATED)
-      
-      
+        momo_response = self.create_momo_qr(order)
+        if "error" in momo_response or "qrCodeUrl" not in momo_response:
+            return Response({
+                "error": "Không thể tạo QR thanh toán MoMo",
+                "momo_response": momo_response
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "order": OrderSerializer(order).data,
+            "qrCodeUrl": momo_response["qrCodeUrl"],
+            "payUrl": momo_response["payUrl"]
+        }, status=status.HTTP_201_CREATED)
+
+    def create_momo_qr(self, order):
+        """ Hàm gọi API tạo QR MoMo """
+        order_id = f"ORDER_{order.user.id}_{order.id}"
+        request_id = f"REQ_{order_id}"
+        amount = int(order.total_amount)
+        order_info = f"Thanh toán đơn hàng {order_id}"
+
+        endpoint = "https://test-payment.momo.vn/v2/gateway/api/create"
+        partner_code = "MOMO"
+        access_key = "F8BBA842ECF85"
+        secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
+        redirect_url = "http://localhost:8000/payment-success"
+        ipn_url = "http://localhost:8000/payment-notify"
+
+        raw_data = f"accessKey={access_key}&amount={amount}&extraData=&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
+        signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
+
+        data = {
+            "partnerCode": partner_code,
+            "accessKey": access_key,
+            "requestId": request_id,
+            "amount": amount,
+            "orderId": order_id,
+            "orderInfo": order_info,
+            "redirectUrl": redirect_url,
+            "ipnUrl": ipn_url,
+            "lang": "vi",
+            "extraData": "",
+            "requestType": "captureWallet",
+            "signature": signature
+        }
+
+        response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'})
+        return response.json()
+
+
+
+class MoMoPaymentViewSet(viewsets.ViewSet):
+
+    @action(detail=False, methods=['post'], url_path='payment-notify')
+    def payment_notify(self, request):
+        """
+        API nhận thông báo thanh toán từ MoMo (IPN).
+        """
+        data = request.data
+        order_id = data.get("orderId")  # ID đơn hàng từ MoMo
+        request_id = data.get("requestId")
+        result_code = data.get("resultCode")  # Mã kết quả giao dịch (0: thành công)
+        message = data.get("message")
+
+        if not order_id or not request_id:
+            return Response({"error": "Dữ liệu không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Tìm đơn hàng theo order_id
+        order = Order.objects.filter(id=order_id.replace("ORDER_", "")).first()
+
+        if not order:
+            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Cập nhật trạng thái đơn hàng dựa vào result_code từ MoMo
+        if result_code == 0:
+            order.payment_status = Order.PaymentStatus.PAID
+            order.save()
+            return Response({"message": "Thanh toán thành công", "order_id": order.id}, status=status.HTTP_200_OK)
+        else:
+            order.payment_status = Order.PaymentStatus.FAILED
+            order.save()
+            return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
+
 # class EventCategoryViewSet(viewsets.ModelViewSet):
 #     queryset = EventCategory.objects.filter(active=True)
 #     serializer_class = EventCategorySerializer
