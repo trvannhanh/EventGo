@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from ckeditor.fields import RichTextField
 from django.utils.timezone import now
 
+
 class User(AbstractUser):
     class Role(models.TextChoices):
         ADMIN = 'admin', 'Admin'
@@ -117,6 +118,9 @@ class OrderDetail(BaseModel):
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
     qr_code = models.CharField(max_length=255, unique=True)
+    qr_image = models.ImageField(upload_to='tickets/%Y/%m/%d/', blank=True, null=True)
+    checked_in = models.BooleanField(default=False)
+    checkin_time = models.DateTimeField(null=True)
 
     def __str__(self):
         return f"Order #{self.order.id} - {self.ticket.type}"
