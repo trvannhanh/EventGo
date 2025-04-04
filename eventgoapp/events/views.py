@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from django.db import transaction
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
@@ -14,6 +16,7 @@ import json
 import requests
 import hashlib
 import hmac
+from .utils import generate_qr_image
 
 from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory
 from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
@@ -145,6 +148,23 @@ class BookingViewSet(viewsets.ViewSet):
 
         total_price = ticket.price * quantity
 
+        # with transaction.atomic():
+        #     order = Order.objects.create(
+        #         user=user,
+        #         total_amount=total_price,
+        #         payment_status=Order.PaymentStatus.PENDING,
+        #         payment_method=payment_method
+        #     )
+        #     OrderDetail.objects.create(
+        #         order=order,
+        #         ticket=ticket,
+        #         quantity=quantity,
+        #         qr_code=f"QR_{order.id}_{ticket.id}"
+        #     )
+        #
+        #     ticket.quantity -= quantity
+        #     ticket.save()
+
         with transaction.atomic():
             order = Order.objects.create(
                 user=user,
@@ -152,12 +172,18 @@ class BookingViewSet(viewsets.ViewSet):
                 payment_status=Order.PaymentStatus.PENDING,
                 payment_method=payment_method
             )
-            OrderDetail.objects.create(
+            qr_code = f"QR_{order.id}_{ticket.id}"
+            order_detail = OrderDetail.objects.create(
                 order=order,
                 ticket=ticket,
                 quantity=quantity,
-                qr_code=f"QR_{order.id}_{ticket.id}"
+                qr_code=qr_code
             )
+
+            # Tạo hình ảnh QR code và gán vào order_detail
+            qr_image = generate_qr_image(qr_code)
+            order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+            order_detail.save()
 
             ticket.quantity -= quantity
             ticket.save()
@@ -172,8 +198,29 @@ class BookingViewSet(viewsets.ViewSet):
         return Response({
             "order": OrderSerializer(order).data,
             "qrCodeUrl": momo_response["qrCodeUrl"],
-            "payUrl": momo_response["payUrl"]
+            "payUrl": momo_response["payUrl"],
+            "qr_image_url": request.build_absolute_uri(order_detail.qr_image.url)
         }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='checkin')
+    def checkin_by_qr(self, request):
+        qr_code = request.data.get('qr_code')
+        if not qr_code:
+            return Response({"error": "Thiếu mã QR"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order_detail = OrderDetail.objects.get(qr_code=qr_code)
+        except OrderDetail.DoesNotExist:
+            return Response({"error": "Không tìm thấy vé với mã QR này"}, status=status.HTTP_404_NOT_FOUND)
+
+        if order_detail.checked_in:
+            return Response({"message": "Vé đã được check-in trước đó"}, status=status.HTTP_200_OK)
+
+        order_detail.checked_in = True
+        order_detail.save()
+
+        return Response({"message": "Check-in thành công", "order_id": order_detail.order.id},
+                        status=status.HTTP_200_OK)
 
     def create_momo_qr(self, order):
         """ Hàm gọi API tạo QR MoMo """
@@ -209,6 +256,8 @@ class BookingViewSet(viewsets.ViewSet):
 
         response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'})
         return response.json()
+
+
 
 
 
@@ -263,3 +312,5 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
 #         events = category.events.filter(active=True)  # Lọc các event còn hoạt động
 #         serializer = EventSerializer(events, many=True)
 #         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
