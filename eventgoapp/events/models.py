@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from ckeditor.fields import RichTextField
 from django.utils.timezone import now
-
+from django.core.mail import send_mail
 
 class User(AbstractUser):
     class Role(models.TextChoices):
@@ -56,7 +56,7 @@ class Event(BaseModel):
     description = RichTextField(blank=True, null=True)
     date = models.DateTimeField(default=now)
     location = models.CharField(max_length=255, blank=True, null=True)
-    google_maps_link = models.URLField(blank=True, null=True)
+    google_maps_link = models.URLField(blank=True, null=True, max_length=1000)
     ticket_limit = models.PositiveIntegerField(null=True)
     status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.UPCOMING)
     image = models.ImageField(upload_to='events/%Y/%m/%d/', blank=True, null=True)
@@ -64,6 +64,30 @@ class Event(BaseModel):
     def __str__(self):
         return self.name
 
+    def send_notifications(self):
+        
+        attendees = OrderDetail.objects.filter(ticket__event=self, order__payment_status=Order.PaymentStatus.PAID).values_list('order__user', flat=True)
+        users = User.objects.filter(id__in=attendees)
+
+        for user in users:
+            # Send email notification
+            send_mail(
+                subject=f"Thông báo: Upcoming Event - {self.name}",
+                message=f"Gửi {user.username},\n\nMail này thông báo về sự kiện sắp diễn ra '{self.name}' diễn ra vào {self.date}.",
+                from_email="noreply@eventgoapp.com",
+                recipient_list=[user.email],
+                fail_silently=False,  
+            )
+
+            # Create a push notification
+            Notification.objects.create(
+                user=user,
+                event=self,
+                message=f"Reminder: The event '{self.name}' is happening soon!"
+            )
+        print(f"Created notifications for {len(users)} users.")
+    
+            
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['name', 'date'], name='unique_event_name_date')
@@ -86,7 +110,14 @@ class Ticket(BaseModel):
         verbose_name_plural = "Tickets"
         ordering = ['price']
 
-
+# def send_test_email():
+#         send_mail(
+#             subject='Test Email from SendGrid',
+#             message='This is a test email sent using SendGrid.',
+#             from_email='noreply@yourdomain.com',  # Replace with your sender email
+#             recipient_list=['recipient@example.com'],  # Replace with the recipient's email
+#             fail_silently=False,
+#         )
 class Order(BaseModel):
     class PaymentStatus(models.TextChoices):
         PENDING = 'pending', 'Pending'
