@@ -13,6 +13,9 @@ import os
 from pathlib import Path
 
 import oauth2_provider.contrib.rest_framework
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 from oauth2_provider.contrib import rest_framework
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -43,16 +46,25 @@ INSTALLED_APPS = [
     'events.apps.EventsConfig',
     'ckeditor',
     'ckeditor_uploader',
-    'rest_framework', #29/3
-    'oauth2_provider', #29/3
-    'corsheaders', #1/4
-    #30/3
+    'rest_framework',
+    'oauth2_provider',
+    'corsheaders',
     'django.contrib.sites',  # Bắt buộc cho allauth
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
+    'cloudinary',
+    'cloudinary_storage',
 ]
+
+
+cloudinary.config(
+    cloud_name='dqpkxxzaf',
+    api_key='948716666497639',
+    api_secret='VxK3FJQ_0HFa4UeMXYI0nfSIGko'
+)
+
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'events', 'static'),  # Chỉ định đúng đường dẫn
@@ -92,6 +104,8 @@ SOCIALACCOUNT_PROVIDERS = {
 ACCOUNT_LOGIN_METHODS = {'email', 'username'}
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = "optional"
+
+
 
 #29/3
 # không thể dùng email vì không có money mua gg cloud tạo API
@@ -133,7 +147,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
 ]
 
-CORS_ALLOWED_ALL_ORIGINS = True #cho phép hết (ALL)
+CORS_ALLOWED_ALL_ORIGINS = True #CORS cho phép hết (ALL)
 
 AUTH_USER_MODEL = 'events.User'
 
