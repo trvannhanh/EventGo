@@ -128,13 +128,14 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"
 # EMAIL_HOST_PASSWORD = '@Giidavibe2004'  # Thay bằng mật khẩu Mailgun
 # DEFAULT_FROM_EMAIL = 'trvannhanh@gmail.com'  # Địa chỉ email gửi
 
-EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
-SENDGRID_API_KEY = '<YOUR_SENDGRID_API_KEY>'  # Replace with your SendGrid API key
 
-# Optional settings
-SENDGRID_SANDBOX_MODE_IN_DEBUG = False  # Set to True to test emails in debug mode without actually sending them
-SENDGRID_ECHO_TO_STDOUT = True  # Print email content to the console in debug mode
-DEFAULT_FROM_EMAIL = 'noreply@yourdomain.com'  # Replace with your desired sender email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  
+EMAIL_PORT = 587  # Typically 587 for TLS
+EMAIL_USE_TLS = True  # Use TLS for secure connection
+EMAIL_HOST_USER = 'nhanhgon24@gmail.com'  
+EMAIL_HOST_PASSWORD = 'ozxs stip hhfs amtr'  
+DEFAULT_FROM_EMAIL = 'nhanhgon24@gmail.com'
 
 #29/3
 REST_FRAMEWORK = {
