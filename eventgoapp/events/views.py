@@ -1,6 +1,7 @@
 from datetime import timezone
 
 from django.db import transaction
+from django.utils.timezone import now
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
 from django.utils.http import urlsafe_base64_encode
@@ -17,6 +18,10 @@ import requests
 import hashlib
 import hmac
 from .utils import generate_qr_image
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from .recommendation_engine import RecommendationEngine
+
 
 from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
@@ -97,6 +102,20 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
 
+    def update_event_statuses(self, queryset):
+        """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
+        current_time = now()
+        # Cập nhật từ 'upcoming' sang 'completed' nếu đã qua
+        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(status=Event.EventStatus.COMPLETED)
+        # Cập nhật từ 'completed' sang 'upcoming' nếu còn trong tương lai (trường hợp hiếm)
+        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(status=Event.EventStatus.UPCOMING)
+        return queryset
+
+    def get_queryset(self):
+        """Trả về queryset với trạng thái đã được cập nhật."""
+        queryset = Event.objects.filter(active=True)
+        return self.update_event_statuses(queryset)
+
     @action(methods=['post'], url_path='create', detail=False)
     def create_event(self, request):
 
@@ -112,7 +131,14 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         serializer = EventSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        event = serializer.save()
+
+        # Cập nhật trạng thái ngay sau khi tạo
+        event.update_status()  # Nếu vẫn giữ method trong model, hoặc dùng logic dưới
+        current_time = now()
+        if event.date < current_time and event.status == Event.EventStatus.UPCOMING: #6/4
+            event.status = Event.EventStatus.COMPLETED
+            event.save(update_fields=['status'])
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -166,6 +192,22 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         reviews = Review.objects.filter(event=event)
         serializer = ReviewSerializer(reviews, many=True)
 
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['get'], url_path='recommended', detail=False, permission_classes=[IsAuthenticated])
+    def get_recommended_events(self, request):
+        user = request.user
+        if user.role != 'attendee':
+            return Response(
+                {"error": "Chỉ người tham gia (attendee) mới có thể xem sự kiện đề xuất."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Cập nhật trạng thái trước khi đề xuất
+        self.update_event_statuses(Event.objects.all())
+        engine = RecommendationEngine()
+        recommended_events = engine.ml_recommendation(user.id)
+        serializer = self.get_serializer(recommended_events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     
@@ -375,5 +417,4 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
 #         events = category.events.filter(active=True)  # Lọc các event còn hoạt động
 #         serializer = EventSerializer(events, many=True)
 #         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
