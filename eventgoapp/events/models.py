@@ -72,21 +72,23 @@ class Event(BaseModel):
 
         for user in users:
             # Send email notification
-            send_mail(
+            if send_mail(
                 subject=f"Thông báo: Upcoming Event - {self.name}",
                 message=f"Gửi {user.username},\n\nMail này thông báo về sự kiện sắp diễn ra '{self.name}' diễn ra vào {self.date}.",
-                from_email="noreply@eventgoapp.com",
+                from_email="nhanhgon24@gmail.com",
                 recipient_list=[user.email],
-                fail_silently=False,  
-            )
+                fail_silently=False,
+                
+            ): 
+                print(f"Email sent to {user.username} ({user.email})")
 
             # Create a push notification
-            Notification.objects.create(
+            if Notification.objects.create(
                 user=user,
                 event=self,
                 message=f"Reminder: The event '{self.name}' is happening soon!"
-            )
-        print(f"Created notifications for {len(users)} users.")
+            ):
+                print(f"Created notifications for {len(users)} users.")
     
             
     class Meta:
