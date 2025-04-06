@@ -65,6 +65,20 @@ class Event(BaseModel):
     def __str__(self):
         return self.name
 
+    def update_status(self):
+        """Cập nhật trạng thái sự kiện dựa trên thời gian hiện tại."""
+        current_time = now()
+        if self.date < current_time and self.status == self.EventStatus.UPCOMING:
+            self.status = self.EventStatus.COMPLETED
+        elif self.date > current_time and self.status == self.EventStatus.COMPLETED:
+            self.status = self.EventStatus.UPCOMING
+        self.save(update_fields=['status'])
+
+    def save(self, *args, **kwargs):
+        """Ghi đè save để tự động cập nhật trạng thái trước khi lưu."""
+        self.update_status()
+        super().save(*args, **kwargs)
+
     def send_notifications(self):
         
         attendees = OrderDetail.objects.filter(ticket__event=self, order__payment_status=Order.PaymentStatus.PAID).values_list('order__user', flat=True)
