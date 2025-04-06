@@ -18,8 +18,8 @@ import hashlib
 import hmac
 from .utils import generate_qr_image
 
-from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory
-from events.serializers import UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
+from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory
+from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
     EventCategorySerializer
 
 
@@ -93,19 +93,82 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
 #         fail_silently=False,
 #     )
 
-class EventViewSet(viewsets.ModelViewSet):
+class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
+    @action(methods=['post'], url_path='create', detail=False)
+    def create_event(self, request):
 
-#     def get_queryset(self): 
-#         queryset = self.queryset
-#         search = self.request.query_params.get('search', None)
-#         if search:
-#             queryset = queryset.filter(name__icontains=search)
-#         return queryset
+        if not request.user.is_superuser and request.user.role != User.Role.ORGANIZER:
+            return Response(
+                {"error": "Bạn không có quyền tạo sự kiện"},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
+        
+        data = request.data.copy()
+        data['organizer'] = request.user.id
+
+        serializer = EventSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(methods=['post'], url_path='review', detail=True)
+    def submit_review(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+
+        
+        if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event, order__payment_status=Order.PaymentStatus.PAID).exists():
+            return Response(
+                {"error": "Bạn không thể đánh giá sự kiện mà bạn không tham gia."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        
+        rating = request.data.get('rating')
+        comment = request.data.get('comment')
+
+        if not rating or not comment:
+            return Response(
+                {"error": "Vui lòng cung cấp cả đánh giá và nhận xét."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+        review = Review.objects.create(
+            user=request.user,
+            event=event,
+            rating=rating,
+            comment=comment
+        )
+
+        return Response(
+            {"message": "Đánh giá của bạn đã được gửi thành công."},
+            status=status.HTTP_201_CREATED
+        )
+
+    @action(methods=['get'], url_path='feedback', detail=True)
+    def view_feedback(self, request, pk=None):
+        
+        event = get_object_or_404(Event, id=pk)
+
+        
+        if event.organizer != request.user:
+            return Response(
+                {"error": "Bạn không có quyền xem phản hồi cho sự kiện này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        
+        reviews = Review.objects.filter(event=event)
+        serializer = ReviewSerializer(reviews, many=True)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    
 class BookingViewSet(viewsets.ViewSet):
 
     @action(methods=['get'], url_path='search-events', detail=False)

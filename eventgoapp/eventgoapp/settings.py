@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
+    'django_celery_beat',
+    'push_notifications', # 4/5
     'cloudinary',
     'cloudinary_storage',
 ]
@@ -125,6 +127,14 @@ ACCOUNT_EMAIL_VERIFICATION = "optional"
 # EMAIL_HOST_USER = 'postmaster@sandbox9870d6bed4c74fe084eb0ba5d3ed2721.mailgun.org'  # Thay bằng tài khoản Mailgun của bạn
 # EMAIL_HOST_PASSWORD = '@Giidavibe2004'  # Thay bằng mật khẩu Mailgun
 # DEFAULT_FROM_EMAIL = 'trvannhanh@gmail.com'  # Địa chỉ email gửi
+
+EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
+SENDGRID_API_KEY = '<YOUR_SENDGRID_API_KEY>'  # Replace with your SendGrid API key
+
+# Optional settings
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False  # Set to True to test emails in debug mode without actually sending them
+SENDGRID_ECHO_TO_STDOUT = True  # Print email content to the console in debug mode
+DEFAULT_FROM_EMAIL = 'noreply@yourdomain.com'  # Replace with your desired sender email
 
 #29/3
 REST_FRAMEWORK = {
@@ -244,3 +254,10 @@ GOOGLE_CLIENT_SECRET = '<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>'
 # response_type=code&
 # scope=email%20profile&
 # access_type=offline
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
