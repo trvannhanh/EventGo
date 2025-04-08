@@ -1,6 +1,6 @@
-from datetime import timezone
+from datetime import timezone, timedelta
 
-from django.db import transaction
+from django.db import transaction, models
 from django.utils.timezone import now
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
@@ -17,15 +17,17 @@ import json
 import requests
 import hashlib
 import hmac
+
+from django.db.models import F
 from .utils import generate_qr_image
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .recommendation_engine import RecommendationEngine
+from .utils import get_customer_rank
 
-
-from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory
+from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
-    EventCategorySerializer
+    EventCategorySerializer, DiscountSerializer
 
 
 # 29/3
@@ -102,13 +104,24 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
 
+    @action(methods=['get'], url_path='detail', detail=True)
+    def view_event(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+        trend, created = EventTrend.objects.get_or_create(event=event)
+        trend.increment_views()  # Tăng views
+        trend.increment_interest(points=1)  # Tăng interest_level khi xem chi tiết
+        serializer = EventSerializer(event)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def update_event_statuses(self, queryset):
         """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
         current_time = now()
         # Cập nhật từ 'upcoming' sang 'completed' nếu đã qua
-        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(status=Event.EventStatus.COMPLETED)
+        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(
+            status=Event.EventStatus.COMPLETED)
         # Cập nhật từ 'completed' sang 'upcoming' nếu còn trong tương lai (trường hợp hiếm)
-        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(status=Event.EventStatus.UPCOMING)
+        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(
+            status=Event.EventStatus.UPCOMING)
         return queryset
 
     def get_queryset(self):
@@ -125,7 +138,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        
         data = request.data.copy()
         data['organizer'] = request.user.id
 
@@ -136,7 +148,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         # Cập nhật trạng thái ngay sau khi tạo
         event.update_status()  # Nếu vẫn giữ method trong model, hoặc dùng logic dưới
         current_time = now()
-        if event.date < current_time and event.status == Event.EventStatus.UPCOMING: #6/4
+        if event.date < current_time and event.status == Event.EventStatus.UPCOMING:  # 6/4
             event.status = Event.EventStatus.COMPLETED
             event.save(update_fields=['status'])
 
@@ -146,14 +158,13 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     def submit_review(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
 
-        
-        if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event, order__payment_status=Order.PaymentStatus.PAID).exists():
+        if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event,
+                                          order__payment_status=Order.PaymentStatus.PAID).exists():
             return Response(
                 {"error": "Bạn không thể đánh giá sự kiện mà bạn không tham gia."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        
         rating = request.data.get('rating')
         comment = request.data.get('comment')
 
@@ -163,13 +174,16 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        
         review = Review.objects.create(
             user=request.user,
             event=event,
             rating=rating,
             comment=comment
         )
+
+        # Tăng interest_level khi đánh giá
+        trend, created = EventTrend.objects.get_or_create(event=event)
+        trend.increment_interest(points=2)  # Đánh giá đáng giá +2
 
         return Response(
             {"message": "Đánh giá của bạn đã được gửi thành công."},
@@ -178,17 +192,15 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['get'], url_path='feedback', detail=True)
     def view_feedback(self, request, pk=None):
-        
+
         event = get_object_or_404(Event, id=pk)
 
-        
         if event.organizer != request.user:
             return Response(
                 {"error": "Bạn không có quyền xem phản hồi cho sự kiện này."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        
         reviews = Review.objects.filter(event=event)
         serializer = ReviewSerializer(reviews, many=True)
 
@@ -210,7 +222,49 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         serializer = self.get_serializer(recommended_events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    
+    @action(methods=['get'], url_path='trending', detail=False)
+    def get_trending_events(self, request):
+        """Lấy danh sách sự kiện hot dựa trên views và interest_level."""
+        limit = int(request.query_params.get('limit', 5))
+
+        # Tính điểm tổng hợp: ví dụ 70% views + 30% interest_level
+        trending_events = Event.objects.filter(
+            active=True,
+            status=Event.EventStatus.UPCOMING
+        ).annotate(
+            trend_score=(0.7 * models.F('trends__views') + 0.3 * models.F('trends__interest_level'))
+        ).order_by('-trend_score')[:limit]
+
+        serializer = self.get_serializer(trending_events, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['post'], url_path='create-discount', detail=True)
+    def create_discount(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+
+        if not request.user.is_superuser and request.user != event.organizer:
+            return Response(
+                {"error": "Bạn không có quyền tạo mã giảm giá cho sự kiện này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        data = request.data.copy()
+        data['event'] = event.id
+        if 'expiration_date' not in data:
+            data['expiration_date'] = now() + timedelta(days=7)
+
+        serializer = DiscountSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(methods=['get'], url_path='my-rank', detail=False, permission_classes=[IsAuthenticated])
+    def get_my_rank(self, request):
+        rank = get_customer_rank(request.user)
+        return Response({"rank": rank}, status=status.HTTP_200_OK)
+
+
 class BookingViewSet(viewsets.ViewSet):
 
     @action(methods=['get'], url_path='search-events', detail=False)
@@ -239,6 +293,7 @@ class BookingViewSet(viewsets.ViewSet):
         ticket_id = request.data.get('ticket_id')
         quantity = int(request.data.get('quantity', 1))
         payment_method = request.data.get('payment_method')
+        discount_code = request.data.get('discount_code')
 
         if not all([event_id, ticket_id, quantity, payment_method]):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
@@ -253,22 +308,25 @@ class BookingViewSet(viewsets.ViewSet):
 
         total_price = ticket.price * quantity
 
-        # with transaction.atomic():
-        #     order = Order.objects.create(
-        #         user=user,
-        #         total_amount=total_price,
-        #         payment_status=Order.PaymentStatus.PENDING,
-        #         payment_method=payment_method
-        #     )
-        #     OrderDetail.objects.create(
-        #         order=order,
-        #         ticket=ticket,
-        #         quantity=quantity,
-        #         qr_code=f"QR_{order.id}_{ticket.id}"
-        #     )
-        #
-        #     ticket.quantity -= quantity
-        #     ticket.save()
+        # Kiểm tra và áp dụng mã giảm giá
+        if discount_code:
+            discount = Discount.objects.filter(
+                code=discount_code,
+                event=event,  # Chỉ áp dụng cho sự kiện này
+                expiration_date__gt=now()
+            ).first()
+            if not discount:
+                return Response({"error": "Mã giảm giá không hợp lệ hoặc đã hết hạn."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            user_rank = get_customer_rank(user)
+            if discount.target_rank and discount.target_rank != 'none' and discount.target_rank != user_rank:
+                return Response({"error": "Mã giảm giá không áp dụng cho hạng của bạn."},
+                                status=status.HTTP_403_FORBIDDEN)
+
+            # Áp dụng giảm giá
+            total_price = total_price * (1 - discount.discount_percent / 100)
+
 
         with transaction.atomic():
             order = Order.objects.create(
@@ -292,6 +350,10 @@ class BookingViewSet(viewsets.ViewSet):
 
             ticket.quantity -= quantity
             ticket.save()
+
+            # Tăng interest_level khi đặt vé
+            trend, created = EventTrend.objects.get_or_create(event=event)
+            trend.increment_interest(points=3)  # Đặt vé có thể đáng giá hơn xem (+3)
 
         momo_response = self.create_momo_qr(order)
         if "error" in momo_response or "qrCodeUrl" not in momo_response:
@@ -363,7 +425,26 @@ class BookingViewSet(viewsets.ViewSet):
         return response.json()
 
 
+    @action(methods=['post'], url_path='check-discount', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def check_discount(self, request):
+        discount_code = request.data.get('discount_code')
+        event_id = request.data.get('event_id')
+        if not all([discount_code, event_id]):
+            return Response({"error": "Thiếu mã hoặc event_id"}, status=status.HTTP_400_BAD_REQUEST)
 
+        discount = Discount.objects.filter(code=discount_code, event_id=event_id, expiration_date__gt=now()).first()
+        if not discount:
+            return Response({"error": "Mã không hợp lệ hoặc hết hạn"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_rank = get_customer_rank(request.user)
+        if discount.target_rank and discount.target_rank != 'none' and discount.target_rank != user_rank:
+            return Response({"error": "Mã không áp dụng cho hạng của bạn"}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response({
+            "code": discount.code,
+            "discount_percent": discount.discount_percent,
+            "target_rank": discount.target_rank
+        }, status=status.HTTP_200_OK)
 
 
 class MoMoPaymentViewSet(viewsets.ViewSet):
@@ -398,23 +479,4 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
             order.save()
             return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
-# class EventCategoryViewSet(viewsets.ModelViewSet):
-#     queryset = EventCategory.objects.filter(active=True)
-#     serializer_class = EventCategorySerializer
-#     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-#     def get_queryset(self):
-#         queryset = self.queryset
-#         search = self.request.query_params.get('search', None)
-#         if search:
-#             queryset = queryset.filter(name__icontains=search)
-#         return queryset
-
-#     # API để lấy danh sách sự kiện thuộc danh mục
-#     @action(methods=['get'], detail=True, url_path='events')
-#     def get_events(self, request, pk=None):
-#         category = self.get_object()
-#         events = category.events.filter(active=True)  # Lọc các event còn hoạt động
-#         serializer = EventSerializer(events, many=True)
-#         return Response(serializer.data, status=status.HTTP_200_OK)
 
