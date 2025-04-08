@@ -81,25 +81,26 @@ class RecommendationEngine:
     def ml_recommendation(self, user_id, max_results=5):
         preferences = self.get_user_preferences(user_id)
         if not preferences:
-            # Dùng trending nếu không có lịch sử
-            trending_events = EventTrend.objects.order_by('-views')[:max_results]
+            trending_events = EventTrend.objects.order_by('-interest_level')[:max_results]  # Fallback dùng interest_level
             return Event.objects.filter(id__in=[t.event_id for t in trending_events])
 
-        # Chuẩn bị dữ liệu ML
         df = self.prepare_ml_data()
         X = df.drop('event_id', axis=1).values
+        n_samples = X.shape[0]
+        n_neighbors = min(max_results, n_samples)
 
-        # Huấn luyện KNN
-        knn = NearestNeighbors(n_neighbors=max_results, metric='cosine')
+        if n_samples == 0:
+            trending_events = EventTrend.objects.order_by('-interest_level')[:max_results]
+            return Event.objects.filter(id__in=[t.event_id for t in trending_events])
+
+        knn = NearestNeighbors(n_neighbors=n_neighbors, metric='cosine')
         knn.fit(X)
-
-        # Tạo vector đặc trưng cho người dùng dựa trên sở thích
         user_vector = pd.DataFrame([0] * len(X[0]), index=df.columns[1:]).T
         for pref in preferences:
             if f'cat_{pref}' in user_vector.columns:
                 user_vector[f'cat_{pref}'] = 1
 
-        # Tìm các sự kiện gần nhất
         distances, indices = knn.kneighbors(user_vector.values)
         recommended_event_ids = df.iloc[indices[0]]['event_id'].tolist()
-        return Event.objects.filter(id__in=recommended_event_ids)
+        recommended = Event.objects.filter(id__in=recommended_event_ids).order_by('-trends__interest_level')
+        return recommended

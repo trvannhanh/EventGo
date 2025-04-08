@@ -176,6 +176,33 @@ class OrderDetail(BaseModel):
         verbose_name_plural = "Order Details"
         ordering = ['-created_at']
 
+class Discount(BaseModel):
+    class LoyaltyRank(models.TextChoices):
+        BRONZE = 'bronze', 'Đồng'
+        SILVER = 'silver', 'Bạc'
+        GOLD = 'gold', 'Vàng'
+        NONE = 'none', 'Không có hạng'  # Áp dụng cho tất cả nếu không chỉ định
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='discounts')
+    code = models.CharField(max_length=50, unique=True)
+    discount_percent = models.PositiveIntegerField()
+    expiration_date = models.DateTimeField()
+    target_rank = models.CharField(
+        max_length=20,
+        choices=LoyaltyRank.choices,
+        null=True,
+        blank=True,
+        default=LoyaltyRank.NONE,
+        help_text="Hạng khách hàng áp dụng (nếu để trống, áp dụng cho tất cả)."
+    )
+
+    def __str__(self):
+        return f"Discount {self.code} - {self.discount_percent}% for {self.target_rank or 'All'}"
+
+    class Meta:
+        verbose_name = "Discount"
+        verbose_name_plural = "Discounts"
+        ordering = ['-expiration_date']
 
 class Review(BaseModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews')
@@ -207,20 +234,6 @@ class Notification(BaseModel):
         ordering = ['-created_at']
 
 
-class Discount(BaseModel):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='discounts')
-    code = models.CharField(max_length=50, unique=True)
-    discount_percent = models.PositiveIntegerField()
-    expiration_date = models.DateTimeField()
-
-    def __str__(self):
-        return f"Discount {self.code} - {self.discount_percent}%"
-
-    class Meta:
-        verbose_name = "Discount"
-        verbose_name_plural = "Discounts"
-        ordering = ['-expiration_date']
-
 
 class ChatMessage(BaseModel):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='chat_messages')
@@ -241,6 +254,16 @@ class EventTrend(BaseModel):
     views = models.PositiveIntegerField(default=0)
     interest_level = models.PositiveIntegerField(default=0)
 
+    def increment_views(self):
+        """Tăng lượt xem khi sự kiện được truy cập."""
+        self.views += 1
+        self.save(update_fields=['views'])
+
+    def increment_interest(self, points=1):
+        """Tăng interest_level dựa trên hành vi người dùng."""
+        self.interest_level += points
+        self.save(update_fields=['interest_level'])
+
     def __str__(self):
         return f"Trend for {self.event.name}: {self.views} views"
 
@@ -248,3 +271,5 @@ class EventTrend(BaseModel):
         verbose_name = "Event Trend"
         verbose_name_plural = "Event Trends"
         ordering = ['-views']
+
+

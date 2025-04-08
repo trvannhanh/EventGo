@@ -88,3 +88,9 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'user', 'rating', 'comment', 'created_at']
+
+class DiscountSerializer(serializers.ModelSerializer):
+    event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())
+    class Meta:
+        model = Discount
+        fields = ['id', 'event', 'code', 'discount_percent', 'expiration_date', 'target_rank']
