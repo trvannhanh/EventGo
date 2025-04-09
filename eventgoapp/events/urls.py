@@ -5,7 +5,7 @@ from events.views import UserViewSet, EventViewSet, BookingViewSet, MoMoPaymentV
 r = DefaultRouter()
 r.register('users', UserViewSet, basename='users')
 r.register('events', EventViewSet, basename='events')
-# r.register('categories', EventCategoryViewSet, basename='categories')
+
 
 r.register('booking', BookingViewSet, basename='booking')
 r.register('momopayment', MoMoPaymentViewSet, basename='momopayment')

@@ -54,11 +54,15 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.facebook',
     'django_celery_beat',
     'push_notifications', # 4/5
     'cloudinary',
     'cloudinary_storage',
 ]
+
+
+
 
 
 cloudinary.config(
@@ -88,45 +92,14 @@ AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend',
 )
 
-#Tạm thời tắt đi
-# OAUTH2_PROVIDER = {
-#     'ACCESS_TOKEN_EXPIRE_SECONDS': 3600,  # Token hết hạn sau 1 giờ
-# }
 
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            'client_id': '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com',
-            'secret': '<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>',
-            'key': '',
-        }
-    }
-}
 
-ACCOUNT_LOGIN_METHODS = {'email', 'username'}
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
+
+ACCOUNT_AUTHENTICATION_METHOD = 'username_email'  # Cho phép đăng nhập bằng username hoặc email
 ACCOUNT_EMAIL_VERIFICATION = "optional"
 
 
 
-#29/3
-# không thể dùng email vì không có money mua gg cloud tạo API
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'trvannhanh@gmail.com'
-# EMAIL_HOST_PASSWORD = '@Giidavibe2004'
-
-#Lỗi r đau đầu quá đ chạy đc
-# # Dùng Mailgun thay vì
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.mailgun.org'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'postmaster@sandbox9870d6bed4c74fe084eb0ba5d3ed2721.mailgun.org'  # Thay bằng tài khoản Mailgun của bạn
-# EMAIL_HOST_PASSWORD = '@Giidavibe2004'  # Thay bằng mật khẩu Mailgun
-# DEFAULT_FROM_EMAIL = 'trvannhanh@gmail.com'  # Địa chỉ email gửi
 
 EMAIL_BACKEND = 'sendgrid_backend.SendgridBackend'
 SENDGRID_API_KEY = '<YOUR_SENDGRID_API_KEY>'  # Replace with your SendGrid API key
@@ -245,15 +218,11 @@ CLIENT_ID = 'LugOVBYQ40AG5gX2rZLrJ06QwMfURLu53KMZ5uUR'
 CLIENT_SECRET = 'UhLGgZO3EUw2TjWsTH9pj0ZIghx4geIwIcQX3dBe7BJaCwMkVgZJEKKEKcbhWyDOcm1fDnGowDdAo086zXO1wtEIVAuwmbtiH6sWwRBVPYxJ0c3U8wuYtriI8ZjoklAM'
 
 GOOGLE_CLIENT_ID = '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com'
-GOOGLE_CLIENT_SECRET = '<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>'
+GOOGLE_CLIENT_SECRET = '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'
 
+FACEBOOK_ID = '1390840525421151'
+FACKEBOOK_SECRET = '4677af425a1550366a18fe756cf0c0a9'
 
-# https://accounts.google.com/o/oauth2/auth?
-# client_id=782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com&
-# redirect_uri=http://localhost:8000/auth/complete/google/&
-# response_type=code&
-# scope=email%20profile&
-# access_type=offline
 
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
