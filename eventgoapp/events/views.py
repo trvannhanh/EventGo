@@ -46,59 +46,7 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
 
-#     @action(methods=['post'], url_path='forgot-password', detail=False)
-#     def forgot_password(self, request):
-#         """ Xử lý quên mật khẩu: Gửi email chứa link reset """
-#         serializer = ForgotPasswordSerializer(data=request.data)
-#         if serializer.is_valid():
-#             email = serializer.validated_data['email']
-#             user = User.objects.get(email=email)
-#
-#             # Tạo token đặt lại mật khẩu
-#             token = default_token_generator.make_token(user)
-#             uid = urlsafe_base64_encode(force_bytes(user.pk))
-#             reset_link = f"http://localhost:8000/api/users/reset-password/{uid}/{token}/"
-#
-#             # Gửi email chứa link đặt lại mật khẩu
-#             send_mail(
-#                 "Đặt lại mật khẩu",
-#                 f"Nhấp vào link sau để đặt lại mật khẩu: {reset_link}",
-#                 "your_email@gmail.com",
-#                 [email],
-#                 fail_silently=False,
-#             )
-#
-#             return Response({"message": "Một email đặt lại mật khẩu đã được gửi."}, status=status.HTTP_200_OK)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#
-#     @action(methods=['post'], url_path='reset-password/(?P<uidb64>[^/.]+)/(?P<token>[^/.]+)', detail=False)
-#     def reset_password(self, request, uidb64, token):
-#         """ Xử lý đặt lại mật khẩu """
-#         try:
-#             uid = force_str(urlsafe_base64_decode(uidb64))
-#             user = User.objects.get(pk=uid)
-#
-#             if not default_token_generator.check_token(user, token):
-#                 return Response({"error": "Link đặt lại mật khẩu không hợp lệ."}, status=status.HTTP_400_BAD_REQUEST)
-#
-#             serializer = ResetPasswordSerializer(data=request.data)
-#             if serializer.is_valid():
-#                 user.set_password(serializer.validated_data['new_password'])
-#                 user.save()
-#                 return Response({"message": "Mật khẩu đã được đặt lại thành công."}, status=status.HTTP_200_OK)
-#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
-#             return Response({"error": "Link không hợp lệ."}, status=status.HTTP_400_BAD_REQUEST)
-#
-#
-# def send_test_email():
-#     send_mail(
-#         'Test Mailgun SMTP',
-#         'Nội dung email từ Django sử dụng Mailgun.',
-#         'danhtrantunham2016@gmail.com',  # Địa chỉ email gửi
-#         ['trvannhanh@gmail.com'],  # Địa chỉ email nhận
-#         fail_silently=False,
-#     )
+
 
 class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
