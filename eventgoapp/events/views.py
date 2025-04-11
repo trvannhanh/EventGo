@@ -27,26 +27,55 @@ from .utils import get_customer_rank
 
 from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
-    EventCategorySerializer, DiscountSerializer
+    EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer
 
 
 # 29/3
-class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
+class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.UpdateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
     parser_classes = [parsers.MultiPartParser]
 
     def get_permissions(self):
         if self.action == 'list':
-            return [permissions.IsAdminUser()]  # Chỉ Admin có thể xem danh sách Users
-        return [permissions.AllowAny()]  # Ai cũng có thể đăng ký
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+    def get_object(self):
+        # Dùng cho UpdateAPIView để lấy user hiện tại
+        return self.request.user
 
     @action(methods=['get'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
+    @action(methods=['put', 'patch'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def update_current_user(self, request):
+        user = request.user
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['post'], url_path='change-password', detail=False,
+            permission_classes=[permissions.IsAuthenticated])
+    def change_password(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+
+        return Response({"message": "Đổi mật khẩu thành công."}, status=status.HTTP_200_OK)
 
 
+    @action(methods=['delete'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def delete_current_user(self, request):
+        user = request.user
+        user.is_active = False  # Soft delete
+        user.save()
+        return Response({"message": "Xóa tài khoản thành công."}, status=status.HTTP_204_NO_CONTENT)
 
 class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
