@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('events', '0008_alter_event_google_maps_link'),
-        ('events', '0008_alter_event_image_alter_user_avatar'),
+        ('events', '0009_alter_event_image_alter_user_avatar'),
     ]
 
     operations = [
