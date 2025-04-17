@@ -72,7 +72,6 @@ class Event(BaseModel):
             self.status = self.EventStatus.COMPLETED
         elif self.date > current_time and self.status == self.EventStatus.COMPLETED:
             self.status = self.EventStatus.UPCOMING
-        self.save(update_fields=['status'])
 
     def save(self, *args, **kwargs):
         """Ghi đè save để tự động cập nhật trạng thái trước khi lưu."""

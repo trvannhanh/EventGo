@@ -1,7 +1,13 @@
 from datetime import timezone, timedelta
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from django.conf import settings
+from django.shortcuts import get_object_or_404
 
 from django.db import transaction, models
 from django.utils.timezone import now
+from google_auth_oauthlib.flow import Flow
+from httplib2 import Credentials
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
 from django.utils.http import urlsafe_base64_encode
@@ -19,6 +25,7 @@ import hashlib
 import hmac
 
 from django.db.models import F
+
 from .utils import generate_qr_image
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
@@ -304,7 +311,7 @@ class BookingViewSet(viewsets.ViewSet):
             # Áp dụng giảm giá
             total_price = total_price * (1 - discount.discount_percent / 100)
 
-
+        calendar_event_id = None  # Biến để lưu ID sự kiện trên Google Calendar
         with transaction.atomic():
             order = Order.objects.create(
                 user=user,
@@ -332,6 +339,41 @@ class BookingViewSet(viewsets.ViewSet):
             trend, created = EventTrend.objects.get_or_create(event=event)
             trend.increment_interest(points=3)  # Đặt vé có thể đáng giá hơn xem (+3)
 
+
+            # Tích hợp Google Calendar: Thêm sự kiện vào lịch nếu người dùng đã xác thực
+            credentials_dict = request.session.get('google_credentials')
+            if credentials_dict:
+                try:
+                    credentials = Credentials(**credentials_dict)
+                    service = build('calendar', 'v3', credentials=credentials)
+
+                    calendar_event = {
+                        'summary': event.title,
+                        'location': event.location,
+                        'description': event.description,
+                        'start': {
+                            'dateTime': event.start_time.isoformat(),
+                            'timeZone': 'Asia/Ho_Chi_Minh',
+                        },
+                        'end': {
+                            'dateTime': event.end_time.isoformat(),
+                            'timeZone': 'Asia/Ho_Chi_Minh',
+                        },
+                        'reminders': {
+                            'useDefault': False,
+                            'overrides': [
+                                {'method': 'email', 'minutes': 24 * 60},
+                                {'method': 'popup', 'minutes': 30},
+                            ],
+                        },
+                    }
+
+                    calendar_event_response = service.events().insert(calendarId='primary',
+                                                                      body=calendar_event).execute()
+                    calendar_event_id = calendar_event_response['id']
+                except Exception as e:
+                    # Nếu có lỗi khi thêm vào Google Calendar, không làm gián đoạn đặt vé
+                    print(f"Error adding to Google Calendar: {str(e)}")
         momo_response = self.create_momo_qr(order)
         if "error" in momo_response or "qrCodeUrl" not in momo_response:
             return Response({
@@ -343,7 +385,9 @@ class BookingViewSet(viewsets.ViewSet):
             "order": OrderSerializer(order).data,
             "qrCodeUrl": momo_response["qrCodeUrl"],
             "payUrl": momo_response["payUrl"],
-            "qr_image_url": request.build_absolute_uri(order_detail.qr_image.url)
+            "qr_image_url": request.build_absolute_uri(order_detail.qr_image.url),
+            "calendar_added": calendar_event_id is not None,
+            "calendar_event_id": calendar_event_id
         }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='checkin')
@@ -456,4 +500,106 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
             order.save()
             return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
+class GoogleCalendarViewSet(viewsets.ViewSet):
+    @action(methods=['get'], url_path='auth-url', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def get_auth_url(self, request):
+        # Tạo flow để lấy URL xác thực
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_CALENDAR_API['CLIENT_ID'],
+                    "client_secret": settings.GOOGLE_CALENDAR_API['CLIENT_SECRET'],
+                    "redirect_uris": [settings.GOOGLE_CALENDAR_API['REDIRECT_URI']],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_API['SCOPES']
+        )
 
+        flow.redirect_uri = settings.GOOGLE_CALENDAR_API['REDIRECT_URI']
+        auth_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+
+        request.session['google_auth_state'] = state
+        return Response({"auth_url": auth_url}, status=status.HTTP_200_OK)
+
+    @action(methods=['get'], url_path='callback', detail=False)
+    def google_callback(self, request):
+        state = request.query_params.get('state')
+        code = request.query_params.get('code')
+
+        if state != request.session.get('google_auth_state'):
+            return Response({"error": "State không khớp"}, status=status.HTTP_400_BAD_REQUEST)
+
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": settings.GOOGLE_CALENDAR_API['CLIENT_ID'],
+                    "client_secret": settings.GOOGLE_CALENDAR_API['CLIENT_SECRET'],
+                    "redirect_uris": [settings.GOOGLE_CALENDAR_API['REDIRECT_URI']],
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                }
+            },
+            scopes=settings.GOOGLE_CALENDAR_API['SCOPES'],
+            state=state
+        )
+
+        flow.redirect_uri = settings.GOOGLE_CALENDAR_API['REDIRECT_URI']
+        flow.fetch_token(code=code)
+
+        credentials = flow.credentials
+        request.session['google_credentials'] = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+
+        return Response({"message": "Xác thực Google thành công"}, status=status.HTTP_200_OK)
+
+    @action(methods=['post'], url_path='add-to-calendar/(?P<event_id>[^/.]+)', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def add_to_calendar(self, request, event_id=None):
+        event = get_object_or_404(Event, id=event_id)
+        if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event, order__payment_status='PAID').exists():
+            return Response({"error": "Bạn chưa đặt vé cho sự kiện này"}, status=status.HTTP_403_FORBIDDEN)
+
+        credentials_dict = request.session.get('google_credentials')
+        if not credentials_dict:
+            return Response({"error": "Chưa xác thực với Google"}, status=status.HTTP_400_BAD_REQUEST)
+
+        credentials = Credentials(**credentials_dict)
+        service = build('calendar', 'v3', credentials=credentials)
+
+        calendar_event = {
+            'summary': event.title,
+            'location': event.location,
+            'description': event.description,
+            'start': {
+                'dateTime': event.start_time.isoformat(),
+                'timeZone': 'Asia/Ho_Chi_Minh',
+            },
+            'end': {
+                'dateTime': event.end_time.isoformat(),
+                'timeZone': 'Asia/Ho_Chi_Minh',
+            },
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'email', 'minutes': 24 * 60},
+                    {'method': 'popup', 'minutes': 30},
+                ],
+            },
+        }
+
+        calendar_event = service.events().insert(calendarId='primary', body=calendar_event).execute()
+        return Response({
+            "message": "Sự kiện đã được thêm vào Google Calendar",
+            "calendar_event_id": calendar_event['id']
+        }, status=status.HTTP_200_OK)
