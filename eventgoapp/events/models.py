@@ -52,14 +52,14 @@ class Event(BaseModel):
         COMPLETED = 'completed', 'Completed'
         CANCELED = 'canceled', 'Canceled'
 
-    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True)
+    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True, blank=True)
     category = models.ForeignKey(EventCategory, on_delete=models.SET_NULL, null=True, related_name='events')
     name = models.CharField(max_length=100, unique=True, null=True)
     description = RichTextField(blank=True, null=True)
     date = models.DateTimeField(default=now)
     location = models.CharField(max_length=255, blank=True, null=True)
     google_maps_link = models.URLField(blank=True, null=True, max_length=1000)
-    ticket_limit = models.PositiveIntegerField(null=True)
+    ticket_limit = models.PositiveIntegerField(null=True, blank=True, default=0)
     status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.UPCOMING)
     image = CloudinaryField('image', blank=True, null=True)
 
