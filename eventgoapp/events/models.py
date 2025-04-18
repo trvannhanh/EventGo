@@ -15,6 +15,7 @@ class User(AbstractUser):
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     avatar = CloudinaryField('avatar', blank=True, null=True)
+    google_credentials = models.JSONField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.username}"
@@ -168,6 +169,7 @@ class OrderDetail(BaseModel):
     qr_image = models.ImageField(upload_to='tickets/%Y/%m/%d/', blank=True, null=True)
     checked_in = models.BooleanField(default=False)
     checkin_time = models.DateTimeField(null=True)
+    google_calendar_event_id = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
         return f"Order #{self.order.id} - {self.ticket.type}"
