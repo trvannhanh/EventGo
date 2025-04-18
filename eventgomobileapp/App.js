@@ -1,71 +1,61 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { Text, View, FlatList, TouchableOpacity } from 'react-native';
-import styles from './styles'; 
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Home from './components/Home/Home';
+import EventDetail from './components/Home/EventDetail';
+import Login from './components/User/Login';
+import Register from './components/User/Register';
+import Profile from './components/User/Profile';
+import MyTickets from './components/User/MyTickets';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MyUserContext, MyDispatchContext } from './configs/MyContexts';
+import MyUserReducer from "./components/reducers/MyUserReducer";
+import { useReducer, useContext } from 'react';
 
-const Stack = createStackNavigator();
-
-function HomeScreen({ navigation }) {
+const Stack = createNativeStackNavigator();
+const StackNavigator = () => {
   return (
-    <View style={styles.container}>
-      <Text>Welcome to Eventgoapp</Text>
-      <TouchableOpacity onPress={() => navigation.navigate('EventList')}>
-        <Text style={styles.link}>Xem danh sách sự kiện</Text>
-      </TouchableOpacity>
-    </View>
+    <Stack.Navigator>
+      <Stack.Screen name="Home" component={Home} options={{ title: 'Trang chủ' }} />
+      {/* <Stack.Screen name="EventDetail" component={EventDetail} options={{ title: 'Chi tiết sự kiện' }} /> */}
+    </Stack.Navigator>
   );
-}
+};
 
-function EventListScreen({ navigation }) {
-  const [events, setEvents] = useState([]);
+const Tab = createBottomTabNavigator();
 
-  useEffect(() => {
-    fetch('http://10.0.2.2:8000/events/')
-      .then((response) => response.json())
-      .then((data) => setEvents(data))
-      .catch((error) => console.error('Error fetching events:', error.message));
-  }, []);
-
-  const renderItem = ({ item }) => (
-    <TouchableOpacity onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}>
-      <View style={styles.eventItem}>
-        <Text style={styles.eventName}>{item.name}</Text>
-        <Text>{item.date}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+const TabNavigator = () => {
+  const user = useContext(MyUserContext);
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={events}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-      />
-    </View>
+    <Tab.Navigator>
+      <Tab.Screen name="Trang chủ" component={StackNavigator} options={{ title: 'Sự kiện', tabBarIcon: () => <Icon name="calendar" size={20} /> }} />
+      {/* <Tab.Screen name="Vé của tôi" component={MyTickets} options={{ title: 'Vé của tôi', tabBarIcon: () => <Icon name="ticket" size={20} /> }} /> */}
+      {user === null ? (
+        <>
+          <Tab.Screen name="Đăng nhập" component={Login} options={{ title: 'Đăng nhập', tabBarIcon: () => <Icon name="login" size={20} /> }} />
+          <Tab.Screen name="Đăng ký" component={Register} options={{ title: 'Đăng ký', tabBarIcon: () => <Icon name="account-plus" size={20} /> }} />
+        </>
+      ) : (
+        <Tab.Screen name="Tài khoản" component={Profile} options={{ title: 'Tài khoản', tabBarIcon: () => <Icon name="account" size={20} /> }} />
+      )}
+    </Tab.Navigator>
   );
-}
+};
 
-function EventDetailsScreen({ route }) {
-  const { eventId } = route.params;
+const App = () => {
+  const [user, dispatch] = useReducer(MyUserReducer, null);
 
   return (
-    <View style={styles.container}>
-      <Text>Event Details Page</Text>
-      <Text>Event ID: {eventId}</Text>
-    </View>
+    <MyUserContext.Provider value={user}>
+      <MyDispatchContext.Provider value={dispatch}>
+        <NavigationContainer>
+          <TabNavigator />
+        </NavigationContainer>
+      </MyDispatchContext.Provider>
+    </MyUserContext.Provider>
   );
-}
+};
 
-export default function App() {
-  return (
-    <NavigationContainer>
-      <Stack.Navigator>
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="EventList" component={EventListScreen} />
-        <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
-  );
-}
+export default App;
