@@ -84,6 +84,11 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         user.save()
         return Response({"message": "Xóa tài khoản thành công."}, status=status.HTTP_204_NO_CONTENT)
 
+    @action(methods=['get'], url_path='my-rank', detail=False, permission_classes=[IsAuthenticated])
+    def get_my_rank(self, request):
+        rank = get_customer_rank(request.user)
+        return Response({"rank": rank}, status=status.HTTP_200_OK)
+
 class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
@@ -243,13 +248,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(methods=['get'], url_path='my-rank', detail=False, permission_classes=[IsAuthenticated])
-    def get_my_rank(self, request):
-        rank = get_customer_rank(request.user)
-        return Response({"rank": rank}, status=status.HTTP_200_OK)
-
-
-class BookingViewSet(viewsets.ViewSet):
 
     @action(methods=['get'], url_path='search-events', detail=False)
     def search_events(self, request):
@@ -262,33 +260,33 @@ class BookingViewSet(viewsets.ViewSet):
         serializer = EventSerializer(events, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(methods=['get'], url_path='tickets',
-            detail=True)  # Nếu detail=False, URL sẽ là /booking/tickets/ (không cần id sự kiện).
-    def get_tickets(self, request, pk=None):  # pk là id của sự kiện
-        event = get_object_or_404(Event, id=pk)  # Tìm sự kiện theo id, nếu không có thì báo lỗi 404.
+    @action(methods=['get'], url_path='tickets', detail=True)
+    def get_tickets(self, request, pk=None):
+        """Lấy danh sách vé của một sự kiện."""
+        event = get_object_or_404(Event, id=pk)
         tickets = Ticket.objects.filter(event=event)
         serializer = TicketSerializer(tickets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(methods=['post'], url_path='book-ticket', permission_classes=[permissions.IsAuthenticated], detail=False)
-    def book_ticket(self, request):
+    @action(methods=['post'], url_path='book-ticket', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def book_ticket(self, request, pk=None):
+        """Đặt vé cho một sự kiện."""
         user = request.user
-        event_id = request.data.get('event_id')
+        event = get_object_or_404(Event, id=pk)
+        if event.status != Event.EventStatus.UPCOMING:
+            return Response({"error": "Sự kiện không khả dụng để đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
+
         ticket_id = request.data.get('ticket_id')
         quantity = int(request.data.get('quantity', 1))
         payment_method = request.data.get('payment_method')
         discount_code = request.data.get('discount_code')
 
-        if not all([event_id, ticket_id, quantity, payment_method]):
-            return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
+        if not all([ticket_id, quantity, payment_method]):
+            return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
 
-        event = get_object_or_404(Event, id=event_id)
-        if event.status != Event.EventStatus.UPCOMING:
-            return Response({"error": "Sự kiện không khả dụng để đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
         ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
-
         if ticket.quantity < quantity:
-            return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
 
         total_price = ticket.price * quantity
 
@@ -296,22 +294,20 @@ class BookingViewSet(viewsets.ViewSet):
         if discount_code:
             discount = Discount.objects.filter(
                 code=discount_code,
-                event=event,  # Chỉ áp dụng cho sự kiện này
+                event=event,
                 expiration_date__gt=now()
             ).first()
             if not discount:
-                return Response({"error": "Mã giảm giá không hợp lệ hoặc đã hết hạn."},
+                return Response({"error": "Mã giảm giá không hợp lệ hoặc đã hết hạn"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             user_rank = get_customer_rank(user)
             if discount.target_rank and discount.target_rank != 'none' and discount.target_rank != user_rank:
-                return Response({"error": "Mã giảm giá không áp dụng cho hạng của bạn."},
+                return Response({"error": "Mã giảm giá không áp dụng cho hạng của bạn"},
                                 status=status.HTTP_403_FORBIDDEN)
 
-            # Áp dụng giảm giá
             total_price = total_price * (1 - discount.discount_percent / 100)
 
-        calendar_event_id = None  # Biến để lưu ID sự kiện trên Google Calendar
         with transaction.atomic():
             order = Order.objects.create(
                 user=user,
@@ -327,53 +323,19 @@ class BookingViewSet(viewsets.ViewSet):
                 qr_code=qr_code
             )
 
-            # Tạo hình ảnh QR code và gán vào order_detail
+            # Tạo và lưu QR code
             qr_image = generate_qr_image(qr_code)
             order_detail.qr_image.save(f"{qr_code}.png", qr_image)
             order_detail.save()
 
+            # Cập nhật số lượng vé
             ticket.quantity -= quantity
             ticket.save()
 
-            # Tăng interest_level khi đặt vé
+            # Tăng interest_level
             trend, created = EventTrend.objects.get_or_create(event=event)
-            trend.increment_interest(points=3)  # Đặt vé có thể đáng giá hơn xem (+3)
+            trend.increment_interest(points=3)
 
-
-            # Tích hợp Google Calendar: Thêm sự kiện vào lịch nếu người dùng đã xác thực
-            credentials_dict = request.session.get('google_credentials')
-            if credentials_dict:
-                try:
-                    credentials = Credentials(**credentials_dict)
-                    service = build('calendar', 'v3', credentials=credentials)
-
-                    calendar_event = {
-                        'summary': event.title,
-                        'location': event.location,
-                        'description': event.description,
-                        'start': {
-                            'dateTime': event.start_time.isoformat(),
-                            'timeZone': 'Asia/Ho_Chi_Minh',
-                        },
-                        'end': {
-                            'dateTime': event.end_time.isoformat(),
-                            'timeZone': 'Asia/Ho_Chi_Minh',
-                        },
-                        'reminders': {
-                            'useDefault': False,
-                            'overrides': [
-                                {'method': 'email', 'minutes': 24 * 60},
-                                {'method': 'popup', 'minutes': 30},
-                            ],
-                        },
-                    }
-
-                    calendar_event_response = service.events().insert(calendarId='primary',
-                                                                      body=calendar_event).execute()
-                    calendar_event_id = calendar_event_response['id']
-                except Exception as e:
-                    # Nếu có lỗi khi thêm vào Google Calendar, không làm gián đoạn đặt vé
-                    print(f"Error adding to Google Calendar: {str(e)}")
         momo_response = self.create_momo_qr(order)
         if "error" in momo_response or "qrCodeUrl" not in momo_response:
             return Response({
@@ -386,20 +348,25 @@ class BookingViewSet(viewsets.ViewSet):
             "qrCodeUrl": momo_response["qrCodeUrl"],
             "payUrl": momo_response["payUrl"],
             "qr_image_url": request.build_absolute_uri(order_detail.qr_image.url),
-            "calendar_added": calendar_event_id is not None,
-            "calendar_event_id": calendar_event_id
         }, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=['post'], url_path='checkin')
-    def checkin_by_qr(self, request):
+    @action(methods=['post'], url_path='checkin', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def checkin_by_qr(self, request, pk=None):
+        """Check-in vé bằng mã QR cho một sự kiện."""
         qr_code = request.data.get('qr_code')
         if not qr_code:
             return Response({"error": "Thiếu mã QR"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            order_detail = OrderDetail.objects.get(qr_code=qr_code)
+            order_detail = OrderDetail.objects.get(
+                qr_code=qr_code,
+                ticket__event_id=pk
+            )
         except OrderDetail.DoesNotExist:
-            return Response({"error": "Không tìm thấy vé với mã QR này"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Không tìm thấy vé với mã QR này cho sự kiện"}, status=status.HTTP_404_NOT_FOUND)
+
+        if order_detail.order.payment_status != Order.PaymentStatus.PAID:
+            return Response({"error": "Vé chưa được thanh toán"}, status=status.HTTP_400_BAD_REQUEST)
 
         if order_detail.checked_in:
             return Response({"message": "Vé đã được check-in trước đó"}, status=status.HTTP_200_OK)
@@ -411,7 +378,7 @@ class BookingViewSet(viewsets.ViewSet):
                         status=status.HTTP_200_OK)
 
     def create_momo_qr(self, order):
-        """ Hàm gọi API tạo QR MoMo """
+        """Hàm gọi API tạo QR MoMo."""
         order_id = f"ORDER_{order.user.id}_{order.id}"
         request_id = f"REQ_{order_id}"
         amount = int(order.total_amount)
@@ -442,18 +409,25 @@ class BookingViewSet(viewsets.ViewSet):
             "signature": signature
         }
 
-        response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'})
-        return response.json()
+        try:
+            response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            return {"error": f"Lỗi khi gọi API MoMo: {str(e)}"}
 
-
-    @action(methods=['post'], url_path='check-discount', detail=False, permission_classes=[permissions.IsAuthenticated])
-    def check_discount(self, request):
+    @action(methods=['post'], url_path='check-discount', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def check_discount(self, request, pk=None):
+        """Kiểm tra mã giảm giá cho một sự kiện."""
         discount_code = request.data.get('discount_code')
-        event_id = request.data.get('event_id')
-        if not all([discount_code, event_id]):
-            return Response({"error": "Thiếu mã hoặc event_id"}, status=status.HTTP_400_BAD_REQUEST)
+        if not discount_code:
+            return Response({"error": "Thiếu mã giảm giá"}, status=status.HTTP_400_BAD_REQUEST)
 
-        discount = Discount.objects.filter(code=discount_code, event_id=event_id, expiration_date__gt=now()).first()
+        discount = Discount.objects.filter(
+            code=discount_code,
+            event_id=pk,
+            expiration_date__gt=now()
+        ).first()
         if not discount:
             return Response({"error": "Mã không hợp lệ hoặc hết hạn"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -468,32 +442,131 @@ class BookingViewSet(viewsets.ViewSet):
         }, status=status.HTTP_200_OK)
 
 
+
+class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.UpdateAPIView, generics.DestroyAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'  # Dùng 'id' làm tham số trong URL
+
+    def get_queryset(self):
+        """Chỉ trả về đơn hàng của người dùng hiện tại."""
+        return Order.objects.filter(user=self.request.user)
+
+    def get_object(self):
+        """Lấy đơn hàng dựa trên id từ URL và đảm bảo thuộc về người dùng hiện tại."""
+        return get_object_or_404(Order, id=self.kwargs['id'], user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        """GET /orders/: Lấy danh sách đơn hàng của người dùng hiện tại."""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        """PUT /orders/{id}/: Cập nhật toàn bộ thông tin đơn hàng."""
+        order = self.get_object()
+        if order.payment_status != 'PENDING':
+            return Response({"error": "Không thể cập nhật đơn hàng đã thanh toán hoặc thất bại"},
+                           status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(order, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def partial_update(self, request, *args, **kwargs):
+        """PATCH /orders/{id}/: Cập nhật một phần thông tin đơn hàng."""
+        order = self.get_object()
+        if order.payment_status != 'PENDING':
+            return Response({"error": "Không thể cập nhật đơn hàng đã thanh toán hoặc thất bại"},
+                           status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(order, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE /orders/{id}/: Hủy đơn hàng."""
+        order = self.get_object()
+        if order.payment_status != 'PENDING':
+            return Response({"error": "Không thể hủy đơn hàng đã thanh toán hoặc thất bại"},
+                           status=status.HTTP_400_BAD_REQUEST)
+
+        order.delete()
+        return Response({"message": "Hủy đơn hàng thành công"}, status=status.HTTP_204_NO_CONTENT)
+
+
+
 class MoMoPaymentViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], url_path='payment-notify')
     def payment_notify(self, request):
-        """
-        API nhận thông báo thanh toán từ MoMo (IPN).
-        """
         data = request.data
-        order_id = data.get("orderId")  # ID đơn hàng từ MoMo
+        order_id = data.get("orderId")
         request_id = data.get("requestId")
-        result_code = data.get("resultCode")  # Mã kết quả giao dịch (0: thành công)
+        result_code = data.get("resultCode")
         message = data.get("message")
 
         if not order_id or not request_id:
             return Response({"error": "Dữ liệu không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Tìm đơn hàng theo order_id
-        order = Order.objects.filter(id=order_id.replace("ORDER_", "")).first()
+        # Tách order_id từ định dạng ORDER_<user_id>_<order_id>
+        try:
+            order_id_parts = order_id.split('_')
+            if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
+                raise ValueError("Định dạng order_id không hợp lệ")
+            actual_order_id = order_id_parts[2]
+        except (ValueError, IndexError):
+            return Response({"error": "Định dạng order_id không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
+        order = Order.objects.filter(id=actual_order_id).first()
         if not order:
             return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Cập nhật trạng thái đơn hàng dựa vào result_code từ MoMo
         if result_code == 0:
             order.payment_status = Order.PaymentStatus.PAID
             order.save()
+
+            # Thêm sự kiện vào Google Calendar nếu người dùng đã xác thực
+            order_detail = OrderDetail.objects.filter(order=order).first()
+            if order_detail:
+                event = order_detail.ticket.event
+                user = order.user
+                credentials_dict = user.google_credentials  # Giả sử google_credentials được lưu trong User model
+                if credentials_dict:
+                    try:
+                        credentials = Credentials(**credentials_dict)
+                        service = build('calendar', 'v3', credentials=credentials)
+                        calendar_event = {
+                            'summary': event.title,
+                            'location': event.location,
+                            'description': event.description,
+                            'start': {
+                                'dateTime': event.start_time.isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'end': {
+                                'dateTime': event.end_time.isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'reminders': {
+                                'useDefault': False,
+                                'overrides': [
+                                    {'method': 'email', 'minutes': 24 * 60},
+                                    {'method': 'popup', 'minutes': 30},
+                                ],
+                            },
+                        }
+                        calendar_event_response = service.events().insert(calendarId='primary',
+                                                                          body=calendar_event).execute()
+                        order_detail.google_calendar_event_id = calendar_event_response['id']  # Lưu ID sự kiện nếu cần
+                        order_detail.save()
+                    except Exception as e:
+                        # Ghi log lỗi nhưng không làm gián đoạn quá trình thanh toán
+                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
+
             return Response({"message": "Thanh toán thành công", "order_id": order.id}, status=status.HTTP_200_OK)
         else:
             order.payment_status = Order.PaymentStatus.FAILED
@@ -553,7 +626,7 @@ class GoogleCalendarViewSet(viewsets.ViewSet):
         flow.fetch_token(code=code)
 
         credentials = flow.credentials
-        request.session['google_credentials'] = {
+        request.user.google_credentials = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
             'token_uri': credentials.token_uri,
@@ -561,6 +634,7 @@ class GoogleCalendarViewSet(viewsets.ViewSet):
             'client_secret': credentials.client_secret,
             'scopes': credentials.scopes
         }
+        request.user.save()
 
         return Response({"message": "Xác thực Google thành công"}, status=status.HTTP_200_OK)
 
