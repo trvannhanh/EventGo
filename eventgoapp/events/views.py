@@ -271,7 +271,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['post'], url_path='book-ticket', detail=True, permission_classes=[permissions.IsAuthenticated])
     def book_ticket(self, request, pk=None):
-        """Khởi tạo thanh toán MoMo, tạo OrderDetail và mã QR sau khi thanh toán thành công."""
+        """Khởi tạo thanh toán (MoMo hoặc VNPAY), tạo OrderDetail và mã QR sau khi thanh toán thành công."""
         user = request.user
         event = get_object_or_404(Event, id=pk)
         if event.status != Event.EventStatus.UPCOMING:
@@ -284,6 +284,9 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         if not all([ticket_id, quantity, payment_method]):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if payment_method not in ["MoMo", "VNPAY"]:
+            return Response({"error": "Phương thức thanh toán không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
         ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
         if ticket.quantity < quantity:
@@ -322,26 +325,45 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             trend, created = EventTrend.objects.get_or_create(event=event)
             trend.increment_interest(points=3)
 
-        # Tạo yêu cầu thanh toán MoMo với extraData chứa ticket_id và quantity
+        # Tạo yêu cầu thanh toán
         extra_data = base64.b64encode(json.dumps({
             'ticket_id': ticket_id,
             'quantity': quantity
-        }).encode()).decode()  # Mã hóa ticket_id và quantity thành base64
-        momo_response = self.create_momo_qr(order, extra_data)
-        if "error" in momo_response or "qrCodeUrl" not in momo_response:
-            order.payment_status = Order.PaymentStatus.FAILED
-            order.save()
-            return Response({
-                "error": "Không thể tạo QR thanh toán MoMo",
-                "momo_response": momo_response
-            }, status=status.HTTP_400_BAD_REQUEST)
+        }).encode()).decode()
 
-        return Response({
-            "order_id": order.id,
-            "qrCodeUrl": momo_response["qrCodeUrl"],
-            "payUrl": momo_response["payUrl"],
-            "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
-        }, status=status.HTTP_201_CREATED)
+        if payment_method == "MoMo":
+            payment_response = self.create_momo_qr(order, extra_data)
+            if "error" in payment_response or "qrCodeUrl" not in payment_response:
+                order.payment_status = Order.PaymentStatus.FAILED
+                order.save()
+                return Response({
+                    "error": "Không thể tạo QR thanh toán MoMo",
+                    "momo_response": payment_response
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                "order_id": order.id,
+                "qrCodeUrl": payment_response["qrCodeUrl"],
+                "payUrl": payment_response["payUrl"],
+                "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
+            }, status=status.HTTP_201_CREATED)
+
+        elif payment_method == "VNPAY":
+            payment_response = self.create_vnpay_url(order, extra_data, request)
+            if "error" in payment_response or "payUrl" not in payment_response:
+                order.payment_status = Order.PaymentStatus.FAILED
+                order.save()
+                return Response({
+                    "error": "Không thể tạo URL thanh toán VNPAY",
+                    "vnpay_response": payment_response
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                "order_id": order.id,
+                "payUrl": payment_response["payUrl"],
+                "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
+            }, status=status.HTTP_201_CREATED)
+        return None
 
     def create_momo_qr(self, order, extra_data):
         """Hàm gọi API tạo QR MoMo, truyền extraData."""
@@ -354,8 +376,8 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         partner_code = "MOMO"
         access_key = "F8BBA842ECF85"
         secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "http://localhost:8000/momopayment/payment-success"
-        ipn_url = "http://localhost:8000/momopayment/payment-notify"
+        redirect_url = "http://localhost:8000/payment/momo-payment-success"
+        ipn_url = "http://localhost:8000/payment/momo-payment-notify"
 
         raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
@@ -381,6 +403,44 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             return response.json()
         except requests.RequestException as e:
             return {"error": f"Lỗi khi gọi API MoMo: {str(e)}"}
+
+    def create_vnpay_url(self, order, extra_data, request):
+        """Tạo URL thanh toán VNPAY."""
+        order_id = f"ORDER_{order.user.id}_{order.id}"
+        amount = int(order.total_amount * 100)  # VNPAY yêu cầu số tiền tính bằng VND, nhân 100
+        order_info = f"Thanh toan don hang {order_id}"
+        ip_addr = request.META.get('REMOTE_ADDR', '127.0.0.1')
+
+        # Thông tin VNPAY (cần thay bằng thông tin thật từ tài khoản VNPAY của bạn)
+        vnpay_tmn_code = "YOUR_VNPAY_TMN_CODE"  # Mã website do VNPAY cung cấp
+        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"  # Secret key do VNPAY cung cấp
+        vnpay_url = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+        return_url = "http://localhost:8000/payment/vnpay-payment-success"  # URL MoMo chuyển hướng sau thanh toán
+        notify_url = "http://localhost:8000/payment/vnpay-payment-notify"  # IPN URL
+
+        # Tạo các tham số cho URL thanh toán
+        vnpay_params = {"vnp_Version": "2.1.0", "vnp_Command": "pay", "vnp_TmnCode": vnpay_tmn_code,
+                        "vnp_Amount": amount, "vnp_CreateDate": now().strftime("%Y%m%d%H%M%S"), "vnp_CurrCode": "VND",
+                        "vnp_IpAddr": ip_addr, "vnp_Locale": "vn",
+                        "vnp_OrderInfo": f"{order_info}|extraData:{extra_data}", "vnp_OrderType": "billpayment",
+                        "vnp_ReturnUrl": return_url, "vnp_TxnRef": order_id, "vnp_NotifyUrl": notify_url}
+
+        # Thêm extra_data vào OrderInfo (nếu cần)
+
+        # Sắp xếp các tham số theo thứ tự alphabet để tạo chữ ký
+        sorted_params = sorted(vnpay_params.items(), key=lambda x: x[0])
+        query_string = "&".join([f"{k}={v}" for k, v in sorted_params])
+        hash_data = query_string.encode('utf-8')
+        vnpay_secure_hash = hmac.new(
+            vnpay_hash_secret.encode('utf-8'),
+            hash_data,
+            hashlib.sha512
+        ).hexdigest()
+        vnpay_params["vnp_SecureHash"] = vnpay_secure_hash
+
+        # Tạo URL thanh toán
+        pay_url = f"{vnpay_url}?{query_string}&vnp_SecureHash={vnpay_secure_hash}"
+        return {"payUrl": pay_url}
 
     @action(methods=['post'], url_path='checkin', detail=True, permission_classes=[permissions.IsAuthenticated])
     def checkin_by_qr(self, request, pk=None):
@@ -434,10 +494,10 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             "target_rank": discount.target_rank
         }, status=status.HTTP_200_OK)
 
-class MoMoPaymentViewSet(viewsets.ViewSet):
+class PaymentViewSet(viewsets.ViewSet):
 
-    @action(detail=False, methods=['post'], url_path='payment-notify')
-    def payment_notify(self, request):
+    @action(detail=False, methods=['post'], url_path='momo-payment-notify')
+    def momo_payment_notify(self, request):
         data = request.data
         order_id = data.get("orderId")
         request_id = data.get("requestId")
@@ -448,7 +508,6 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
         if not order_id or not request_id:
             return Response({"error": "Dữ liệu không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Tách order_id từ định dạng ORDER_<user_id>_<order_id>
         try:
             order_id_parts = order_id.split('_')
             if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
@@ -466,7 +525,6 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
                 order.payment_status = Order.PaymentStatus.PAID
                 order.save()
 
-                # Giải mã extraData để lấy ticket_id và quantity
                 if not extra_data:
                     return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
                 try:
@@ -482,7 +540,6 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
                     order.save()
                     return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
 
-                # Tạo OrderDetail và mã QR
                 qr_image_urls = []
                 for i in range(quantity):
                     qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
@@ -497,25 +554,21 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
                     order_detail.qr_image.save(f"{qr_code}.png", qr_image)
                     order_detail.save()
 
-                    # Lưu URL hình QR (không có request context, dùng đường dẫn tương đối)
                     qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
 
-                # Giảm số lượng vé
                 ticket.quantity -= quantity
                 ticket.save()
 
-                # Gửi email chứa mã QR
                 send_mail(
                     subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
                     message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
                             "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
-                            "\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
+                            f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
                     from_email="nhanhgon24@gmail.com",
                     recipient_list=[order.user.email],
                     fail_silently=True
                 )
 
-                # Thêm Google Calendar (giữ nguyên logic hiện tại)
                 user = order.user
                 credentials_dict = user.google_credentials
                 if credentials_dict:
@@ -562,8 +615,150 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['get'], url_path='payment-success')
-    def payment_success(self, request):
+    @action(detail=False, methods=['post'], url_path='vnpay-payment-notify')
+    def vnpay_payment_notify(self, request):
+        """Xử lý thông báo từ VNPAY."""
+        data = request.query_params
+        vnp_TxnRef = data.get("vnp_TxnRef")
+        vnp_ResponseCode = data.get("vnp_ResponseCode")
+        vnp_SecureHash = data.get("vnp_SecureHash")
+        vnp_Amount = int(data.get("vnp_Amount")) / 100  # Chia 100 để đổi về VND
+
+        # Xác minh chữ ký
+        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
+        input_data = {k: v for k, v in data.items() if k != "vnp_SecureHash"}
+        sorted_input = sorted(input_data.items(), key=lambda x: x[0])
+        query_string = "&".join([f"{k}={v}" for k, v in sorted_input])
+        hash_data = query_string.encode('utf-8')
+        calculated_hash = hmac.new(
+            vnpay_hash_secret.encode('utf-8'),
+            hash_data,
+            hashlib.sha512
+        ).hexdigest()
+
+        if calculated_hash != vnp_SecureHash:
+            return Response({"error": "Chữ ký không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order_id_parts = vnp_TxnRef.split('_')
+            if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
+                raise ValueError("Định dạng order_id không hợp lệ")
+            actual_order_id = order_id_parts[2]
+        except (ValueError, IndexError):
+            return Response({"error": "Định dạng order_id không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = Order.objects.filter(id=actual_order_id).first()
+        if not order:
+            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Kiểm tra số tiền
+        if vnp_Amount != order.total_amount:
+            return Response({"error": "Số tiền không khớp"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            if vnp_ResponseCode == "00":  # Thanh toán thành công
+                order.payment_status = Order.PaymentStatus.PAID
+                order.save()
+
+                # Lấy extra_data từ vnp_OrderInfo
+                order_info = data.get("vnp_OrderInfo", "")
+                extra_data = ""
+                if "|extraData:" in order_info:
+                    extra_data = order_info.split("|extraData:")[1]
+                if not extra_data:
+                    return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
+
+                try:
+                    extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
+                    ticket_id = extra_data_decoded['ticket_id']
+                    quantity = extra_data_decoded['quantity']
+                except (ValueError, KeyError):
+                    return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+                ticket = get_object_or_404(Ticket, id=ticket_id)
+                if ticket.quantity < quantity:
+                    order.payment_status = Order.PaymentStatus.FAILED
+                    order.save()
+                    return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
+
+                qr_image_urls = []
+                for i in range(quantity):
+                    qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
+                    order_detail = OrderDetail.objects.create(
+                        order=order,
+                        ticket=ticket,
+                        quantity=1,
+                        qr_code=qr_code
+                    )
+
+                    qr_image = generate_qr_image(qr_code)
+                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+                    order_detail.save()
+
+                    qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
+
+                ticket.quantity -= quantity
+                ticket.save()
+
+                send_mail(
+                    subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
+                    message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
+                            "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
+                            f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
+                    from_email="nhanhgon24@gmail.com",
+                    recipient_list=[order.user.email],
+                    fail_silently=True
+                )
+
+                user = order.user
+                credentials_dict = user.google_credentials
+                if credentials_dict:
+                    try:
+                        credentials = Credentials(**credentials_dict)
+                        service = build('calendar', 'v3', credentials=credentials)
+                        event = ticket.event
+                        calendar_event = {
+                            'summary': f"Event: {event.name}",
+                            'location': event.location,
+                            'description': f"Ticket: {ticket.type}",
+                            'start': {
+                                'dateTime': event.date.isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'end': {
+                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'reminders': {
+                                'useDefault': False,
+                                'overrides': [
+                                    {'method': 'email', 'minutes': 24 * 60},
+                                    {'method': 'popup', 'minutes': 30},
+                                ],
+                            },
+                        }
+                        calendar_event_response = service.events().insert(
+                            calendarId='primary',
+                            body=calendar_event
+                        ).execute()
+                        order_detail = OrderDetail.objects.filter(order=order).first()
+                        order_detail.google_calendar_event_id = calendar_event_response['id']
+                        order_detail.save()
+                    except Exception as e:
+                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
+
+                return Response({
+                    "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
+                    "order_id": order.id
+                }, status=status.HTTP_200_OK)
+            else:
+                order.payment_status = Order.PaymentStatus.FAILED
+                order.save()
+                return Response({"message": f"Thanh toán thất bại: {vnp_ResponseCode}"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='momo-payment-success')
+    def momo_payment_success(self, request):
         """Xử lý chuyển hướng từ MoMo sau khi thanh toán thành công."""
         partner_code = request.query_params.get('partnerCode')
         order_id = request.query_params.get('orderId')
@@ -587,8 +782,6 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
             return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
 
         if result_code == '0':
-            # Thanh toán thành công
-            # Lưu ý: Logic chính đã được xử lý trong payment_notify, ở đây chỉ cần trả về thông điệp
             return Response({
                 "message": "Thanh toán thành công! Kiểm tra email của bạn để xem mã QR hoặc gọi GET /orders/{id}/",
                 "order_id": order.id
@@ -596,6 +789,51 @@ class MoMoPaymentViewSet(viewsets.ViewSet):
         else:
             return Response({
                 "message": f"Thanh toán thất bại: {message}",
+                "order_id": order.id
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='vnpay-payment-success')
+    def vnpay_payment_success(self, request):
+        """Xử lý chuyển hướng từ VNPAY sau khi thanh toán thành công."""
+        vnp_TxnRef = request.query_params.get("vnp_TxnRef")
+        vnp_ResponseCode = request.query_params.get("vnp_ResponseCode")
+        vnp_SecureHash = request.query_params.get("vnp_SecureHash")
+
+        # Xác minh chữ ký
+        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
+        input_data = {k: v for k, v in request.query_params.items() if k != "vnp_SecureHash"}
+        sorted_input = sorted(input_data.items(), key=lambda x: x[0])
+        query_string = "&".join([f"{k}={v}" for k, v in sorted_input])
+        hash_data = query_string.encode('utf-8')
+        calculated_hash = hmac.new(
+            vnpay_hash_secret.encode('utf-8'),
+            hash_data,
+            hashlib.sha512
+        ).hexdigest()
+
+        if calculated_hash != vnp_SecureHash:
+            return Response({"error": "Chữ ký không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order_id_parts = vnp_TxnRef.split('_')
+            if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
+                raise ValueError("Định dạng order_id không hợp lệ")
+            actual_order_id = order_id_parts[2]
+        except (ValueError, IndexError):
+            return Response({"error": "Định dạng order_id không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = Order.objects.filter(id=actual_order_id).first()
+        if not order:
+            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
+
+        if vnp_ResponseCode == "00":
+            return Response({
+                "message": "Thanh toán thành công! Kiểm tra email của bạn để xem mã QR hoặc gọi GET /orders/{id}/",
+                "order_id": order.id
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "message": f"Thanh toán thất bại: {vnp_ResponseCode}",
                 "order_id": order.id
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -626,130 +864,172 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
     @action(detail=True, methods=['post'], url_path='check-payment-status',
             permission_classes=[permissions.IsAuthenticated])
     def check_payment_status(self, request, id=None):
-        """Kiểm tra trạng thái thanh toán MoMo thủ công."""
+        """Kiểm tra trạng thái thanh toán (MoMo hoặc VNPAY) thủ công."""
         order = self.get_object()
         if order.payment_status != Order.PaymentStatus.PENDING:
             return Response({
                 "message": f"Đơn hàng đã được xử lý với trạng thái: {order.payment_status}"
             }, status=status.HTTP_200_OK)
 
-        # Gọi API MoMo để kiểm tra trạng thái
         order_id = f"ORDER_{order.user.id}_{order.id}"
         request_id = f"REQ_{order_id}"
-        endpoint = "https://test-payment.momo.vn/v2/gateway/api/query"
-        partner_code = "MOMO"
-        access_key = "F8BBA842ECF85"
-        secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
 
-        raw_data = f"accessKey={access_key}&orderId={order_id}&partnerCode={partner_code}&requestId={request_id}"
-        signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
+        if order.payment_method == "MoMo":
+            endpoint = "https://test-payment.momo.vn/v2/gateway/api/query"
+            partner_code = "MOMO"
+            access_key = "F8BBA842ECF85"
+            secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
 
-        data = {
-            "partnerCode": partner_code,
-            "accessKey": access_key,
-            "requestId": request_id,
-            "orderId": order_id,
-            "signature": signature,
-            "lang": "vi"
-        }
+            raw_data = f"accessKey={access_key}&orderId={order_id}&partnerCode={partner_code}&requestId={request_id}"
+            signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
+
+            data = {
+                "partnerCode": partner_code,
+                "accessKey": access_key,
+                "requestId": request_id,
+                "orderId": order_id,
+                "signature": signature,
+                "lang": "vi"
+            }
+
+            try:
+                response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
+                response.raise_for_status()
+                result = response.json()
+                result_code = result.get("resultCode")
+                message = result.get("message")
+                extra_data = result.get("extraData")
+            except requests.RequestException as e:
+                return Response({"error": f"Lỗi khi kiểm tra trạng thái MoMo: {str(e)}"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        elif order.payment_method == "VNPAY":
+            endpoint = "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction"
+            vnpay_tmn_code = "YOUR_VNPAY_TMN_CODE"
+            vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
+
+            vnpay_params = {
+                "vnp_Version": "2.1.0",
+                "vnp_Command": "querydr",
+                "vnp_TmnCode": vnpay_tmn_code,
+                "vnp_TxnRef": order_id,
+                "vnp_OrderInfo": f"Tra cuu giao dich {order_id}",
+                "vnp_TransDate": now().strftime("%Y%m%d%H%M%S"),
+                "vnp_CreateDate": now().strftime("%Y%m%d%H%M%S"),
+                "vnp_IpAddr": request.META.get('REMOTE_ADDR', '127.0.0.1'),
+            }
+
+            sorted_params = sorted(vnpay_params.items(), key=lambda x: x[0])
+            query_string = "&".join([f"{k}={v}" for k, v in sorted_params])
+            hash_data = query_string.encode('utf-8')
+            secure_hash = hmac.new(
+                vnpay_hash_secret.encode('utf-8'),
+                hash_data,
+                hashlib.sha512
+            ).hexdigest()
+            vnpay_params["vnp_SecureHash"] = secure_hash
+
+            try:
+                response = requests.post(endpoint, data=vnpay_params, timeout=10)
+                response.raise_for_status()
+                result = response.json()
+                result_code = result.get("vnp_ResponseCode")
+                message = result.get("vnp_Message", "Không có thông tin")
+                extra_data = ""
+                order_info = result.get("vnp_OrderInfo", "")
+                if "|extraData:" in order_info:
+                    extra_data = order_info.split("|extraData:")[1]
+            except requests.RequestException as e:
+                return Response({"error": f"Lỗi khi kiểm tra trạng thái VNPAY: {str(e)}"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        if not extra_data:
+            return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            response = requests.post(endpoint, json=data, headers={'Content-Type': 'application/json'}, timeout=10)
-            response.raise_for_status()
-            result = response.json()
-            result_code = result.get("resultCode")
-            message = result.get("message")
+            extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
+            ticket_id = extra_data_decoded['ticket_id']
+            quantity = extra_data_decoded['quantity']
+        except (ValueError, KeyError):
+            return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
-            if result_code == 0:
-                # Thanh toán thành công, gọi lại logic của payment_notify
-                extra_data = result.get("extraData")
-                if not extra_data:
-                    return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
+        ticket = get_object_or_404(Ticket, id=ticket_id)
+        with transaction.atomic():
+            if ticket.quantity < quantity:
+                order.payment_status = Order.PaymentStatus.FAILED
+                order.save()
+                return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
 
-                try:
-                    extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
-                    ticket_id = extra_data_decoded['ticket_id']
-                    quantity = extra_data_decoded['quantity']
-                except (ValueError, KeyError):
-                    return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
+            if (order.payment_method == "MoMo" and result_code == 0) or (
+                    order.payment_method == "VNPAY" and result_code == "00"):
+                order.payment_status = Order.PaymentStatus.PAID
+                order.save()
 
-                ticket = get_object_or_404(Ticket, id=ticket_id)
-                with transaction.atomic():
-                    if ticket.quantity < quantity:
-                        order.payment_status = Order.PaymentStatus.FAILED
-                        order.save()
-                        return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
-
-                    order.payment_status = Order.PaymentStatus.PAID
-                    order.save()
-
-                    qr_image_urls = []
-                    for i in range(quantity):
-                        qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
-                        order_detail = OrderDetail.objects.create(
-                            order=order,
-                            ticket=ticket,
-                            quantity=1,
-                            qr_code=qr_code
-                        )
-
-                        qr_image = generate_qr_image(qr_code)
-                        order_detail.qr_image.save(f"{qr_code}.png", qr_image)
-                        order_detail.save()
-
-                        qr_image_urls.append(request.build_absolute_uri(order_detail.qr_image.url))
-
-                    ticket.quantity -= quantity
-                    ticket.save()
-
-                    # Gửi email chứa mã QR
-                    send_mail(
-                        subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
-                        message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
-                                "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
-                                "\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                        from_email="nhanhgon24@gmail.com",
-                        recipient_list=[order.user.email],
-                        fail_silently=True
+                qr_image_urls = []
+                for i in range(quantity):
+                    qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
+                    order_detail = OrderDetail.objects.create(
+                        order=order,
+                        ticket=ticket,
+                        quantity=1,
+                        qr_code=qr_code
                     )
 
-                    # Thêm Google Calendar (tương tự payment_notify)
-                    user = order.user
-                    credentials_dict = user.google_credentials
-                    if credentials_dict:
-                        try:
-                            credentials = Credentials(**credentials_dict)
-                            service = build('calendar', 'v3', credentials=credentials)
-                            event = ticket.event
-                            calendar_event = {
-                                'summary': f"Event: {event.name}",
-                                'location': event.location,
-                                'description': f"Ticket: {ticket.type}",
-                                'start': {
-                                    'dateTime': event.date.isoformat(),
-                                    'timeZone': 'Asia/Ho_Chi_Minh',
-                                },
-                                'end': {
-                                    'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                    'timeZone': 'Asia/Ho_Chi_Minh',
-                                },
-                                'reminders': {
-                                    'useDefault': False,
-                                    'overrides': [
-                                        {'method': 'email', 'minutes': 24 * 60},
-                                        {'method': 'popup', 'minutes': 30},
-                                    ],
-                                },
-                            }
-                            calendar_event_response = service.events().insert(
-                                calendarId='primary',
-                                body=calendar_event
-                            ).execute()
-                            order_detail = OrderDetail.objects.filter(order=order).first()
-                            order_detail.google_calendar_event_id = calendar_event_response['id']
-                            order_detail.save()
-                        except Exception as e:
-                            print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
+                    qr_image = generate_qr_image(qr_code)
+                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+                    order_detail.save()
+
+                    qr_image_urls.append(request.build_absolute_uri(order_detail.qr_image.url))
+
+                ticket.quantity -= quantity
+                ticket.save()
+
+                send_mail(
+                    subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
+                    message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
+                            "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
+                            f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
+                    from_email="nhanhgon24@gmail.com",
+                    recipient_list=[order.user.email],
+                    fail_silently=True
+                )
+
+                user = order.user
+                credentials_dict = user.google_credentials
+                if credentials_dict:
+                    try:
+                        credentials = Credentials(**credentials_dict)
+                        service = build('calendar', 'v3', credentials=credentials)
+                        event = ticket.event
+                        calendar_event = {
+                            'summary': f"Event: {event.name}",
+                            'location': event.location,
+                            'description': f"Ticket: {ticket.type}",
+                            'start': {
+                                'dateTime': event.date.isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'end': {
+                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
+                                'timeZone': 'Asia/Ho_Chi_Minh',
+                            },
+                            'reminders': {
+                                'useDefault': False,
+                                'overrides': [
+                                    {'method': 'email', 'minutes': 24 * 60},
+                                    {'method': 'popup', 'minutes': 30},
+                                ],
+                            },
+                        }
+                        calendar_event_response = service.events().insert(
+                            calendarId='primary',
+                            body=calendar_event
+                        ).execute()
+                        order_detail = OrderDetail.objects.filter(order=order).first()
+                        order_detail.google_calendar_event_id = calendar_event_response['id']
+                        order_detail.save()
+                    except Exception as e:
+                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
 
                 return Response({
                     "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
@@ -759,9 +1039,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                 order.payment_status = Order.PaymentStatus.FAILED
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
-        except requests.RequestException as e:
-            return Response({"error": f"Lỗi khi kiểm tra trạng thái MoMo: {str(e)}"},
-                            status=status.HTTP_400_BAD_REQUEST)
 
     def list(self, request, *args, **kwargs):
         """GET /orders/: Lấy danh sách đơn hàng của người dùng hiện tại."""
