@@ -20,11 +20,15 @@ export default function Profile() {
         );
     }
 
+    // Log user object để debug
+    console.log('USER PROFILE:', user);
+
     return (
         <View style={MyStyles.containerCenter}>
             <Text style={MyStyles.title}>Thông tin tài khoản</Text>
-            <Text style={MyStyles.infoText}>Tên: {user.name || user.username}</Text>
+            <Text style={MyStyles.infoText}>Tên đăng nhập: {user.username}</Text>
             <Text style={MyStyles.infoText}>Email: {user.email}</Text>
+            {user.role && <Text style={MyStyles.infoText}>Vai trò: {user.role}</Text>}
             <Button title="Đăng xuất" onPress={handleLogout} />
         </View>
     );

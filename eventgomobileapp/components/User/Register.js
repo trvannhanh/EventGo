@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, Alert } from 'react-native';
-import axios from 'axios';
+import api from '../../configs/Apis'; // dùng api đã cấu hình baseURL
 import MyStyles from '../styles/MyStyles';
 
 export default function Register() {
-    const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -12,13 +12,15 @@ export default function Register() {
     const handleRegister = async () => {
         setLoading(true);
         try {
-            const response = await axios.post('http://localhost:8000/api/register/', {
-                name,
+            const response = await api.post('users/', {
+                username,
                 email,
                 password,
+            }, {
+                headers: { 'Content-Type': 'application/json' }
             });
             Alert.alert('Thành công', 'Đăng ký thành công!');
-        } catch (error) {
+        } catch (error) {     
             Alert.alert('Lỗi', 'Đăng ký thất bại!');
         } finally {
             setLoading(false);
@@ -30,9 +32,9 @@ export default function Register() {
             <Text style={MyStyles.title}>Đăng ký</Text>
             <TextInput
                 style={MyStyles.input}
-                placeholder="Tên"
-                value={name}
-                onChangeText={setName}
+                placeholder="Tên đăng nhập"
+                value={username}
+                onChangeText={setUsername}
             />
             <TextInput
                 style={MyStyles.input}

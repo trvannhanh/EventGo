@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-3*0)+zju75-6mb82)sr3ne#8qtv0*pl7w^s93hoc*3s0w87$a3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['10.0.2.2', 'localhost', '127.0.0.1', "192.168.1.41"]
+ALLOWED_HOSTS = ['10.0.2.2', 'localhost', '127.0.0.1', "192.168.1.41", "10.17.49.112"]
 
 
 # Application definition
@@ -215,8 +215,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 #29/3
-CLIENT_ID = 'LugOVBYQ40AG5gX2rZLrJ06QwMfURLu53KMZ5uUR'
-CLIENT_SECRET = 'UhLGgZO3EUw2TjWsTH9pj0ZIghx4geIwIcQX3dBe7BJaCwMkVgZJEKKEKcbhWyDOcm1fDnGowDdAo086zXO1wtEIVAuwmbtiH6sWwRBVPYxJ0c3U8wuYtriI8ZjoklAM'
+CLIENT_ID = 'pD7UpIjBUdkylCiTFQ5oURKDu61S9DfpEpbX2sBZ'
+CLIENT_SECRET = 'eeN7xeN4jxCiGVN9HKI3j9NhNbHrJrbmlDVlCEvnhk5yV3d7uXwLbiUxfeHYIa3A2IhYAbrB9MQ8GHs30ARomfdwMiyy9olP5qlNzgaO4VE03efF7889NZqdgTqNYgIq'
 
 GOOGLE_CLIENT_ID = '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com'
 GOOGLE_CLIENT_SECRET = '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'
@@ -225,8 +225,8 @@ FACEBOOK_ID = '1390840525421151'
 FACKEBOOK_SECRET = '4677af425a1550366a18fe756cf0c0a9'
 
 
-CELERY_BROKER_URL = 'redis://192.168.1.41:6379/0'
-CELERY_RESULT_BACKEND = 'redis://192.168.1.41:6379/0'
+CELERY_BROKER_URL = 'redis://:Admin123@192.168.1.41:6379/0'
+CELERY_RESULT_BACKEND = 'redis://:Admin123@192.168.1.41:6379/0'
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -234,7 +234,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://192.168.1.41:6379/1",  # database số 1
+        "LOCATION": "redis://:Admin123@192.168.1.41:6379/1",  # database số 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "PASSWORD": "Admin123",
