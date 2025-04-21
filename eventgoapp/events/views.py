@@ -1,5 +1,9 @@
 import base64
 from datetime import timezone, timedelta
+from io import BytesIO
+
+import openpyxl
+from django.http import HttpResponse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from django.conf import settings
@@ -9,6 +13,9 @@ from django.db import transaction, models
 from django.utils.timezone import now
 from google_auth_oauthlib.flow import Flow
 from httplib2 import Credentials
+from openpyxl.styles import Alignment
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
 from django.utils.http import urlsafe_base64_encode
@@ -25,7 +32,7 @@ import requests
 import hashlib
 import hmac
 
-from django.db.models import F
+from django.db.models import F, Sum, Avg, ExpressionWrapper, DurationField
 
 from .utils import generate_qr_image
 from rest_framework import generics
@@ -493,6 +500,175 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             "discount_percent": discount.discount_percent,
             "target_rank": discount.target_rank
         }, status=status.HTTP_200_OK)
+
+    @action(methods=['get'], url_path='analytics', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def get_event_analytics(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+
+        # Kiểm tra quyền truy cập
+        if not request.user.is_superuser and request.user != event.organizer:
+            return Response(
+                {"error": "Bạn không có quyền xem báo cáo phân tích cho sự kiện này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Tính toán các chỉ số hiện có
+        total_revenue = Order.objects.filter(
+            order_details__ticket__event=event,
+            payment_status=Order.PaymentStatus.PAID
+        ).aggregate(total=Sum('total_amount'))['total'] or 0
+
+        tickets_sold = OrderDetail.objects.filter(
+            ticket__event=event,
+            order__payment_status=Order.PaymentStatus.PAID
+        ).aggregate(total_tickets=Sum('quantity'))['total_tickets'] or 0
+
+        average_rating = Review.objects.filter(event=event).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
+        average_rating = round(average_rating, 1)
+
+        # Tỷ lệ hủy đơn hàng
+        total_orders = Order.objects.filter(order_details__ticket__event=event).count()
+        canceled_orders = Order.objects.filter(
+            order_details__ticket__event=event,
+            payment_status=Order.PaymentStatus.FAILED
+        ).count()
+        cancellation_rate = (canceled_orders / total_orders * 100) if total_orders > 0 else 0
+        cancellation_rate = round(cancellation_rate, 2)
+
+        # Thời gian trung bình để mua vé (tính từ created_at đến updated_at khi thanh toán thành công)
+        avg_purchase_time = Order.objects.filter(
+            order_details__ticket__event=event,
+            payment_status=Order.PaymentStatus.PAID
+        ).annotate(
+            purchase_duration=ExpressionWrapper(
+                F('updated_at') - F('created_at'),
+                output_field=DurationField()
+            )
+        ).aggregate(avg_time=Avg('purchase_duration'))['avg_time']
+        avg_purchase_time_seconds = avg_purchase_time.total_seconds() / 60 if avg_purchase_time else 0  # Đổi ra phút
+
+        # Tỷ lệ người tham gia quay lại
+        attendees = User.objects.filter(
+            orders__order_details__ticket__event=event,
+            orders__payment_status=Order.PaymentStatus.PAID
+        ).distinct()
+        total_attendees = attendees.count()
+        repeat_attendees = 0
+        for attendee in attendees:
+            other_events = Event.objects.filter(
+                organizer=event.organizer
+            ).exclude(id=event.id)
+            if Order.objects.filter(
+                    user=attendee,
+                    order_details__ticket__event__in=other_events,
+                    payment_status=Order.PaymentStatus.PAID
+            ).exists():
+                repeat_attendees += 1
+        repeat_attendee_rate = (repeat_attendees / total_attendees * 100) if total_attendees > 0 else 0
+        repeat_attendee_rate = round(repeat_attendee_rate, 2)
+
+        return Response({
+            "total_revenue": total_revenue,
+            "tickets_sold": tickets_sold,
+            "average_rating": average_rating,
+            "cancellation_rate": cancellation_rate,  # Tỷ lệ hủy đơn hàng (%)
+            "avg_purchase_time_minutes": round(avg_purchase_time_seconds, 2),  # Thời gian trung bình (phút)
+            "repeat_attendee_rate": repeat_attendee_rate  # Tỷ lệ người tham gia quay lại (%)
+        }, status=status.HTTP_200_OK)
+
+    # Action mới: Xuất báo cáo
+    @action(methods=['get'], url_path='analytics/export', detail=True,
+            permission_classes=[permissions.IsAuthenticated])
+    def export_analytics(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+
+        # Kiểm tra quyền truy cập
+        if not request.user.is_superuser and request.user != event.organizer:
+            return Response(
+                {"error": "Bạn không có quyền xuất báo cáo cho sự kiện này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Lấy dữ liệu từ API analytics
+        analytics_response = self.get_event_analytics(request, pk)
+        if analytics_response.status_code != 200:
+            return Response(analytics_response.data, status=analytics_response.status_code)
+        analytics_data = analytics_response.data
+
+        # Định dạng xuất (pdf hoặc excel)
+        export_format = request.query_params.get('format', 'pdf')
+
+        if export_format.lower() == 'pdf':
+            # Xuất PDF
+            buffer = BytesIO()
+            p = canvas.Canvas(buffer, pagesize=letter)
+            width, height = letter
+
+            # Tiêu đề
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(100, height - 50, f"Event Analytics Report - {event.name}")
+
+            # Dữ liệu analytics
+            p.setFont("Helvetica", 12)
+            y_position = height - 100
+            p.drawString(100, y_position, f"Total Revenue: {analytics_data['total_revenue']} VND")
+            p.drawString(100, y_position - 20, f"Tickets Sold: {analytics_data['tickets_sold']}")
+            p.drawString(100, y_position - 40, f"Average Rating: {analytics_data['average_rating']}")
+            p.drawString(100, y_position - 60, f"Cancellation Rate: {analytics_data['cancellation_rate']}%")
+            p.drawString(100, y_position - 80,
+                         f"Average Purchase Time: {analytics_data['avg_purchase_time_minutes']} minutes")
+            p.drawString(100, y_position - 100, f"Repeat Attendee Rate: {analytics_data['repeat_attendee_rate']}%")
+
+            p.showPage()
+            p.save()
+            buffer.seek(0)
+
+            response = HttpResponse(buffer, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="event_{event.id}_analytics.pdf"'
+            return response
+
+        elif export_format.lower() == 'excel':
+            # Xuất Excel
+            workbook = openpyxl.Workbook()
+            worksheet = workbook.active
+            worksheet.title = "Event Analytics"
+
+            # Tiêu đề
+            worksheet['A1'] = f"Event Analytics Report - {event.name}"
+            worksheet['A1'].font = Font(bold=True, size=16)
+            worksheet['A1'].alignment = Alignment(horizontal='center')
+            worksheet.merge_cells('A1:D1')
+
+            # Dữ liệu analytics
+            headers = ['Metric', 'Value', '', '']
+            worksheet.append(headers)
+            for cell in worksheet[2]:
+                cell.font = Font(bold=True)
+            analytics_rows = [
+                ['Total Revenue', f"{analytics_data['total_revenue']} VND", '', ''],
+                ['Tickets Sold', analytics_data['tickets_sold'], '', ''],
+                ['Average Rating', analytics_data['average_rating'], '', ''],
+                ['Cancellation Rate', f"{analytics_data['cancellation_rate']}%", '', ''],
+                ['Average Purchase Time', f"{analytics_data['avg_purchase_time_minutes']} minutes", '', ''],
+                ['Repeat Attendee Rate', f"{analytics_data['repeat_attendee_rate']}%", '', '']
+            ]
+            for row in analytics_rows:
+                worksheet.append(row)
+
+            buffer = BytesIO()
+            workbook.save(buffer)
+            buffer.seek(0)
+
+            response = HttpResponse(buffer,
+                                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = f'attachment; filename="event_{event.id}_analytics.xlsx"'
+            return response
+
+        else:
+            return Response({"error": "Định dạng không được hỗ trợ. Sử dụng 'pdf' hoặc 'excel'."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+
 
 class PaymentViewSet(viewsets.ViewSet):
 
