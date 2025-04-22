@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'push_notifications', # 4/5
     'cloudinary',
     'cloudinary_storage',
+    'drf_yasg'
 ]
 
 
@@ -92,7 +93,12 @@ AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend',
 )
 
-
+GOOGLE_CALENDAR_API = {
+    'CLIENT_ID': '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com',
+    'CLIENT_SECRET': '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',
+    'REDIRECT_URI': 'http://localhost:8000/auth/google/callback/',
+    'SCOPES': ['https://www.googleapis.com/auth/calendar.events'],
+}
 
 
 ACCOUNT_AUTHENTICATION_METHOD = 'username_email'  # Cho phép đăng nhập bằng username hoặc email
@@ -215,8 +221,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 #29/3
-CLIENT_ID = 'pD7UpIjBUdkylCiTFQ5oURKDu61S9DfpEpbX2sBZ'
-CLIENT_SECRET = 'eeN7xeN4jxCiGVN9HKI3j9NhNbHrJrbmlDVlCEvnhk5yV3d7uXwLbiUxfeHYIa3A2IhYAbrB9MQ8GHs30ARomfdwMiyy9olP5qlNzgaO4VE03efF7889NZqdgTqNYgIq'
+
+CLIENT_ID = 'RMc1aqYSM98ld8ulAOy1FAyvubnPJiWCeWnnefPC'
+CLIENT_SECRET = 'pVmRNtsbnYZj7j0vYEbg20GoV8JE74HA4ZG74Ggqxw0OD0a3Qqlz2LGM2M6DVkArIolR3pTv4Kh7Z4mmu5CDqAhUIsOoyDCX8eKoQeRSGWVmwfFVljwtBbicN2EOrozT'
+
 
 GOOGLE_CLIENT_ID = '782723098529-vrc06mm3l9oj92crt6bcpnnpsgupjh28.apps.googleusercontent.com'
 GOOGLE_CLIENT_SECRET = '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'
