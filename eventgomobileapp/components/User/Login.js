@@ -7,6 +7,7 @@ import { API_BASE } from '../../configs/Apis';
 import { authApis } from '../../configs/Apis';
 import { MyDispatchContext } from '../../configs/MyContexts';
 import { Card, Title, TextInput as PaperTextInput, Button as PaperButton, Paragraph } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -45,16 +46,22 @@ export default function Login() {
     };
 
     return (
-        <Card style={{ margin: 16, padding: 16 }}>
+        <Card style={MyStyles.cardPastel}>
             <Card.Content>
-                <Title style={{ textAlign: 'center', marginBottom: 12 }}>Đăng nhập</Title>
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <MaterialCommunityIcons name="login" size={48} style={MyStyles.iconPastel} />
+                </View>
+                <Title style={MyStyles.titlePastel}>Đăng nhập</Title>
                 <PaperTextInput
                     mode="outlined"
                     label="Tên đăng nhập"
                     value={username}
                     onChangeText={setUsername}
                     autoCapitalize="none"
-                    style={{ marginBottom: 16 }}
+                    style={MyStyles.inputPastel}
+                    outlineColor="#A49393"
+                    activeOutlineColor="#A49393"
+                    textColor="#222"
                 />
                 <PaperTextInput
                     mode="outlined"
@@ -62,9 +69,12 @@ export default function Login() {
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
-                    style={{ marginBottom: 16 }}
+                    style={MyStyles.inputPastel}
+                    outlineColor="#A49393"
+                    activeOutlineColor="#A49393"
+                    textColor="#222"
                 />
-                <PaperButton mode="contained" onPress={handleLogin} loading={loading} disabled={loading}>
+                <PaperButton mode="contained" onPress={handleLogin} loading={loading} disabled={loading} style={MyStyles.buttonPastel} labelStyle={MyStyles.buttonLabelLight}>
                     Đăng nhập
                 </PaperButton>
             </Card.Content>

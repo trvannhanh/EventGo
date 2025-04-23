@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { authApis } from '../../configs/Apis';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button as PaperButton, TextInput as PaperTextInput, Card, Avatar, Title, Paragraph } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function Profile() {
     const user = useContext(MyUserContext);
@@ -68,9 +69,12 @@ export default function Profile() {
 
     return (
         
-        <Card style={{ margin: 16, padding: 16 }}>
+        <Card style={MyStyles.cardPastel}>
             <Card.Content>
-                <Title style={{ textAlign: 'center', marginBottom: 12 }}>Thông tin tài khoản</Title>
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <MaterialCommunityIcons name="account-circle" size={48} style={MyStyles.iconPastel} />
+                </View>
+                <Title style={MyStyles.titlePastel}>Thông tin tài khoản</Title>
                 <Avatar.Image
                     size={100}
                     source={
@@ -80,27 +84,30 @@ export default function Profile() {
                                 : { uri: `https://res.cloudinary.com/dqpkxxzaf/${avatar}` })
                             : require('../../assets/icon.png')
                     }
-                    style={{ alignSelf: 'center', marginBottom: 16 }}
+                    style={MyStyles.avatarPastel}
                 />
-                <PaperButton mode="outlined" onPress={pickImage} style={{ marginBottom: 16 }}>
+                <PaperButton mode="outlined" onPress={pickImage} style={MyStyles.buttonOutlinePastel} labelStyle={MyStyles.buttonLabelDark}>
                     Chọn ảnh đại diện
                 </PaperButton>
-                <Paragraph>Tên đăng nhập: {user.username}</Paragraph>
-                <Paragraph>Email: {user.email}</Paragraph>
-                <Paragraph>Vai trò: {user.role}</Paragraph>
-                <Paragraph>Số điện thoại:</Paragraph>
+                <Paragraph style={MyStyles.labelPastel}>Tên đăng nhập: <Text style={MyStyles.textDark}>{user.username}</Text></Paragraph>
+                <Paragraph style={MyStyles.labelPastel}>Email: <Text style={MyStyles.textDark}>{user.email}</Text></Paragraph>
+                <Paragraph style={MyStyles.labelPastel}>Vai trò: <Text style={MyStyles.textDark}>{user.role}</Text></Paragraph>
+                <Paragraph style={MyStyles.labelPastel}>Số điện thoại:</Paragraph>
                 <PaperTextInput
                     mode="outlined"
                     value={phone}
                     onChangeText={setPhone}
                     placeholder="Nhập số điện thoại"
                     keyboardType="phone-pad"
-                    style={{ marginBottom: 16 }}
+                    style={MyStyles.inputPastel}
+                    outlineColor="#A49393"
+                    activeOutlineColor="#A49393"
+                    textColor="#222"
                 />
-                <PaperButton mode="contained" onPress={handleUpdate} loading={updating} disabled={updating} style={{ marginBottom: 8 }}>
+                <PaperButton mode="contained" onPress={handleUpdate} loading={updating} disabled={updating} style={MyStyles.buttonPastel} labelStyle={MyStyles.buttonLabelLight}>
                     Cập nhật
                 </PaperButton>
-                <PaperButton mode="outlined" onPress={handleLogout} color="red">
+                <PaperButton mode="outlined" onPress={handleLogout} style={MyStyles.buttonOutlinePastel} labelStyle={MyStyles.buttonLabelDark}>
                     Đăng xuất
                 </PaperButton>
             </Card.Content>

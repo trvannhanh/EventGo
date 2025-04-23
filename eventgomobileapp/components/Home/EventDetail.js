@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, ActivityIndicator, Image } from 'react-native';
+import { ScrollView, ActivityIndicator, Image, Text, View } from 'react-native';
 import { Card, Title, Paragraph, Button as PaperButton } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import api, { endpoints } from '../../configs/Apis';
+import MyStyles from '../styles/MyStyles';
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
@@ -27,30 +29,31 @@ const EventDetail = ({ route, navigation }) => {
 
   return (
     <ScrollView>
-      <Card style={{ margin: 16, padding: 16 }}>
+      <Card style={MyStyles.cardPastel}>
         <Card.Content>
-          <Title>{event.name}</Title>
+          <View style={{ alignItems: 'center', marginBottom: 12 }}>
+            <MaterialCommunityIcons name="calendar-star" size={48} style={MyStyles.iconPastel} />
+          </View>
+          <Title style={MyStyles.titlePastel}>Chi tiết sự kiện</Title>
           {event.image && (
             <Image
               source={{
-                uri: event.image
-                  ? (event.image.startsWith('http')
-                      ? event.image
-                      : `https://res.cloudinary.com/dqpkxxzaf/${event.image}`)
-                  : undefined
+                uri: event.image.startsWith('http') ? event.image : `https://res.cloudinary.com/dqpkxxzaf/${event.image}`
               }}
-              style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 12 }}
+              style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 12, backgroundColor: '#BFD8D5' }}
             />
           )}
-          <Paragraph>Ngày: {event.date}</Paragraph>
-          <Paragraph>Địa điểm: {event.location}</Paragraph>
-          <Paragraph>Mô tả: {event.description}</Paragraph>
-          
+          <Paragraph style={MyStyles.labelPastel}>Tên: <Text style={MyStyles.textDark}>{event.name}</Text></Paragraph>
+          <Paragraph style={MyStyles.labelPastel}>Ngày: <Text style={MyStyles.textDark}>{event.date}</Text></Paragraph>
+          <Paragraph style={MyStyles.labelPastel}>Địa điểm: <Text style={MyStyles.textDark}>{event.location}</Text></Paragraph>
+          <Paragraph style={MyStyles.labelPastel}>Mô tả: <Text style={MyStyles.textDark}>{event.description}</Text></Paragraph>
         </Card.Content>
         <Card.Actions>
           <PaperButton
             mode="contained"
             onPress={() => navigation.navigate('BookTicket', { eventId: event.id })}
+            style={MyStyles.buttonPastel}
+            labelStyle={MyStyles.buttonLabelLight}
           >
             Đặt vé
           </PaperButton>

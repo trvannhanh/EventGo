@@ -233,8 +233,8 @@ FACEBOOK_ID = '1390840525421151'
 FACKEBOOK_SECRET = '4677af425a1550366a18fe756cf0c0a9'
 
 
-CELERY_BROKER_URL = 'redis://:Admin123@10.17.50.147:6379/0'
-CELERY_RESULT_BACKEND = 'redis://:Admin123@10.17.50.147:6379/0'
+CELERY_BROKER_URL = 'redis://:Admin123@192.168.1.41:6379/0'
+CELERY_RESULT_BACKEND = 'redis://:Admin123@192.168.1.41:6379/0'
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -242,7 +242,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://:Admin123@10.17.50.147:6379/1",  # database số 1
+        "LOCATION": "redis://:Admin123@192.168.1.41:6379/1",  # database số 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "PASSWORD": "Admin123",

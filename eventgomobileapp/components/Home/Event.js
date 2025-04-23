@@ -3,6 +3,7 @@ import { View, Text, FlatList, ActivityIndicator, StyleSheet } from 'react-nativ
 import { Card, Title, Paragraph, Button as PaperButton } from 'react-native-paper';
 import MyStyles from "../styles/MyStyles";
 import api, { endpoints } from '../../configs/Apis';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const Event = ({ navigation, search = '', eventType = '' }) => {
   const [events, setEvents] = useState([]);
@@ -33,14 +34,17 @@ const Event = ({ navigation, search = '', eventType = '' }) => {
   });
 
   const renderItem = ({ item }) => (
-    <Card style={{ marginBottom: 12 }} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
+    <Card style={MyStyles.cardPastel} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
       <Card.Content>
-        <Title>{item.title || item.name}</Title>
-        <Paragraph>{item.date}</Paragraph>
-        <Paragraph numberOfLines={2}>{item.description}</Paragraph>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+          <MaterialCommunityIcons name="calendar-heart" size={28} style={MyStyles.iconPastel} />
+          <Title style={MyStyles.titlePastel}>{item.title || item.name}</Title>
+        </View>
+        <Paragraph style={MyStyles.labelPastel}>{item.date}</Paragraph>
+        <Paragraph numberOfLines={2} style={MyStyles.textDark}>{item.description}</Paragraph>
       </Card.Content>
       <Card.Actions>
-        <PaperButton onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
+        <PaperButton onPress={() => navigation.navigate('EventDetail', { eventId: item.id })} style={MyStyles.buttonPastel} labelStyle={MyStyles.buttonLabelLight}>
           Xem chi tiết
         </PaperButton>
       </Card.Actions>

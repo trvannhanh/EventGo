@@ -368,7 +368,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         }).encode()).decode()
 
         if payment_method == "MoMo":
-            payment_response = self.create_momo_qr(order, extra_data)
+            payment_response = self.create_momo_qr(order, extra_data) # so tien toi thieu 1k toi da 50m
             if "error" in payment_response or "qrCodeUrl" not in payment_response:
                 order.payment_status = Order.PaymentStatus.FAILED
                 order.save()
@@ -383,7 +383,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 "payUrl": payment_response["payUrl"],
                 "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
             }, status=status.HTTP_201_CREATED)
-
+        
         elif payment_method == "VNPAY":
             payment_response = self.create_vnpay_url(order, extra_data, request)
             if "error" in payment_response or "payUrl" not in payment_response:
@@ -399,6 +399,9 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 "payUrl": payment_response["payUrl"],
                 "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
             }, status=status.HTTP_201_CREATED)
+            
+        
+        
         return None
 
     def create_momo_qr(self, order, extra_data):
@@ -412,8 +415,8 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         partner_code = "MOMO"
         access_key = "F8BBA842ECF85"
         secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "http://localhost:8000/payment/momo-payment-success"
-        ipn_url = "http://localhost:8000/payment/momo-payment-notify"
+        redirect_url = "http://192.168.1.41:8000/payment/momo-payment-success"
+        ipn_url = "http://192.168.1.41:8000/payment/momo-payment-notify"
 
         raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()

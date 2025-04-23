@@ -4,6 +4,7 @@ import { Picker } from '@react-native-picker/picker';
 import Event from './Event';
 import MyStyles from '../styles/MyStyles';
 import { Card, Title, TextInput as PaperTextInput, Button as PaperButton, Paragraph } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const EVENT_TYPES = [
     { label: 'Tất cả', value: '' },
@@ -18,19 +19,25 @@ const Home = ({ navigation }) => {
 
     return (
         <View style={{ flex: 1 }}>
-            <Card style={{ margin: 16, padding: 16 }}>
+            <Card style={MyStyles.cardPastel}>
                 <Card.Content>
-                    <Title style={{ textAlign: 'center', marginBottom: 12 }}>Tìm kiếm sự kiện</Title>
+                    <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                        <MaterialCommunityIcons name="magnify" size={40} style={MyStyles.iconPastel} />
+                    </View>
+                    <Title style={MyStyles.titlePastel}>Tìm kiếm sự kiện</Title>
                     <PaperTextInput
                         mode="outlined"
                         label="Tìm kiếm sự kiện..."
                         value={search}
                         onChangeText={setSearch}
-                        style={{ marginBottom: 16 }}
+                        style={MyStyles.inputPastel}
+                        outlineColor="#A49393"
+                        activeOutlineColor="#A49393"
+                        textColor="#222"
                     />
                     <Picker
                         selectedValue={eventType}
-                        style={{ marginBottom: 16 }}
+                        style={[MyStyles.inputPastel, { borderRadius: 8 }]}
                         onValueChange={(itemValue) => setEventType(itemValue)}
                     >
                         {EVENT_TYPES.map((type) => (

@@ -1,38 +1,60 @@
 import { StyleSheet } from 'react-native';
 
-export default StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 10,
-  },
-  eventItem: {
-    backgroundColor: '#f2f2f2',
-    borderRadius: 8,
+const MyStyles = StyleSheet.create({
+  cardPastel: {
+    margin: 16,
     padding: 16,
-    marginBottom: 12,
+    backgroundColor: '#F6E7E7',
+    borderRadius: 18,
+    borderWidth: 0,
+    shadowColor: '#A49393',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  eventTitle: {
-    fontSize: 18,
+  titlePastel: {
+    textAlign: 'center',
+    marginBottom: 12,
+    color: '#A49393',
     fontWeight: 'bold',
+    fontSize: 24,
+  },
+  inputPastel: {
+    marginBottom: 16,
+    backgroundColor: '#FFF6F6',
+  },
+  iconPastel: {
+    color: '#BFD8D5',
     marginBottom: 4,
   },
-  eventDate: {
-    color: '#888',
-    marginBottom: 6,
+  labelPastel: {
+    color: '#A49393',
+    fontWeight: 'bold',
   },
-  eventDesc: {
-    color: '#333',
+  textDark: {
+    color: '#222',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
+  avatarPastel: {
+    alignSelf: 'center',
+    marginBottom: 16,
+    backgroundColor: '#BFD8D5',
+  },
+  buttonPastel: {
+    backgroundColor: '#A49393',
     borderRadius: 8,
-    padding: 8,
-    margin: 10,
+    margin: 8,
   },
-  picker: {
-    marginHorizontal: 10,
-    marginBottom: 10,
+  buttonOutlinePastel: {
+    borderColor: '#A49393',
+  },
+  buttonLabelLight: {
+    color: '#FFF6F6',
+    fontWeight: 'bold',
+  },
+  buttonLabelDark: {
+    color: '#A49393',
+    fontWeight: 'bold',
   },
 });
+
+export default MyStyles;
