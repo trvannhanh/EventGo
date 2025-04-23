@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Alert } from 'react-native';
+import { View, Alert } from 'react-native';
 import api from '../../configs/Apis'; // dùng api đã cấu hình baseURL
 import MyStyles from '../styles/MyStyles';
+import { Card, Title, TextInput as PaperTextInput, Button as PaperButton, Paragraph } from 'react-native-paper';
 
 export default function Register() {
     const [username, setUsername] = useState('');
@@ -28,30 +29,37 @@ export default function Register() {
     };
 
     return (
-        <View style={MyStyles.containerCenter}>
-            <Text style={MyStyles.title}>Đăng ký</Text>
-            <TextInput
-                style={MyStyles.input}
-                placeholder="Tên đăng nhập"
-                value={username}
-                onChangeText={setUsername}
-            />
-            <TextInput
-                style={MyStyles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-            />
-            <TextInput
-                style={MyStyles.input}
-                placeholder="Mật khẩu"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-            />
-            <Button title={loading ? 'Đang đăng ký...' : 'Đăng ký'} onPress={handleRegister} disabled={loading} />
-        </View>
+        <Card style={{ margin: 16, padding: 16 }}>
+            <Card.Content>
+                <Title style={{ textAlign: 'center', marginBottom: 12 }}>Đăng ký</Title>
+                <PaperTextInput
+                    mode="outlined"
+                    label="Tên đăng nhập"
+                    value={username}
+                    onChangeText={setUsername}
+                    style={{ marginBottom: 16 }}
+                />
+                <PaperTextInput
+                    mode="outlined"
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    style={{ marginBottom: 16 }}
+                />
+                <PaperTextInput
+                    mode="outlined"
+                    label="Mật khẩu"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    style={{ marginBottom: 16 }}
+                />
+                <PaperButton mode="contained" onPress={handleRegister} loading={loading} disabled={loading}>
+                    Đăng ký
+                </PaperButton>
+            </Card.Content>
+        </Card>
     );
 }
