@@ -1,29 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Card, Title, Paragraph, Button as PaperButton } from 'react-native-paper';
+import MyStyles from '../styles/MyStyles';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const MyTickets = () => {
   return (
-    <Card style={{ margin: 16, padding: 16 }}>
+    <Card style={MyStyles.cardPastel}>
       <Card.Content>
-        <Title>Vé của tôi</Title>
-        {/* Hiển thị danh sách vé đã đặt ở đây */}
-        {/* Ví dụ: <Paragraph>Mã QR: ...</Paragraph> */}
+        <View style={{ alignItems: 'center', marginBottom: 12 }}>
+          <MaterialCommunityIcons name="ticket-confirmation" size={48} style={MyStyles.iconPastel} />
+        </View>
+        <Title style={MyStyles.titlePastel}>Vé của tôi</Title>
+        
       </Card.Content>
     </Card>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});
 
 export default MyTickets;

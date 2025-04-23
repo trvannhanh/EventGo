@@ -327,7 +327,7 @@ class BookingViewSet(viewsets.ViewSet):
         if not all([ticket_id, quantity, payment_method]):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if payment_method not in ["MoMo", "VNPAY"]:
+        if payment_method not in ["MoMo", "VNPAY", "FAKE"]:
             return Response({"error": "Phương thức thanh toán không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
         ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
@@ -374,7 +374,7 @@ class BookingViewSet(viewsets.ViewSet):
         }).encode()).decode()
 
         if payment_method == "MoMo":
-            payment_response = self.create_momo_qr(order, extra_data)
+            payment_response = self.create_momo_qr(order, extra_data) # so tien toi thieu 1k toi da 50m
             if "error" in payment_response or "qrCodeUrl" not in payment_response:
                 order.payment_status = Order.PaymentStatus.FAILED
                 order.save()
@@ -389,7 +389,7 @@ class BookingViewSet(viewsets.ViewSet):
                 "payUrl": payment_response["payUrl"],
                 "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
             }, status=status.HTTP_201_CREATED)
-
+        
         elif payment_method == "VNPAY":
             payment_response = self.create_vnpay_url(order, extra_data, request)
             if "error" in payment_response or "payUrl" not in payment_response:
@@ -405,6 +405,40 @@ class BookingViewSet(viewsets.ViewSet):
                 "payUrl": payment_response["payUrl"],
                 "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
             }, status=status.HTTP_201_CREATED)
+            
+        # # FakeFake thanh toán thành công
+        # elif payment_method == "FAKE":
+        #     with transaction.atomic():
+        #         order = Order.objects.create(
+        #             user=user,
+        #             total_amount=total_price,
+        #             payment_status=Order.PaymentStatus.PAID,
+        #             payment_method=payment_method
+        #         )
+        #         trend, created = EventTrend.objects.get_or_create(event=event)
+        #         trend.increment_interest(points=3)
+        #         # Sinh mã QR ngay
+        #         qr_image_urls = []
+        #         for i in range(quantity):
+        #             qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
+        #             order_detail = OrderDetail.objects.create(
+        #                 order=order,
+        #                 ticket=ticket,
+        #                 quantity=1,
+        #                 qr_code=qr_code
+        #             )
+        #             qr_image = generate_qr_image(qr_code)
+        #             order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+        #             order_detail.save()
+        #             qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
+        #         ticket.quantity -= quantity
+        #         ticket.save()
+        #     return Response({
+        #         "order_id": order.id,
+        #         "qr_image_urls": qr_image_urls,
+        #         "message": "Đặt vé thành công (giả lập)."
+        #     }, status=status.HTTP_201_CREATED)
+        
         return None
 
     def create_momo_qr(self, order, extra_data):
@@ -418,8 +452,8 @@ class BookingViewSet(viewsets.ViewSet):
         partner_code = "MOMO"
         access_key = "F8BBA842ECF85"
         secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "http://localhost:8000/payment/momo-payment-success"
-        ipn_url = "http://localhost:8000/payment/momo-payment-notify"
+        redirect_url = "http://192.168.1.41:8000/payment/momo-payment-success"
+        ipn_url = "http://192.168.1.41:8000/payment/momo-payment-notify"
 
         raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
