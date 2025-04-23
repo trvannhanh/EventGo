@@ -1,16 +1,18 @@
 import axios from "axios";
 
-export const API_BASE = 'http://192.168.1.41:8000/';
+export const API_BASE = 'http://10.17.50.147:8000/';
 
 export const endpoints = {
     login: API_BASE + "auth/login/",
     register: API_BASE + "users/",
     events: API_BASE + "events/",
-    eventDetail: (id) => API_BASE + `events/${id}/`,
-    bookTicket: (id) => API_BASE + `events/${id}/book/`,
+    eventDetail: (id) => API_BASE + `events/${id}/detail/`,
+    ticketsOfEvent: (id) => API_BASE + `booking/${id}/tickets/`,
+    bookTicket: (id) => API_BASE + `booking/${id}/book-ticket/`,
     myTickets: API_BASE + "tickets/my/",
     checkIn: (ticketId) => API_BASE + `tickets/${ticketId}/checkin/`,
     review: (eventId) => API_BASE + `events/${eventId}/review/`,
+    
 }
 
 export const authApis = (token) => {

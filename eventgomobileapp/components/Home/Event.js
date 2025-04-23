@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
+import { Card, Title, Paragraph, Button as PaperButton } from 'react-native-paper';
 import MyStyles from "../styles/MyStyles";
 import api, { endpoints } from '../../configs/Apis';
 
@@ -32,14 +33,18 @@ const Event = ({ navigation, search = '', eventType = '' }) => {
   });
 
   const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={MyStyles.eventItem}
-      onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
-    >
-      <Text style={MyStyles.eventTitle}>{item.title || item.name}</Text>
-      <Text style={MyStyles.eventDate}>{item.date}</Text>
-      <Text numberOfLines={2} style={MyStyles.eventDesc}>{item.description}</Text>
-    </TouchableOpacity>
+    <Card style={{ marginBottom: 12 }} onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
+      <Card.Content>
+        <Title>{item.title || item.name}</Title>
+        <Paragraph>{item.date}</Paragraph>
+        <Paragraph numberOfLines={2}>{item.description}</Paragraph>
+      </Card.Content>
+      <Card.Actions>
+        <PaperButton onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}>
+          Xem chi tiết
+        </PaperButton>
+      </Card.Actions>
+    </Card>
   );
 
   if (loading) return <ActivityIndicator size="large" style={{ marginTop: 40 }} />;

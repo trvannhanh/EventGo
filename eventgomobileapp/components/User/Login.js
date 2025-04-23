@@ -1,11 +1,12 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, Button, Alert } from 'react-native';
+import { View, Alert } from 'react-native';
 import axios from 'axios';
 import MyStyles from '../styles/MyStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../../configs/Apis';
 import { authApis } from '../../configs/Apis';
 import { MyDispatchContext } from '../../configs/MyContexts';
+import { Card, Title, TextInput as PaperTextInput, Button as PaperButton, Paragraph } from 'react-native-paper';
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -33,7 +34,7 @@ export default function Login() {
             const userRes = await authApis(response.data.access_token).get('users/current-user/');
             dispatch({ type: 'login', payload: userRes.data });
            
-        
+            
             Alert.alert('Thành công', 'Đăng nhập thành công!');
         } catch (error) {
             
@@ -44,23 +45,29 @@ export default function Login() {
     };
 
     return (
-        <View style={MyStyles.containerCenter}>
-            <Text style={MyStyles.title}>Đăng nhập</Text>
-            <TextInput
-                style={MyStyles.input}
-                placeholder="Tên đăng nhập"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-            />
-            <TextInput
-                style={MyStyles.input}
-                placeholder="Mật khẩu"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-            />
-            <Button title={loading ? 'Đang đăng nhập...' : 'Đăng nhập'} onPress={handleLogin} disabled={loading} />
-        </View>
+        <Card style={{ margin: 16, padding: 16 }}>
+            <Card.Content>
+                <Title style={{ textAlign: 'center', marginBottom: 12 }}>Đăng nhập</Title>
+                <PaperTextInput
+                    mode="outlined"
+                    label="Tên đăng nhập"
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    style={{ marginBottom: 16 }}
+                />
+                <PaperTextInput
+                    mode="outlined"
+                    label="Mật khẩu"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    style={{ marginBottom: 16 }}
+                />
+                <PaperButton mode="contained" onPress={handleLogin} loading={loading} disabled={loading}>
+                    Đăng nhập
+                </PaperButton>
+            </Card.Content>
+        </Card>
     );
 }
