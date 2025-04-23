@@ -49,7 +49,7 @@ from events.serializers import ReviewSerializer, UserSerializer, EventSerializer
 class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.UpdateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
-    parser_classes = [parsers.MultiPartParser, parsers.JSONParser]
+    parser_classes = [parsers.MultiPartParser]
 
     def get_permissions(self):
         if self.action == 'list':
@@ -64,7 +64,7 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
     def get_current_user(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
-    @action(methods=['put', 'patch'], url_path='update-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    @action(methods=['put', 'patch'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def update_current_user(self, request):
         user = request.user
         serializer = UserSerializer(user, data=request.data, partial=True)
@@ -85,15 +85,18 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         return Response({"message": "Đổi mật khẩu thành công."}, status=status.HTTP_200_OK)
 
 
-    @action(methods=['delete'], url_path='delete-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    @action(methods=['delete'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def delete_current_user(self, request):
         user = request.user
         user.is_active = False  # Soft delete
         user.save()
         return Response({"message": "Xóa tài khoản thành công."}, status=status.HTTP_204_NO_CONTENT)
 
- 
- 
+    @action(methods=['get'], url_path='my-rank', detail=False, permission_classes=[IsAuthenticated])
+    def get_my_rank(self, request):
+        rank = get_customer_rank(request.user)
+        return Response({"rank": rank}, status=status.HTTP_200_OK)
+
     @action(methods=['get'], url_path='my-tickets', detail=False, permission_classes=[IsAuthenticated])
     def my_tickets(self, request):
         user = request.user
@@ -101,12 +104,6 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         from events.serializers import OrderDetailSerializer
         serializer = OrderDetailSerializer(order_details, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
-
-    @action(methods=['get'], url_path='my-rank', detail=False, permission_classes=[IsAuthenticated])
-    def get_my_rank(self, request):
-        rank = get_customer_rank(request.user)
-        return Response({"rank": rank}, status=status.HTTP_200_OK)
 
 
 class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
@@ -137,6 +134,26 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         """Trả về queryset với trạng thái đã được cập nhật."""
         queryset = Event.objects.filter(active=True)
         return self.update_event_statuses(queryset)
+        
+    @action(methods=['put', 'patch'], url_path='update', detail=True, permission_classes=[IsAuthenticated])
+    def update_event(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+        user = request.user
+        if not user.is_superuser and event.organizer != user:
+            return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
+        serializer = EventSerializer(event, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['delete'], url_path='delete', detail=True, permission_classes=[IsAuthenticated])
+    def delete_event(self, request, pk=None):
+        event = get_object_or_404(Event, id=pk)
+        user = request.user
+        if not user.is_superuser and event.organizer != user:
+            return Response({"error": "Bạn không có quyền xóa sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
+        event.delete()
+        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)
 
     @action(methods=['post'], url_path='create', detail=False)
     def create_event(self, request):
@@ -268,29 +285,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
-    @action(methods=['put', 'patch'], url_path='update', detail=True, permission_classes=[IsAuthenticated])
-    def update_event(self, request, pk=None):
-        event = get_object_or_404(Event, id=pk)
-        user = request.user
-        if not user.is_superuser and event.organizer != user:
-            return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
-        serializer = EventSerializer(event, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(methods=['delete'], url_path='delete', detail=True, permission_classes=[IsAuthenticated])
-    def delete_event(self, request, pk=None):
-        event = get_object_or_404(Event, id=pk)
-        user = request.user
-        if not user.is_superuser and event.organizer != user:
-            return Response({"error": "Bạn không có quyền xóa sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
-        event.delete()
-        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)
-
-
-class BookingViewSet(viewsets.ViewSet):
 
     @action(methods=['get'], url_path='search-events', detail=False)
     def search_events(self, request):
@@ -535,7 +529,6 @@ class BookingViewSet(viewsets.ViewSet):
             "discount_percent": discount.discount_percent,
             "target_rank": discount.target_rank
         }, status=status.HTTP_200_OK)
-
 
     @action(methods=['get'], url_path='analytics', detail=True, permission_classes=[permissions.IsAuthenticated])
     def get_event_analytics(self, request, pk=None):
