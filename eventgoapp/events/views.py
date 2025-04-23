@@ -321,7 +321,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         if not all([ticket_id, quantity, payment_method]):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if payment_method not in ["MoMo", "VNPAY", "FAKE"]:
+        if payment_method not in ["MoMo", "VNPAY"]:
             return Response({"error": "Phương thức thanh toán không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
         ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
@@ -400,38 +400,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 "message": "Vui lòng hoàn tất thanh toán, sau đó gọi GET /orders/{id}/ để xem mã QR"
             }, status=status.HTTP_201_CREATED)
             
-        # # FakeFake thanh toán thành công
-        # elif payment_method == "FAKE":
-        #     with transaction.atomic():
-        #         order = Order.objects.create(
-        #             user=user,
-        #             total_amount=total_price,
-        #             payment_status=Order.PaymentStatus.PAID,
-        #             payment_method=payment_method
-        #         )
-        #         trend, created = EventTrend.objects.get_or_create(event=event)
-        #         trend.increment_interest(points=3)
-        #         # Sinh mã QR ngay
-        #         qr_image_urls = []
-        #         for i in range(quantity):
-        #             qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
-        #             order_detail = OrderDetail.objects.create(
-        #                 order=order,
-        #                 ticket=ticket,
-        #                 quantity=1,
-        #                 qr_code=qr_code
-        #             )
-        #             qr_image = generate_qr_image(qr_code)
-        #             order_detail.qr_image.save(f"{qr_code}.png", qr_image)
-        #             order_detail.save()
-        #             qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
-        #         ticket.quantity -= quantity
-        #         ticket.save()
-        #     return Response({
-        #         "order_id": order.id,
-        #         "qr_image_urls": qr_image_urls,
-        #         "message": "Đặt vé thành công (giả lập)."
-        #     }, status=status.HTTP_201_CREATED)
+        
         
         return None
 
