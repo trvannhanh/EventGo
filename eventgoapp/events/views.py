@@ -49,7 +49,7 @@ from events.serializers import ReviewSerializer, UserSerializer, EventSerializer
 class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.UpdateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
-    parser_classes = [parsers.MultiPartParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_permissions(self):
         if self.action == 'list':
@@ -64,7 +64,7 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
     def get_current_user(self, request):
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
 
-    @action(methods=['put', 'patch'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    @action(methods=['put', 'patch'], url_path='update-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def update_current_user(self, request):
         user = request.user
         serializer = UserSerializer(user, data=request.data, partial=True)
@@ -85,7 +85,7 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         return Response({"message": "Đổi mật khẩu thành công."}, status=status.HTTP_200_OK)
 
 
-    @action(methods=['delete'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
+    @action(methods=['delete'], url_path='delete-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def delete_current_user(self, request):
         user = request.user
         user.is_active = False  # Soft delete
@@ -1396,3 +1396,100 @@ class GoogleCalendarViewSet(viewsets.ViewSet):
             "message": "Sự kiện đã được thêm vào Google Calendar",
             "calendar_event_id": calendar_event['id']
         }, status=status.HTTP_200_OK)
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    
+    serializer_class = ReviewSerializer
+    
+    def get_permissions(self):
+        if self.action in ['retrieve', 'list', 'by_event']:
+            # Cho phép tất cả người dùng xem đánh giá
+            return [permissions.AllowAny()]
+        else:
+            # Chỉ người dùng đã xác thực mới có thể tạo, sửa, xóa đánh giá
+            return [permissions.IsAuthenticated()]
+    
+    def get_queryset(self):
+        # Mặc định chỉ lấy các đánh giá active
+        return Review.objects.filter(active=True)
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['get'], url_path='by-event/(?P<event_id>[^/.]+)')
+    def by_event(self, request, event_id=None):
+        """Lấy tất cả đánh giá cho một sự kiện cụ thể"""
+        event = get_object_or_404(Event, id=event_id)
+        reviews = self.get_queryset().filter(event=event)
+        
+        # Tính điểm đánh giá trung bình
+        avg_rating = reviews.aggregate(Avg('rating'))['rating__avg'] or 0
+        
+        # Phân trang
+        page = self.paginate_queryset(reviews)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            response_data = {
+                'reviews': serializer.data,
+                'average_rating': round(avg_rating, 1),
+                'total_reviews': reviews.count(),
+            }
+            return self.get_paginated_response(response_data)
+        
+        serializer = self.get_serializer(reviews, many=True)
+        response_data = {
+            'reviews': serializer.data,
+            'average_rating': round(avg_rating, 1),
+            'total_reviews': reviews.count(),
+        }
+        return Response(response_data)
+    
+    @action(detail=False, methods=['get'], url_path='my-reviews', permission_classes=[permissions.IsAuthenticated])
+    def my_reviews(self, request):
+        """Lấy tất cả đánh giá của người dùng hiện tại"""
+        reviews = self.get_queryset().filter(user=request.user)
+        serializer = self.get_serializer(reviews, many=True)
+        return Response(serializer.data)
+    
+    def update(self, request, *args, **kwargs):
+        """Cập nhật đánh giá"""
+        review = self.get_object()
+        # Chỉ user tạo review mới có quyền cập nhật
+        if review.user != request.user:
+            return Response(
+                {"error": "Bạn không có quyền cập nhật đánh giá này."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Chỉ cho phép sửa rating và comment
+        data = request.data.copy()
+        allowed_fields = ['rating', 'comment']
+        for field in list(data.keys()):
+            if field not in allowed_fields:
+                data.pop(field)
+                
+        serializer = self.get_serializer(review, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response(serializer.data)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Xóa đánh giá (soft delete)"""
+        review = self.get_object()
+        # Chỉ user tạo review hoặc admin mới có quyền xóa
+        if review.user != request.user and not request.user.is_superuser:
+            return Response(
+                {"error": "Bạn không có quyền xóa đánh giá này."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Soft delete bằng cách đặt active=False
+        review.active = False
+        review.save()
+        
+        return Response(
+            {"message": "Đánh giá đã được xóa thành công."}, 
+            status=status.HTTP_204_NO_CONTENT
+        )

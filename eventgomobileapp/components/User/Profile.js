@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { View, Text, Alert, Image } from 'react-native';
 import MyStyles from '../styles/MyStyles';
 import { MyUserContext, MyDispatchContext } from '../../configs/MyContexts';
@@ -14,6 +14,38 @@ export default function Profile() {
     const [phone, setPhone] = useState(user?.phone || '');
     const [avatar, setAvatar] = useState(user?.avatar || null);
     const [updating, setUpdating] = useState(false);
+    const [avatarKey, setAvatarKey] = useState(Date.now()); // Thêm state để force re-render Avatar
+
+    // Thêm useEffect để cập nhật avatar khi user thay đổi
+    useEffect(() => {
+        if (user?.avatar) {
+            setAvatar(user.avatar);
+            setAvatarKey(Date.now()); // Cập nhật key để force re-render
+        }
+    }, [user]);
+
+    // Helper function để tạo URL chính xác cho avatar
+    const getAvatarUri = (avatarPath) => {
+        if (!avatarPath) return null;
+        
+        // Nếu là URI cục bộ từ thư viện ảnh (file:// hoặc content://)
+        if (avatarPath.startsWith('file://') || avatarPath.startsWith('content://')) {
+            return avatarPath;
+        }
+        
+        // Nếu đã là URL đầy đủ
+        if (avatarPath.startsWith('http')) {
+            return avatarPath;
+        }
+        
+        // Nếu là đường dẫn relative trong Cloudinary
+        if (avatarPath.includes('cloudinary') || avatarPath.includes('upload')) {
+            return `https://res.cloudinary.com/dqpkxxzaf/${avatarPath}`;
+        }
+        
+        // Nếu chỉ là tên file (trường hợp từ media trong Django)
+        return `http://192.168.1.41:8000/media/${avatarPath}`;
+    };
 
     const handleLogout = () => {
         dispatch({ type: 'logout' });
@@ -32,6 +64,7 @@ export default function Profile() {
         
         if (!result.canceled) {
             setAvatar(result.assets[0].uri);
+            setAvatarKey(Date.now()); // Cập nhật key để force re-render Avatar
         }
     };
 
@@ -76,12 +109,11 @@ export default function Profile() {
                 </View>
                 <Title style={MyStyles.titlePastel}>Thông tin tài khoản</Title>
                 <Avatar.Image
+                    key={avatarKey} // Thêm key để force re-render Avatar
                     size={100}
                     source={
                         avatar
-                            ? (avatar.startsWith('http')
-                                ? { uri: avatar }
-                                : { uri: `https://res.cloudinary.com/dqpkxxzaf/${avatar}` })
+                            ? { uri: getAvatarUri(avatar) }
                             : require('../../assets/icon.png')
                     }
                     style={MyStyles.avatarPastel}
