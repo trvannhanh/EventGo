@@ -51,8 +51,13 @@ export default function Login() {
                 // Gọi API để lấy thông tin người dùng hiện tại
                 const userRes = await api.get('users/current-user/');
                 
-                // Lưu thông tin người dùng vào state
-                dispatch({ type: 'login', payload: userRes.data });
+                // Lưu thông tin người dùng vào state với access_token 
+                const userData = {
+                    ...userRes.data,
+                    access_token: response.data.access_token // Đảm bảo access_token luôn có mặt
+                };
+                
+                dispatch({ type: 'login', payload: userData });
                 
                 Alert.alert('Thành công', 'Đăng nhập thành công!');
             } catch (userError) {
@@ -63,7 +68,7 @@ export default function Login() {
                     type: 'login', 
                     payload: { 
                         username: username,
-                        token: response.data.access_token
+                        access_token: response.data.access_token // Sử dụng access_token thay vì token
                     } 
                 });
                 

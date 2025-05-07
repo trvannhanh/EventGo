@@ -218,19 +218,23 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['get'], url_path='feedback', detail=True)
     def view_feedback(self, request, pk=None):
-
         event = get_object_or_404(Event, id=pk)
-
-        if event.organizer != request.user:
-            return Response(
-                {"error": "Bạn không có quyền xem phản hồi cho sự kiện này."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
+        
+        # Không cần kiểm tra quyền, cho phép mọi người dùng xem phản hồi
         reviews = Review.objects.filter(event=event)
         serializer = ReviewSerializer(reviews, many=True)
+        
+        # Tính điểm đánh giá trung bình để đồng bộ với frontend
+        avg_rating = reviews.aggregate(Avg('rating'))['rating__avg'] or 0
+        
+        # Trả về dạng đối tượng có cấu trúc giống với ReviewViewSet.by_event
+        response_data = {
+            'reviews': serializer.data,
+            'average_rating': round(avg_rating, 1),
+            'total_reviews': reviews.count(),
+        }
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @action(methods=['get'], url_path='recommended', detail=False, permission_classes=[IsAuthenticated])
     def get_recommended_events(self, request):

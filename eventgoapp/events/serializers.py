@@ -124,11 +124,15 @@ class ReviewSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(write_only=True, required=False)
     event_id = serializers.IntegerField(write_only=True)
     user_avatar = serializers.SerializerMethodField()
+    event_name = serializers.SerializerMethodField()
     
     def get_user_avatar(self, obj):
         if obj.user.avatar:
             return obj.user.avatar.url
         return None
+    
+    def get_event_name(self, obj):
+        return obj.event.name if obj.event else None
     
     def validate_rating(self, value):
         if value < 1 or value > 5:
@@ -169,7 +173,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ['id', 'user', 'user_id', 'event_id', 'rating', 'comment', 'created_at', 'user_avatar']
+        fields = ['id', 'user', 'user_id', 'event_id', 'rating', 'comment', 'created_at', 'user_avatar', 'event_name']
 
 class DiscountSerializer(serializers.ModelSerializer):
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())
