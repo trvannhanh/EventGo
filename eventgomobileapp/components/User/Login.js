@@ -25,21 +25,58 @@ export default function Login() {
                 client_id: 'pD7UpIjBUdkylCiTFQ5oURKDu61S9DfpEpbX2sBZ',
                 client_secret: 'eeN7xeN4jxCiGVN9HKI3j9NhNbHrJrbmlDVlCEvnhk5yV3d7uXwLbiUxfeHYIa3A2IhYAbrB9MQ8GHs30ARomfdwMiyy9olP5qlNzgaO4VE03efF7889NZqdgTqNYgIq'
             };
-            const formBody = Object.entries(data).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-            const response = await axios.post(`${API_BASE}o/token/`, formBody, {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+
+            // Sử dụng FormData thay vì chuỗi encoded
+            const formData = new FormData();
+            for (const [key, value] of Object.entries(data)) {
+                formData.append(key, value);
+            }
+
+            const response = await axios.post(`${API_BASE}o/token/`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
+            
+            // Lưu token vào AsyncStorage
             await AsyncStorage.setItem('token', response.data.access_token);
             
-            
-            const userRes = await authApis(response.data.access_token).get('users/current-user/');
-            dispatch({ type: 'login', payload: userRes.data });
-           
-            
-            Alert.alert('Thành công', 'Đăng nhập thành công!');
+            try {
+                // Tạo API client với token xác thực mới
+                const api = axios.create({
+                    baseURL: API_BASE,
+                    headers: {
+                        'Authorization': `Bearer ${response.data.access_token}`
+                    }
+                });
+                
+                // Gọi API để lấy thông tin người dùng hiện tại
+                const userRes = await api.get('users/current-user/');
+                
+                // Lưu thông tin người dùng vào state với access_token 
+                const userData = {
+                    ...userRes.data,
+                    access_token: response.data.access_token // Đảm bảo access_token luôn có mặt
+                };
+                
+                dispatch({ type: 'login', payload: userData });
+                
+                Alert.alert('Thành công', 'Đăng nhập thành công!');
+            } catch (userError) {
+                console.error('Lỗi khi lấy thông tin người dùng:', userError.response?.data || userError.message);
+                
+                // Vẫn đăng nhập thành công, chỉ lưu thông tin cơ bản
+                dispatch({ 
+                    type: 'login', 
+                    payload: { 
+                        username: username,
+                        access_token: response.data.access_token // Sử dụng access_token thay vì token
+                    } 
+                });
+                
+                Alert.alert('Thành công', 'Đăng nhập thành công, nhưng không thể lấy thông tin chi tiết.');
+            }
         } catch (error) {
-            
-            Alert.alert('Lỗi', 'Đăng nhập thất bại!');
+            console.error('Lỗi đăng nhập:', error.response ? error.response.data : error.message);
+            Alert.alert('Lỗi', 'Đăng nhập thất bại: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
         } finally {
             setLoading(false);
         }

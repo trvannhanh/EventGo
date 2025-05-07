@@ -9,12 +9,25 @@ import Register from './components/User/Register';
 import Profile from './components/User/Profile';
 import MyTickets from './components/User/MyTickets';
 import BookTicket from './components/Home/BookTicket';
+import ReviewList from './components/Home/ReviewList';
+import MyReviews from './components/User/MyReviews';
+import CreateEvent from './components/Home/CreateEvent';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MyUserContext, MyDispatchContext } from './configs/MyContexts';
 import MyUserReducer from "./components/reducers/MyUserReducer";
 import { useReducer, useContext } from 'react';
-import { Provider as PaperProvider, DefaultTheme } from 'react-native-paper';
+import { Provider as PaperProvider, DefaultTheme, ActivityIndicator } from 'react-native-paper';
 import MyStyles from './components/styles/MyStyles';
+import { View, Text, LogBox } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Bỏ qua một số cảnh báo không cần thiết
+LogBox.ignoreLogs([
+  'Asyncstorage has been extracted',
+  'VirtualizedLists should never be nested',
+  'ViewPropTypes will be removed',
+  'ColorPropType will be removed',
+]);
 
 const Stack = createNativeStackNavigator();
 const StackNavigator = () => {
@@ -23,6 +36,8 @@ const StackNavigator = () => {
       <Stack.Screen name="Home" component={Home} options={{ title: 'Trang chủ' }} />
       <Stack.Screen name="EventDetail" component={EventDetail} options={{ title: 'Chi tiết sự kiện' }} />
       <Stack.Screen name="BookTicket" component={BookTicket} options={{ title: 'Đặt vé' }} />
+      <Stack.Screen name="ReviewList" component={ReviewList} options={{ title: 'Đánh giá sự kiện' }} />
+      <Stack.Screen name="CreateEvent" component={CreateEvent} options={{ title: 'Tạo sự kiện' }} />
     </Stack.Navigator>
   );
 };
@@ -71,8 +86,12 @@ const TabNavigator = () => {
             tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account" color={color} size={size} />
           }} />
           <Tab.Screen name="Vé" component={MyTickets} options={{
-            title: 'Đặt vé',
+            title: 'Vé của tôi',
             tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="ticket-confirmation" color={color} size={size} />
+          }} />
+          <Tab.Screen name="Đánh giá" component={MyReviews} options={{
+            title: 'Đánh giá',
+            tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="star" color={color} size={size} />
           }} />
         </>
       )}
@@ -95,6 +114,59 @@ const paperTheme = {
 
 const App = () => {
   const [user, dispatch] = useReducer(MyUserReducer, null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+
+  useEffect(() => {
+    // Check for cached user data
+    const loadUserData = async () => {
+      try {
+        setIsLoading(true);
+        const userData = await AsyncStorage.getItem('user');
+        
+        if (userData) {
+          dispatch({
+            type: "LOGIN",
+            payload: JSON.parse(userData)
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load user data:", error);
+        setIsError(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <PaperProvider theme={paperTheme}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: paperTheme.colors.background }}>
+          <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+          <Text style={{ marginTop: 10, color: paperTheme.colors.text }}>Đang tải ứng dụng...</Text>
+        </View>
+      </PaperProvider>
+    );
+  }
+
+  if (isError) {
+    return (
+      <PaperProvider theme={paperTheme}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: paperTheme.colors.background }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={60} color="#FF6B6B" />
+          <Text style={{ marginTop: 10, color: paperTheme.colors.text, fontSize: 16, fontWeight: 'bold' }}>
+            Có lỗi xảy ra khi tải ứng dụng
+          </Text>
+          <Text style={{ marginTop: 5, color: paperTheme.colors.text, textAlign: 'center', paddingHorizontal: 30 }}>
+            Vui lòng khởi động lại ứng dụng hoặc liên hệ hỗ trợ
+          </Text>
+        </View>
+      </PaperProvider>
+    );
+  }
 
   return (
     <PaperProvider theme={paperTheme}>

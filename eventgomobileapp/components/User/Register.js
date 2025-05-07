@@ -14,16 +14,21 @@ export default function Register() {
     const handleRegister = async () => {
         setLoading(true);
         try {
-            const response = await api.post('users/', {
-                username,
-                email,
-                password,
-            }, {
-                headers: { 'Content-Type': 'application/json' }
+            // Tạo FormData object để gửi dữ liệu dưới dạng form data
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('email', email);
+            formData.append('password', password);
+
+            const response = await api.post('users/', formData, {
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                }
             });
             Alert.alert('Thành công', 'Đăng ký thành công!');
         } catch (error) {     
-            Alert.alert('Lỗi', 'Đăng ký thất bại!');
+            console.error('Lỗi đăng ký:', error.response ? error.response.data : error.message);
+            Alert.alert('Lỗi', 'Đăng ký thất bại: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
         } finally {
             setLoading(false);
         }
