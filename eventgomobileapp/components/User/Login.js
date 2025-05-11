@@ -1,120 +1,208 @@
 import React, { useState, useContext } from 'react';
-import { View, Alert } from 'react-native';
-import axios from 'axios';
-import MyStyles from '../styles/MyStyles';
+import { View, Alert, TouchableOpacity, Text, StyleSheet, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE } from '../../configs/Apis';
-import { authApis } from '../../configs/Apis';
+import Apis, { authApis, endpoints } from '../../configs/Apis';
 import { MyDispatchContext } from '../../configs/MyContexts';
-import { Card, Title, TextInput as PaperTextInput, Button as PaperButton, Paragraph } from 'react-native-paper';
+import { TextInput as PaperTextInput, Button as PaperButton, Paragraph, Switch, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
-export default function Login() {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
+
+const Login = () => {
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: '#FFF5F7',
+            padding: 20, 
+            justifyContent: 'center',
+        },
+        title: {
+            fontSize: 24,
+            fontWeight: 'bold',
+            color: '#333',
+            textAlign: 'center',
+            marginBottom: 20,
+        },
+        input: {
+            marginBottom: 15,
+            backgroundColor: '#FFF',
+        },
+        rememberRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            marginVertical: 10,
+        },
+        socialButton: {
+            marginVertical: 5,
+        },
+        signUpText: {
+            textAlign: 'center',
+            marginTop: 10,
+        },
+    });
+
+    const info = [{
+        label: 'Tên đăng nhập',
+        field: 'username',
+        icon: 'account',
+        secureTextEntry: false,
+        autoCapitalize:"none",
+        name:"email"
+    }, {
+        label: 'Mật khẩu',
+        field: 'password',
+        icon: 'eye',
+        autoCapitalize:"none",
+        secureTextEntry: true,
+        name:"lock"
+    }];
+
+    
+
+    const [user, setUser] = useState({});
     const [loading, setLoading] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false);
+    const [msg, setMsg] = useState();
+    const nav = useNavigation();
     const dispatch = useContext(MyDispatchContext);
 
+    const setState = (value, field) => {
+        setUser({...user, [field]: value})
+    }
+
+
+     const validate = () => {
+        if (Object.values(user).length == 0) {
+            setMsg("Vui lòng nhập thông tin!");
+            return false;
+        }
+
+        for (let i of info)
+            if (user[i.field] === '') {
+                setMsg(`Vui lòng nhập ${i.label}!`);
+                return false;
+            }
+
+        setMsg('');
+        return true;
+    }
+
+
+
     const handleLogin = async () => {
-        setLoading(true);
-        try {
-            const data = {
-                grant_type: 'password',
-                username,
-                password,
-                client_id: 'pD7UpIjBUdkylCiTFQ5oURKDu61S9DfpEpbX2sBZ',
-                client_secret: 'eeN7xeN4jxCiGVN9HKI3j9NhNbHrJrbmlDVlCEvnhk5yV3d7uXwLbiUxfeHYIa3A2IhYAbrB9MQ8GHs30ARomfdwMiyy9olP5qlNzgaO4VE03efF7889NZqdgTqNYgIq'
-            };
-
-            // Sử dụng FormData thay vì chuỗi encoded
-            const formData = new FormData();
-            for (const [key, value] of Object.entries(data)) {
-                formData.append(key, value);
-            }
-
-            const response = await axios.post(`${API_BASE}o/token/`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            
-            // Lưu token vào AsyncStorage
-            await AsyncStorage.setItem('token', response.data.access_token);
-            
+        if (validate() === true) {
             try {
-                // Tạo API client với token xác thực mới
-                const api = axios.create({
-                    baseURL: API_BASE,
-                    headers: {
-                        'Authorization': `Bearer ${response.data.access_token}`
-                    }
+                setLoading(true);
+    
+                let res = await Apis.post(endpoints['login'], {
+                    ...user, 
+                    client_id: 'RMc1aqYSM98ld8ulAOy1FAyvubnPJiWCeWnnefPC',
+                    client_secret: 'pVmRNtsbnYZj7j0vYEbg20GoV8JE74HA4ZG74Ggqxw0OD0a3Qqlz2LGM2M6DVkArIolR3pTv4Kh7Z4mmu5CDqAhUIsOoyDCX8eKoQeRSGWVmwfFVljwtBbicN2EOrozT',
+                    grant_type: 'password'
+                },{
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
                 });
+                await AsyncStorage.setItem('token', res.data.access_token);
+
+                let u = await authApis(res.data.access_token).get(endpoints['current-user']);
                 
-                // Gọi API để lấy thông tin người dùng hiện tại
-                const userRes = await api.get('users/current-user/');
-                
-                // Lưu thông tin người dùng vào state với access_token 
-                const userData = {
-                    ...userRes.data,
-                    access_token: response.data.access_token // Đảm bảo access_token luôn có mặt
-                };
-                
-                dispatch({ type: 'login', payload: userData });
-                
-                Alert.alert('Thành công', 'Đăng nhập thành công!');
-            } catch (userError) {
-                console.error('Lỗi khi lấy thông tin người dùng:', userError.response?.data || userError.message);
-                
-                // Vẫn đăng nhập thành công, chỉ lưu thông tin cơ bản
-                dispatch({ 
-                    type: 'login', 
-                    payload: { 
-                        username: username,
-                        access_token: response.data.access_token // Sử dụng access_token thay vì token
-                    } 
+                dispatch({
+                    "type": "login",
+                    "payload": u.data
                 });
-                
-                Alert.alert('Thành công', 'Đăng nhập thành công, nhưng không thể lấy thông tin chi tiết.');
+
+                if (res.status === 200)
+                    nav.navigate('home');
+
+            } catch (ex) {
+                if (ex.response && ex.response.status === 400) {
+                    setMsg("Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại.");
+                } else {
+                    setMsg("Đã xảy ra lỗi. Vui lòng thử lại sau.");
+                }
+                console.error(ex);
+            } finally {
+                setLoading(false);
             }
-        } catch (error) {
-            console.error('Lỗi đăng nhập:', error.response ? error.response.data : error.message);
-            Alert.alert('Lỗi', 'Đăng nhập thất bại: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
-        } finally {
-            setLoading(false);
         }
     };
 
     return (
-        <Card style={MyStyles.cardPastel}>
-            <Card.Content>
-                <View style={{ alignItems: 'center', marginBottom: 12 }}>
-                    <MaterialCommunityIcons name="login" size={48} style={MyStyles.iconPastel} />
-                </View>
-                <Title style={MyStyles.titlePastel}>Đăng nhập</Title>
-                <PaperTextInput
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.container}>
+                <MaterialCommunityIcons name="login" size={40} color="#4A90E2" style={{ textAlign: 'center', marginBottom: 10 }} />
+                <Text style={styles.title}>Sign in</Text>
+                <HelperText type="error" visible={msg}>
+                    {msg}
+                </HelperText>
+
+                {info.map(i => <PaperTextInput
+                    key={i.field}
                     mode="outlined"
-                    label="Tên đăng nhập"
+                    label={i.label}
+                    value={user[i.field]}
+                    onChangeText={t => setState(t, i.field)}
+                    autoCapitalize={i.autoCapitalize}
+                    style={styles.input}
+                    outlineColor="#A49393"
+                    activeOutlineColor="#4A90E2"
+                    textColor="#333"
+                    left={<PaperTextInput.Icon name={i.name} color="#4A90E2" />}
+                />)}
+
+                {/* <PaperTextInput
+                    mode="outlined"
+                    label="Email"
                     value={username}
                     onChangeText={setUsername}
                     autoCapitalize="none"
-                    style={MyStyles.inputPastel}
+                    style={styles.input}
                     outlineColor="#A49393"
-                    activeOutlineColor="#A49393"
-                    textColor="#222"
+                    activeOutlineColor="#4A90E2"
+                    textColor="#333"
+                    left={<PaperTextInput.Icon name="email" color="#4A90E2" />}
                 />
                 <PaperTextInput
                     mode="outlined"
-                    label="Mật khẩu"
+                    label="Your password"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
-                    style={MyStyles.inputPastel}
+                    style={styles.input}
                     outlineColor="#A49393"
-                    activeOutlineColor="#A49393"
-                    textColor="#222"
-                />
-                <PaperButton mode="contained" onPress={handleLogin} loading={loading} disabled={loading} style={MyStyles.buttonPastel} labelStyle={MyStyles.buttonLabelLight}>
-                    Đăng nhập
+                    activeOutlineColor="#4A90E2"
+                    textColor="#333"
+                    left={<PaperTextInput.Icon name="lock" color="#4A90E2" />}
+                /> */}
+
+                <View style={styles.rememberRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Switch value={rememberMe} onValueChange={setRememberMe} color="#6D4AFF" />
+                        <Text style={{ color: '#333' }}>Remember Me</Text>
+                    </View>
+                    <TouchableOpacity>
+                        <Text style={{ color: '#6D4AFF' }}>Forgot Password?</Text>
+                    </TouchableOpacity>
+                </View>
+                <PaperButton mode="contained" onPress={handleLogin} loading={loading} disabled={loading} style={{ backgroundColor: '#6D4AFF', marginVertical: 10 }} labelStyle={{ color: '#FFF' }}>
+                    SIGN IN
                 </PaperButton>
-            </Card.Content>
-        </Card>
+                <Paragraph style={{ textAlign: 'center', color: '#666' }}>OR</Paragraph>
+                <PaperButton mode="outlined" icon="google" onPress={() => {}} style={[styles.socialButton, { borderColor: '#DB4437' }]} labelStyle={{ color: '#DB4437' }}>
+                    Login with Google
+                </PaperButton>
+                <PaperButton mode="outlined" icon="facebook" onPress={() => {}} style={[styles.socialButton, { borderColor: '#3B5998' }]} labelStyle={{ color: '#3B5998' }}>
+                    Login with Facebook
+                </PaperButton>
+                <TouchableOpacity style={styles.signUpText}>
+                    <Text style={{ color: '#6D4AFF' }}>Don't have an account? Sign up</Text>
+                </TouchableOpacity>
+            </View>
+        </TouchableWithoutFeedback>
+        
     );
+
 }
+
+
+export default Login;
