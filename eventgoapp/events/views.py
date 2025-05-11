@@ -20,7 +20,9 @@ from rest_framework import viewsets, permissions, generics, status, parsers
 from rest_framework.decorators import action
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
+from rest_framework.exceptions import ValidationError
 from rest_framework.generics import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from django.utils.http import urlsafe_base64_decode
 from django.contrib.auth.tokens import default_token_generator
@@ -32,8 +34,9 @@ import requests
 import hashlib
 import hmac
 
-from django.db.models import F, Sum, Avg, ExpressionWrapper, DurationField
+from django.db.models import F, Sum, Avg, ExpressionWrapper, DurationField, Q
 
+from . import paginators
 from .utils import generate_qr_image
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
@@ -106,9 +109,66 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+
+class EventCategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
+    """
+    API để lấy danh sách tất cả các danh mục sự kiện (EventCategory).
+    Endpoint: GET /event-categories/
+    """
+    queryset = EventCategory.objects.all()
+    serializer_class = EventCategorySerializer
+    pagination_class = PageNumberPagination
+
+    def get_queryset(self):
+        return self.queryset
+
 class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Event.objects.filter(active=True)
     serializer_class = EventSerializer
+    pagination_class = paginators.ItemPaginator
+
+    def update_event_statuses(self, queryset):
+        """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
+        current_time = now()
+        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(
+            status=Event.EventStatus.COMPLETED)
+        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(
+            status=Event.EventStatus.UPCOMING)
+        return queryset
+
+    def get_queryset(self):
+        query = self.queryset
+
+        q = self.request.query_params.get('q')
+        cate_id = self.request.query_params.get('cateId')
+        status = self.request.query_params.get('status')
+
+        filters = Q()
+
+        if q:
+            filters |= Q(name__icontains=q)
+
+        # Xử lý tham số tìm kiếm
+
+        if cate_id:
+            try:
+                filters &= Q(category_id=int(cate_id))
+            except ValueError:
+                raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})
+
+        if status:
+            valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
+            if status not in valid_statuses:
+                raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
+            filters &= Q(status=status.upper())
+
+        # Áp dụng bộ lọc
+        if filters:
+            query = query.filter(filters)
+
+        # Cập nhật trạng thái
+        return self.update_event_statuses(query)
+
 
     @action(methods=['get'], url_path='detail', detail=True)
     def view_event(self, request, pk=None):
@@ -119,21 +179,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         serializer = EventSerializer(event)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def update_event_statuses(self, queryset):
-        """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
-        current_time = now()
-        # Cập nhật từ 'upcoming' sang 'completed' nếu đã qua
-        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(
-            status=Event.EventStatus.COMPLETED)
-        # Cập nhật từ 'completed' sang 'upcoming' nếu còn trong tương lai (trường hợp hiếm)
-        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(
-            status=Event.EventStatus.UPCOMING)
-        return queryset
-
-    def get_queryset(self):
-        """Trả về queryset với trạng thái đã được cập nhật."""
-        queryset = Event.objects.filter(active=True)
-        return self.update_event_statuses(queryset)
         
     @action(methods=['put', 'patch'], url_path='update', detail=True, permission_classes=[IsAuthenticated])
     def update_event(self, request, pk=None):
@@ -290,16 +335,16 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-    @action(methods=['get'], url_path='search-events', detail=False)
-    def search_events(self, request):
-        category = request.query_params.get('category')
-        if not category:
-            return Response({"error": "Vui lòng cung cấp category"}, status=status.HTTP_400_BAD_REQUEST)
-
-        events = Event.objects.filter(category__name__icontains=category,
-                                      status=Event.EventStatus.UPCOMING)  # Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
-        serializer = EventSerializer(events, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    # @action(methods=['get'], url_path='search-events', detail=False)
+    # def search_events(self, request):
+    #     category = request.query_params.get('category')
+    #     if not category:
+    #         return Response({"error": "Vui lòng cung cấp category"}, status=status.HTTP_400_BAD_REQUEST)
+    #
+    #     events = Event.objects.filter(category__name__icontains=category,
+    #                                   status=Event.EventStatus.UPCOMING)  # Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
+    #     serializer = EventSerializer(events, many=True)
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['get'], url_path='tickets', detail=True)
     def get_tickets(self, request, pk=None):

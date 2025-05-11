@@ -1,7 +1,14 @@
 from rest_framework import serializers
 import re
+
 from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory, Review, Notification, Discount
 
+
+class BaseSerializer(serializers.ModelSerializer):
+    def to_representation(self, instance):
+        d = super().to_representation(instance)
+        d['image'] = instance.image.url if instance.image else None # Check if image is null
+        return d
 
 class UserSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
@@ -74,7 +81,7 @@ class EventCategorySerializer(serializers.ModelSerializer):
         model = EventCategory
         fields = '__all__'
 
-class EventSerializer(serializers.ModelSerializer):
+class EventSerializer(BaseSerializer):
     organizer = UserSerializer(read_only=True)
     category = EventCategorySerializer(read_only=True)
     average_rating = serializers.SerializerMethodField(read_only=True)

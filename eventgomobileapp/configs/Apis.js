@@ -1,10 +1,10 @@
 import axios from "axios";
 
-export const API_BASE = 'http://192.168.1.41:8000/';
+export const API_BASE = 'http://192.168.79.102:8000/';
 
 export const endpoints = {
     // Auth endpoints
-    login: API_BASE + "auth/login/",
+    login: API_BASE + "o/token/",
     register: API_BASE + "users/",
     currentUser: API_BASE + "users/current-user/",
     updateUser: API_BASE + "users/update-current-user/",
@@ -19,7 +19,7 @@ export const endpoints = {
     searchEvents: API_BASE + "events/search-events/",
     createEvent: API_BASE + "events/create/",
     createTicket: (eventId) => API_BASE + `events/${eventId}/tickets/create/`,
-    eventCategories: API_BASE + "events/categories/",
+    eventCategories: API_BASE + "event-categories/",
     
     // User related endpoints
     myTickets: API_BASE + "users/my-tickets/",

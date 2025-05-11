@@ -64,17 +64,17 @@ const TabNavigator = () => {
         tabBarLabelStyle: { fontWeight: 'bold', fontSize: 13 },
       }}
     >
-      <Tab.Screen name="Trang chủ" component={StackNavigator} options={{
+      <Tab.Screen name="home" component={StackNavigator} options={{
         title: 'Sự kiện',
         tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar" color={color} size={size} />
       }} />
       {user === null ? (
         <>
-          <Tab.Screen name="Đăng nhập" component={Login} options={{
+          <Tab.Screen name="login" component={Login} options={{
             title: 'Đăng nhập',
             tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="login" color={color} size={size} />
           }} />
-          <Tab.Screen name="Đăng ký" component={Register} options={{
+          <Tab.Screen name="register" component={Register} options={{
             title: 'Đăng ký',
             tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-plus" color={color} size={size} />
           }} />
