@@ -10,8 +10,10 @@ import Apis, { endpoints } from '../../configs/Apis';
 const { width } = Dimensions.get('window');
 
 const Home = ({ navigation }) => {
+    
     const [eventCates, setEventCates] = useState([]);
     const [events, setEvents] = useState([]);
+    const [trendingEvents, setTrendingEvents] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
@@ -63,10 +65,23 @@ const Home = ({ navigation }) => {
             }
         }
     }
+
+    // Load sự kiện trending
+    const loadTrendingEvents = async () => {
+        try {
+            let res = await Apis.get(endpoints['trendingEvents']);
+            console.log('API trending events response:', res.data);
+            setTrendingEvents(res.data); // Lưu danh sách trending events
+        } catch (ex) {
+            console.error('Error loading trending events:', ex);
+            Alert.alert('Lỗi', 'Không thể tải sự kiện trending');
+        }
+    };
     
 
     useEffect(() =>{
         loadEventCates();
+        loadTrendingEvents();
     }, []);
 
     useEffect(() => {
@@ -203,13 +218,42 @@ const Home = ({ navigation }) => {
                             ))}
                         </ScrollView>
                     </View>
+                    {/* Phần trượt ngang cho Trending Events */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Nearby You</Text>
-                            <TouchableOpacity>
+                            <Text style={styles.sectionTitle}>Trending Events</Text>
+                            <TouchableOpacity onPress={() => nav.navigate('EventList')}>
                                 <Text style={styles.seeAll}>See All {'>'}</Text>
                             </TouchableOpacity>
                         </View>
+                        <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
+                            {trendingEvents.length === 0 && !loading && (
+                                <Text style={styles.noEvents}>Không có sự kiện trending</Text>
+                            )}
+                            {trendingEvents.map((event) => (
+                                <TouchableOpacity
+                                    key={event.id}
+                                    style={styles.eventCard}
+                                    onPress={() => nav.navigate('EventDetail', { eventId: event.id })}
+                                >
+                                    <Image
+                                        source={{ uri: event.image }}
+                                        style={styles.eventImage}
+                                        resizeMode="cover"
+                                    />
+                                    <View style={styles.eventInfo}>
+                                        <Text style={styles.eventDate}>
+                                            {new Date(event.date).toLocaleDateString()}
+                                        </Text>
+                                        <Text style={styles.eventTitle}>{event.name}</Text>
+                                        <View style={styles.eventDetails}>
+                                            <MaterialCommunityIcons name="map-marker" size={12} color="#666" />
+                                            <Text style={styles.eventLocation}>{event.location}</Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
                     </View>
                 </ScrollView>
                 {isOrganizer && (

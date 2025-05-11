@@ -16,6 +16,11 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Email không hợp lệ.")
         return value
 
+    def to_representation(self, instance):
+        d = super().to_representation(instance)
+        d['avatar'] = instance.avatar.url if instance.avatar else None # Check if image is null
+        return d
+
     def validate_phone(self, value):
         if value and not re.match(r'^\d{10}$', value):
             raise serializers.ValidationError("Số điện thoại phải có 10 chữ số.")
