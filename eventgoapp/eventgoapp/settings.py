@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     'cloudinary',
     'cloudinary_storage',
     'drf_yasg',
-    'debug_toolbar'
+    'debug_toolbar',
     'channels',  # For real-time chat
 ]
 
