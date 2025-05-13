@@ -1,11 +1,12 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { View, StyleSheet, Alert, Text, TouchableOpacity, ScrollView, Image, SafeAreaView, Dimensions } from 'react-native';
-import MyStyles from '../styles/MyStyles';
-import { TextInput as PaperTextInput, Button as PaperButton, Paragraph, FAB } from 'react-native-paper';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
+import { View, StyleSheet, Alert, Text, TouchableOpacity, ScrollView, Image, SafeAreaView, Dimensions, RefreshControl } from 'react-native';
+import { TextInput, Button, ActivityIndicator, Chip, Divider, Surface, Searchbar, FAB, Portal, Dialog, Badge, Card, Title, Paragraph } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MyUserContext } from '../../configs/MyContexts';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Apis, { endpoints } from '../../configs/Apis';
+import { COLORS } from '../../components/styles/MyStyles';
+import { StatusBar } from 'expo-status-bar';
 
 const { width } = Dimensions.get('window');
 
@@ -16,28 +17,49 @@ const Home = ({ navigation }) => {
     const [trendingEvents, setTrendingEvents] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(false);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [page, setPage] = useState(1);
     const [cateId, setCateId] = useState(null);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadError, setLoadError] = useState(null);
+    const [filterVisible, setFilterVisible] = useState(false);
     const nav = useNavigation();
-    const [location, setLocation] = useState('New York, USA');
+    const [location, setLocation] = useState('TP. Hồ Chí Minh');
     const user = useContext(MyUserContext);
 
     // Ánh xạ tên danh mục sang icon
     const categoryIcons = {
-        'Lễ Hội': 'music',
+        'Lễ Hội': 'music-note',
         "Thể Thao": 'soccer',
         "Họp Báo": 'briefcase',
-        // Thêm các danh mục khác nếu cần
+        "Hội Thảo": 'notebook',
+        "Giải Trí": 'controller',
+        "Giáo Dục": 'school',
+        "Công Nghệ": 'laptop',
+        "Kinh Doanh": 'chart-line',
+        // Mặc định
+        "default": 'calendar-month'
     };
 
     const loadEventCates = async () => {
-        let res = await Apis.get(endpoints['eventCategories']);
-        setEventCates(res.data);
+        try {
+            let res = await Apis.get(endpoints['eventCategories']);
+            setEventCates(res.data);
+        } catch (error) {
+            console.error('Failed to load event categories:', error);
+            setLoadError('Không thể tải danh mục sự kiện');
+        }
     };
 
-    const loadEvents = async () => {
-        if (page > 0) {
-            let url = `${endpoints['events']}?page=${page}&status=upcoming`;
+    const loadEvents = async (pageToLoad = 1, shouldRefresh = false) => {
+        if (!hasMore && pageToLoad > 1 && !shouldRefresh) return;
+        
+        try {
+            setLoading(true);
+            setLoadError(null);
+            
+            let url = `${endpoints['events']}?page=${pageToLoad}&status=upcoming`;
 
             if (search) {
                 url = `${url}&q=${search}`
@@ -47,72 +69,100 @@ const Home = ({ navigation }) => {
                 url = `${url}&cateId=${cateId}`;
             }
 
-
-
-            try {
-                setLoading(true);
-                let res = await Apis.get(url);
-                console.log('API events response:', res.data);
-                setEvents([...events, ...res.data.results]);
-
-                if (res.data.next === null)
-                    setPage(0);
-            } catch (ex) {
-                console.error('Error loading events:', ex);
-                Alert.alert('Lỗi', 'Không thể tải sự kiện');
-            } finally {
-                setLoading(false);
+            const res = await Apis.get(url);
+            
+            if (shouldRefresh || pageToLoad === 1) {
+                setEvents(res.data.results || []);
+            } else {
+                setEvents(prev => [...prev, ...(res.data.results || [])]);
             }
+
+            setHasMore(res.data.next !== null);
+            setPage(pageToLoad);
+            
+        } catch (error) {
+            console.error('Error loading events:', error);
+            setLoadError('Không thể tải sự kiện');
+        } finally {
+            setLoading(false);
+            setInitialLoading(false);
+            setRefreshing(false);
         }
-    }
+    };
 
     // Load sự kiện trending
     const loadTrendingEvents = async () => {
         try {
-            let res = await Apis.get(endpoints['trendingEvents']);
-            console.log('API trending events response:', res.data);
-            setTrendingEvents(res.data); // Lưu danh sách trending events
-        } catch (ex) {
-            console.error('Error loading trending events:', ex);
-            Alert.alert('Lỗi', 'Không thể tải sự kiện trending');
+            const res = await Apis.get(endpoints['trendingEvents']);
+            setTrendingEvents(res.data || []);
+        } catch (error) {
+            console.error('Error loading trending events:', error);
+            // Không hiển thị lỗi cho trending, chỉ log
         }
     };
     
+    // Refresh tất cả dữ liệu
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        setPage(1);
+        setHasMore(true);
+        Promise.all([
+            loadEvents(1, true),
+            loadTrendingEvents(),
+            loadEventCates()
+        ]).finally(() => {
+            setRefreshing(false);
+        });
+    }, [search, cateId]);
 
-    useEffect(() =>{
-        loadEventCates();
-        loadTrendingEvents();
+    // Load dữ liệu ban đầu khi component mount
+    useEffect(() => {
+        setInitialLoading(true);
+        Promise.all([
+            loadEventCates(),
+            loadTrendingEvents()
+        ]).finally(() => {
+            loadEvents(1, true);
+        });
     }, []);
 
+    // Load sự kiện khi search hoặc category thay đổi
     useEffect(() => {
-        let timer = setTimeout(() => {
-            loadEvents();
+        const timer = setTimeout(() => {
+            setPage(1);
+            loadEvents(1, true);
         }, 500);
 
         return () => clearTimeout(timer);
-
-    }, [search, cateId, page]);
-
-     useEffect(() => {
-        setPage(1);
-        setEvents([]);
     }, [search, cateId]);
-    
-   const loadMore = () => {
-        if (!loading && page > 0) {
-            setPage(page + 1);
-        }
-    };
 
-     const handleCategoryPress = (id) => {
+    // Đảm bảo refresh dữ liệu khi quay lại tab này
+    useFocusEffect(
+        useCallback(() => {
+            // Chỉ refresh khi đã có dữ liệu trước đó
+            if (!initialLoading) {
+                onRefresh();
+            }
+            return () => {};
+        }, [initialLoading, onRefresh])
+    );
+    
+    const loadMore = () => {
+        if (!loading && hasMore) {
+            loadEvents(page + 1);
+        }
+    };    const handleCategoryPress = (id) => {
         setCateId(cateId === id ? null : id); // Toggle danh mục
     };
 
-
-    const isOrganizer = user && (user.role === 'organizer' || user.role === 'admin');
-
+    // Kiểm tra xem user có phải là đối tượng hợp lệ hay không
+    const isValidUser = user && typeof user === 'object' && (user.role !== undefined || user.username !== undefined || user.id !== undefined);
+    const isOrganizer = isValidUser && (user.role === 'organizer' || user.role === 'admin');
+    console.log("User context:", user);
+    console.log("Is valid user:", isValidUser);
+    
     const handleCreateEvent = () => {
-        if (user && (user.role === 'organizer' || user.role === 'admin')) {
+        if (isOrganizer) {
             navigation.navigate('CreateEvent');
         } else {
             Alert.alert(
@@ -123,332 +173,643 @@ const Home = ({ navigation }) => {
         }
     };
 
+    // Hiển thị dialog filter
+    const showFilterDialog = () => setFilterVisible(true);
+    const hideFilterDialog = () => setFilterVisible(false);
+
+    // Render Category Chip
+    const renderCategoryChip = useCallback((category) => (
+        <Chip
+            key={category.id}
+            selected={cateId === category.id}
+            onPress={() => handleCategoryPress(category.id)}
+            style={[
+                styles.categoryChip,
+                cateId === category.id && styles.categoryChipSelected
+            ]}
+            textStyle={[
+                styles.categoryChipText,
+                cateId === category.id && styles.categoryChipTextSelected
+            ]}
+            icon={props => (
+                <MaterialCommunityIcons
+                    name={categoryIcons[category.name] || categoryIcons.default}
+                    {...props}
+                    size={16}
+                    color={cateId === category.id ? COLORS.onPrimary : COLORS.primary}
+                />
+            )}
+        >
+            {category.name}
+        </Chip>
+    ), [cateId, categoryIcons]);
+
+    // Render Trending Event Card
+    const renderTrendingEventCard = useCallback((event) => {
+        if (!event || !event.id) return null;
+        
+        const imageUri = event.image || 'https://via.placeholder.com/300x200?text=No+Image';
+        const eventDate = event.date ? new Date(event.date) : new Date();
+        const eventName = event.name || 'Sự kiện không tên';
+        const eventLocation = event.location || 'Chưa cập nhật địa điểm';
+        const eventCategory = event.category_name || 'Danh mục';
+        
+        return (
+            <Card key={`trending-${event.id}`} style={styles.trendingCard} mode="elevated">
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('EventDetail', { 'eventId': event.id })}
+                >
+                    <Card.Cover 
+                        source={{ uri: imageUri }} 
+                        style={styles.trendingImage}
+                    />
+                    <Badge 
+                        style={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            backgroundColor: COLORS.secondary,
+                        }}
+                    >
+                        Hot
+                    </Badge>
+                    <Card.Content style={styles.trendingContent}>
+                        <View style={styles.trendingTagContainer}>
+                            <Text style={styles.trendingTag}>{eventCategory}</Text>
+                        </View>
+                        <Text style={styles.trendingTitle} numberOfLines={2}>
+                            {eventName}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <MaterialCommunityIcons name="map-marker" size={14} color={COLORS.textSecondary} />
+                            <Text style={styles.trendingLocation} numberOfLines={1}>
+                                {eventLocation}
+                            </Text>
+                        </View>
+                        <Text style={styles.trendingDate}>
+                            {eventDate.toLocaleDateString('vi-VN', { 
+                                weekday: 'short',
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric' 
+                            })}
+                        </Text>
+                    </Card.Content>
+                </TouchableOpacity>
+            </Card>
+        );
+    }, [navigation]);
+
+    // Render Event Card
+    const renderEventCard = useCallback((event) => {
+        if (!event || !event.id) return null;
+        
+        const imageUri = event.image || 'https://via.placeholder.com/300x200?text=No+Image';
+        const eventDate = event.date ? new Date(event.date) : new Date();
+        const eventName = event.name || 'Sự kiện không tên';
+        const eventLocation = event.location || 'Chưa cập nhật địa điểm';
+        const eventCategory = event.category_name || 'Danh mục';
+        
+        return (
+            <Card 
+                key={`event-${event.id}`} 
+                style={styles.eventCard}
+                mode="elevated"
+            >
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('EventDetail', { 'eventId': event.id })}
+                >
+                    <Card.Cover 
+                        source={{ uri: imageUri }} 
+                        style={styles.eventImage}
+                    />
+                    <Card.Content style={styles.eventDetails}>
+                        <View style={styles.eventTagRow}>
+                            <Text style={styles.eventTag}>{eventCategory}</Text>
+                        </View>
+                        <Text style={styles.eventTitle} numberOfLines={2}>
+                            {eventName}
+                        </Text>
+                        <View style={styles.eventMetaRow}>
+                            <MaterialCommunityIcons 
+                                name="calendar" 
+                                size={14} 
+                                style={styles.eventMetaIcon} 
+                            />
+                            <Text style={styles.eventMetaText}>
+                                {eventDate.toLocaleDateString('vi-VN', { 
+                                    weekday: 'short',
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric' 
+                                })}
+                            </Text>
+                        </View>
+                        <View style={styles.eventMetaRow}>
+                            <MaterialCommunityIcons 
+                                name="map-marker" 
+                                size={14} 
+                                style={styles.eventMetaIcon} 
+                            />
+                            <Text style={styles.eventMetaText} numberOfLines={1}>
+                                {eventLocation}
+                            </Text>
+                        </View>
+                    </Card.Content>
+                </TouchableOpacity>
+            </Card>
+        );
+    }, [navigation]);
+
+    // Render Empty State
+    const renderEmptyState = useCallback((title, icon = "calendar-remove") => (
+        <View style={styles.emptyStateContainer}>
+            <MaterialCommunityIcons name={icon} size={60} color={COLORS.textSecondary} />
+            <Text style={styles.emptyStateText}>{title}</Text>
+        </View>
+    ), []);
+
+    // Render Loading State
+    const renderLoading = useCallback(() => {
+        if (loading && !refreshing) {
+            return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={{ color: COLORS.textSecondary, marginTop: 8 }}>
+                        Đang tải...
+                    </Text>
+                </View>
+            );
+        }
+        return null;
+    }, [loading, refreshing]);
+
+    // Render Main Content
+    const renderContent = () => {
+        if (initialLoading) {
+            return (
+                <View style={styles.centerContent}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={{ color: COLORS.textSecondary, marginTop: 16 }}>
+                        Đang tải sự kiện...
+                    </Text>
+                </View>
+            );
+        }
+
+        return (
+            <ScrollView
+                style={{ flex: 1, backgroundColor: COLORS.background }}
+                contentContainerStyle={{ paddingBottom: 80 }}
+                onScroll={({ nativeEvent }) => {
+                    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+                    const paddingToBottom = 20;
+                    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
+                        loadMore();
+                    }
+                }}
+                scrollEventThrottle={400}
+                refreshControl={
+                    <RefreshControl 
+                        refreshing={refreshing} 
+                        onRefresh={onRefresh}
+                        colors={[COLORS.primary]}
+                        tintColor={COLORS.primary}
+                    />
+                }
+            >
+                {loadError && (
+                    <View style={styles.errorContainer}>
+                        <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.error} />
+                        <Text style={styles.errorText}>{loadError}</Text>
+                        <Button 
+                            mode="contained" 
+                            onPress={onRefresh}
+                            style={styles.retryButton}
+                        >
+                            Thử lại
+                        </Button>
+                    </View>
+                )}
+
+                {/* Trending Events Section */}
+                <View style={styles.trendingContainer}>
+                    <View style={styles.categoryHeaderContainer}>
+                        <Text style={styles.sectionHeader}>Sự kiện nổi bật</Text>
+                        <TouchableOpacity onPress={() => {}}>
+                            <Text style={styles.categorySeeAll}>Xem tất cả</Text>
+                        </TouchableOpacity>
+                    </View>
+                    
+                    {trendingEvents.length === 0 ? (
+                        renderEmptyState("Không có sự kiện nổi bật", "star-off")
+                    ) : (
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.trendingScroll}
+                        >
+                            {trendingEvents.map(event => renderTrendingEventCard(event))}
+                        </ScrollView>
+                    )}
+                </View>
+
+                <Divider style={styles.divider} />
+
+                {/* All Events */}
+                <View style={styles.eventsContainer}>
+                    <View style={styles.categoryHeaderContainer}>
+                        <Text style={styles.sectionHeader}>Sự kiện sắp diễn ra</Text>
+                        <TouchableOpacity onPress={() => {}}>
+                            <Text style={styles.categorySeeAll}>Xem tất cả</Text>
+                        </TouchableOpacity>
+                    </View>
+                    
+                    {events.length === 0 ? (
+                        renderEmptyState("Không có sự kiện nào được tìm thấy", "calendar-blank")
+                    ) : (
+                        events.map(event => renderEventCard(event))
+                    )}
+                    
+                    {renderLoading()}
+                </View>
+            </ScrollView>
+        );
+    };
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
+            <StatusBar style="auto" />
+            
             <View style={styles.container}>
+                {/* Header */}
                 <View style={styles.header}>
-                    <SafeAreaView edges={['top']}>
-                        <View style={styles.headerContent}>
-                            <MaterialCommunityIcons name="menu" size={24} color="#FFF" />
-                            <View style={styles.location}>
-                                <MaterialCommunityIcons name="map-marker" size={16} color="#FFF" />
-                                <Text style={styles.locationText}>Current Location {'>'}</Text>
-                                <Text style={styles.locationValue}>{location}</Text>
-                            </View>
-                            <MaterialCommunityIcons name="bell" size={24} color="#FFF" />
+                    <View style={styles.headerRow}>                        <View>
+                            <Text style={styles.greeting}>
+                                {isValidUser ? `Xin chào, ${user.firstName || 'Bạn'}!` : 'Khám phá sự kiện'}
+                            </Text>
+                            <TouchableOpacity style={styles.locationContainer}>
+                                <MaterialCommunityIcons name="map-marker" size={14} color={COLORS.textSecondary} />
+                                <Text style={styles.locationText}>{location}</Text>
+                            </TouchableOpacity>
                         </View>
-                    </SafeAreaView>
-                </View>
-                <View style={styles.searchContainer}>
-                    <MaterialCommunityIcons name="magnify" size={20} color="#666" style={styles.searchIcon} />
-                    <PaperTextInput
-                        mode="outlined"
-                        label="Search..."
-                        value={search}
-                        onChangeText={setSearch}
-                        style={styles.searchInput}
-                        outlineColor="#A49393"
-                        activeOutlineColor="#4A90E2"
-                        textColor="#333"
-                    />
-                    <TouchableOpacity style={styles.filters}>
-                        <MaterialCommunityIcons name="filter" size={20} color="#FFF" />
-                        <Text style={styles.filtersText}>Filters</Text>
-                    </TouchableOpacity>
-                </View>
-                <View style={styles.categoryContainer}>
-                    <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
-
-                    
-                    {eventCates.map(e => (
-                        <TouchableOpacity
-                            key={e.id}
-                            style={[
-                                styles.categoryButton,
-                                { backgroundColor: cateId === e.id ? '#FF6B6B' : '#6D4AFF' }
-                            ]}
-                            onPress={() => handleCategoryPress(e.id)}
+                        
+                        <TouchableOpacity 
+                            style={styles.userAvatar}
+                            onPress={() => isValidUser ? navigation.navigate('Profile') : navigation.navigate('Login')}
                         >
-                            <MaterialCommunityIcons
-                                name={categoryIcons[e.name] || 'calendar'}
-                                size={20}
-                                color="#FFF"
-                            />
-                            <Text style={styles.categoryText}>{e.name}</Text>
+                            {isValidUser && user.avatar ? (
+                                <Image 
+                                    source={{ uri: user.avatar }} 
+                                    style={{ width: 40, height: 40, borderRadius: 20 }} 
+                                />
+                            ) : (
+                                <Text style={styles.userAvatarText}>
+                                    {isValidUser ? user.firstName?.charAt(0).toUpperCase() : '?'}
+                                </Text>
+                            )}
                         </TouchableOpacity>
-                    ))}
-
+                    </View>
+                    
+                    {/* Search Bar */}
+                    <View style={styles.searchContainer}>
+                        <Searchbar
+                            placeholder="Tìm kiếm sự kiện..."
+                            onChangeText={setSearch}
+                            value={search}
+                            style={styles.searchInput}
+                            icon="magnify"
+                            clearIcon="close-circle"
+                        />
+                    </View>
+                </View>
+                
+                {/* Categories */}
+                <View style={styles.categoryContainer}>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.categoryScroll}
+                    >
+                        {eventCates.map(category => renderCategoryChip(category))}
                     </ScrollView>
                 </View>
-                <ScrollView style={styles.content} onScrollEndDrag={loadMore}>
-
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Upcoming Events</Text>
-                            <TouchableOpacity onPress={() => navigation.navigate('EventList')}>
-                                <Text style={styles.seeAll}>See All {'>'}</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
-                            {events.length === 0 && !loading && ( 
-                                <Text style={styles.noEvents}>Không có sự kiện nào</Text>
-                            )}
-                            {events.map((event) => (
-                                <TouchableOpacity
-                                    key={event.id}
-                                    style={styles.eventCard}
-                                    onPress={() => navigation.navigate('EventDetail', { 'eventId': event.id })}
-                                >
-                                    <Image
-                                        source={{ uri: event.image }}
-                                        style={styles.eventImage}
-                                    />
-                                    <View style={styles.eventInfo}>
-                                        <Text style={styles.eventDate}>
-                                            {new Date(event.date).toLocaleDateString()}
-                                        </Text>
-                                        <Text style={styles.eventTitle}>{event.name}</Text>
-                                        <View style={styles.eventDetails}>
-                                            <MaterialCommunityIcons name="map-marker" size={12} color="#666" />
-                                            <Text style={styles.eventLocation}>{event.location}</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                    {/* Phần trượt ngang cho Trending Events */}
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Trending Events</Text>
-                            <TouchableOpacity onPress={() => nav.navigate('EventList')}>
-                                <Text style={styles.seeAll}>See All {'>'}</Text>
-                            </TouchableOpacity>
-                        </View>
-                        <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.eventScroll}>
-                            {trendingEvents.length === 0 && !loading && (
-                                <Text style={styles.noEvents}>Không có sự kiện trending</Text>
-                            )}
-                            {trendingEvents.map((event) => (
-                                <TouchableOpacity
-                                    key={event.id}
-                                    style={styles.eventCard}
-                                    onPress={() => nav.navigate('EventDetail', { eventId: event.id })}
-                                >
-                                    <Image
-                                        source={{ uri: event.image }}
-                                        style={styles.eventImage}
-                                        resizeMode="cover"
-                                    />
-                                    <View style={styles.eventInfo}>
-                                        <Text style={styles.eventDate}>
-                                            {new Date(event.date).toLocaleDateString()}
-                                        </Text>
-                                        <Text style={styles.eventTitle}>{event.name}</Text>
-                                        <View style={styles.eventDetails}>
-                                            <MaterialCommunityIcons name="map-marker" size={12} color="#666" />
-                                            <Text style={styles.eventLocation}>{event.location}</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </ScrollView>
+                
+                {/* Main Content */}
+                {renderContent()}
+                  {/* Create Event FAB */}
                 {isOrganizer && (
                     <FAB
                         style={styles.fab}
                         icon="plus"
+                        color={COLORS.onPrimary}
                         onPress={handleCreateEvent}
-                        color="#FFF"
-                        theme={{ colors: { accent: '#A49393' } }}
                     />
                 )}
+                
+                {/* Filter Dialog */}
+                <Portal>
+                    <Dialog visible={filterVisible} onDismiss={hideFilterDialog} style={styles.filterDialog}>
+                        <Dialog.Title style={styles.dialogTitle}>Bộ lọc sự kiện</Dialog.Title>
+                        <Dialog.Content>
+                            <Text style={styles.filterLabel}>Tính năng đang được phát triển</Text>
+                        </Dialog.Content>
+                        <Dialog.Actions>
+                            <Button onPress={hideFilterDialog}>Đóng</Button>
+                            <Button mode="contained" onPress={hideFilterDialog}>Áp dụng</Button>
+                        </Dialog.Actions>
+                    </Dialog>
+                </Portal>
             </View>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-    },
     container: {
         flex: 1,
-        backgroundColor: '#FFF',
+        backgroundColor: COLORS.background,
+        paddingTop: 0,
     },
     header: {
-        backgroundColor: '#4A90E2',
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 8,
+        backgroundColor: COLORS.background,
     },
-    headerContent: {
+    headerRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 15,
+        marginBottom: 8,
     },
-    location: {
+    greeting: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: COLORS.primary,
+    },
+    locationContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+        marginTop: 4,
     },
     locationText: {
-        color: '#FFF',
-        marginRight: 5,
+        fontSize: 14,
+        color: COLORS.textSecondary,
+        marginLeft: 4,
     },
-    locationValue: {
-        color: '#FFF',
+    userAvatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: COLORS.lightPrimary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    userAvatarText: {
+        fontSize: 16,
         fontWeight: 'bold',
+        color: COLORS.onPrimary,
     },
     searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        backgroundColor: '#FFF',
-        marginTop: 70,
-    },
-    searchIcon: {
-        marginRight: 10,
+        marginTop: 8,
+        marginBottom: 16,
+        borderRadius: 12,
+        overflow: 'hidden',
     },
     searchInput: {
-        flex: 1,
-        backgroundColor: '#FFF',
-    },
-    filters: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#9B59B6',
-        padding: 5,
-        borderRadius: 15,
-    },
-    filtersText: {
-        color: '#FFF',
-        marginLeft: 5,
+        height: 46,
+        elevation: 2,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
     },
     categoryContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        padding: 10,
-        backgroundColor: '#FFF',
-    },
-    categoryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
         paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 20,
-        elevation: 2,
-        margin: 5
+        paddingHorizontal: 16,
     },
-    categoryText: {
-        color: '#FFF',
-        marginLeft: 5,
-        fontWeight: 'bold',
-    },
-    content: {
-        flex: 1,
-    },
-    section: {
-        padding: 10,
-    },
-    sectionHeader: {
+    categoryHeaderContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 12,
     },
-    sectionTitle: {
+    categoryTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#333',
+        color: COLORS.text,
     },
-    seeAll: {
-        color: '#9B59B6',
+    categorySeeAll: {
+        fontSize: 14,
+        color: COLORS.primary,
     },
-    eventScroll: {
-        paddingVertical: 5,
+    categoryScroll: {
+        paddingBottom: 8,
+    },
+    categoryChip: {
+        marginRight: 8,
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+    },
+    categoryChipSelected: {
+        backgroundColor: COLORS.primary,
+    },
+    categoryChipText: {
+        color: COLORS.textSecondary,
+    },
+    categoryChipTextSelected: {
+        color: COLORS.onPrimary,
+    },
+    trendingContainer: {
+        paddingLeft: 16,
+        marginTop: 16,
+        marginBottom: 24,
+    },
+    sectionHeader: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        paddingRight: 16,
+        color: COLORS.text,
+    },
+    trendingScroll: {
+        paddingBottom: 8,
+    },
+    trendingCard: {
+        width: width * 0.75,
+        marginRight: 16,
+        borderRadius: 12,
+        overflow: 'hidden',
+        elevation: 3,
+    },
+    trendingImage: {
+        width: '100%',
+        height: 160,
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+    },
+    trendingContent: {
+        padding: 12,
+    },
+    trendingTagContainer: {
+        flexDirection: 'row',
+        marginBottom: 8,
+    },
+    trendingTag: {
+        fontSize: 12,
+        color: COLORS.primary,
+        backgroundColor: COLORS.lightPrimary,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    trendingTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4,
+        color: COLORS.text,
+    },
+    trendingLocation: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    trendingDate: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        marginTop: 4,
+    },
+    eventsContainer: {
+        paddingHorizontal: 16,
+        paddingBottom: 80,
     },
     eventCard: {
-        width: width * 0.75,
-        backgroundColor: '#FFF',
-        borderRadius: 15,
-        marginRight: 10,
-        elevation: 4,
+        marginBottom: 16,
+        borderRadius: 12,
         overflow: 'hidden',
+        elevation: 2,
+    },
+    eventCardContent: {
+        padding: 0,
     },
     eventImage: {
         width: '100%',
-        height: 150,
+        height: 180,
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
     },
-    eventInfo: {
-        padding: 10,
+    eventImagePlaceholder: {
+        width: '100%',
+        height: 180,
+        backgroundColor: COLORS.divider,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
     },
-    eventDate: {
-        color: '#FF6B6B',
-        fontWeight: 'bold',
-        fontSize: 14,
+    eventDetails: {
+        padding: 12,
     },
     eventTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#333',
-        marginVertical: 5,
+        marginBottom: 4,
+        color: COLORS.text,
     },
-    eventDetails: {
+    eventMetaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 5,
+        marginTop: 8,
     },
-    eventLocation: {
-        color: '#666',
-        marginLeft: 5,
+    eventMetaIcon: {
+        marginRight: 4,
+        color: COLORS.textSecondary,
     },
-    eventGoing: {
+    eventMetaText: {
+        fontSize: 12,
+        color: COLORS.textSecondary,
+        flex: 1,
+    },
+    eventTagRow: {
         flexDirection: 'row',
+        marginTop: 8,
+    },
+    eventTag: {
+        fontSize: 12,
+        color: COLORS.primary,
+        backgroundColor: COLORS.lightPrimary,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginRight: 8,
+        borderRadius: 12,
+    },
+    loadingContainer: {
+        paddingVertical: 20,
         alignItems: 'center',
-        marginTop: 5,
     },
-    avatar: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        marginRight: 5,
-    },
-    goingText: {
-        color: '#4A90E2',
-    },
-    inviteCard: {
-        backgroundColor: '#E8F5E9',
-        borderRadius: 15,
-        padding: 15,
-        marginBottom: 10,
+    errorContainer: {
+        padding: 20,
         alignItems: 'center',
-        elevation: 2,
     },
-    inviteTitle: {
-        fontSize: 16,
+    errorText: {
+        color: COLORS.error,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    retryButton: {
+        marginTop: 8,
+        backgroundColor: COLORS.primary,
+    },
+    divider: {
+        backgroundColor: COLORS.divider,
+        marginHorizontal: 16,
+        marginVertical: 8,
+    },
+    filterDialog: {
+        backgroundColor: COLORS.background,
+        borderRadius: 20,
+    },
+    dialogTitle: {
+        color: COLORS.primary,
         fontWeight: 'bold',
-        color: '#333',
     },
-    inviteSubtitle: {
-        color: '#666',
-        marginVertical: 5,
+    filterLabel: {
+        marginBottom: 8,
+        color: COLORS.textSecondary,
     },
-    inviteButton: {
-        backgroundColor: '#4CAF50',
+    centerContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     fab: {
         position: 'absolute',
         margin: 16,
         right: 0,
-        bottom: 80,
-        backgroundColor: '#A49393',
+        bottom: 0,
+        backgroundColor: COLORS.primary,
+    },
+    emptyStateContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 32,
+        paddingVertical: 40,
+    },
+    emptyStateImage: {
+        width: 100, 
+        height: 100,
+        marginBottom: 16,
+        tintColor: COLORS.textSecondary,
+    },
+    emptyStateText: {
+        fontSize: 16,
+        textAlign: 'center',
+        color: COLORS.textSecondary,
+        marginBottom: 16,
     },
 });
 

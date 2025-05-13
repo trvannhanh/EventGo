@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity, Image } from 'react-native';
-import { TextInput, Button, Card, Title, Text, ActivityIndicator, Chip, HelperText } from 'react-native-paper';
+import { View, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity, Image, KeyboardAvoidingView } from 'react-native';
+import { TextInput, Button, Title, Text, ActivityIndicator, Chip, HelperText, Surface, Portal, Modal, FAB, IconButton, Divider } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { MyUserContext } from '../../configs/MyContexts';
 import api, { endpoints, authApis } from '../../configs/Apis';
-import MyStyles from '../styles/MyStyles';
+import MyStyles, { COLORS } from '../styles/MyStyles';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const EVENT_TYPES = [
   { label: 'Âm nhạc', value: 'music' },
@@ -172,14 +173,17 @@ const CreateEvent = ({ navigation }) => {
       return;
     }
     
-    if (!user || !user.access_token) {
+    // Lấy token từ AsyncStorage thay vì user context
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
       Alert.alert('Lỗi', 'Bạn cần đăng nhập để thực hiện chức năng này');
+      navigation.navigate('Login');
       return;
     }
     
     try {
       setLoading(true);
-      const authApi = authApis(user.access_token);
+      const authApi = authApis(token);
       
       // Prepare event data
       const formData = new FormData();
@@ -477,84 +481,120 @@ const CreateEvent = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.background,
+    padding: 16,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#777',
-  },
-  card: {
-    margin: 16,
-    elevation: 2,
+  header: {
+    marginBottom: 20,
   },
   title: {
-    textAlign: 'center',
-    marginBottom: 20,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#444',
+    color: COLORS.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 12,
+  },
+  inputContainer: {
+    marginBottom: 16,
   },
   input: {
-    marginBottom: 12,
-    backgroundColor: '#fff',
-  },
-  inputGroup: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 4,
-    color: '#555',
-  },
-  picker: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    marginBottom: 8,
+    backgroundColor: COLORS.background,
+    marginBottom: 6,
   },
   dateTimeContainer: {
-    marginBottom: 12,
-  },
-  dateTimeButton: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    marginBottom: 16,
+  },
+  dateTimeButton: {
+    flex: 1,
     padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     borderRadius: 4,
-    marginBottom: 12,
-  },
-  imageContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 12,
+    justifyContent: 'space-between',
+    marginRight: 8,
   },
-  eventImage: {
-    width: '100%',
-    height: 180,
-    borderRadius: 8,
-    marginBottom: 8,
+  dateTimeText: {
+    fontSize: 16,
+    color: COLORS.text,
   },
-  imagePlaceholder: {
-    width: '100%',
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  imageButton: {
+  error: {
+    color: COLORS.error,
     marginTop: 4,
-    backgroundColor: '#7FC8C2',
   },
-  ticketsContainer: {
+  imagePreviewContainer: {
+    marginVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
+  },
+  imageUploadButton: {
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadButtonText: {
+    color: COLORS.primary,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 4,
+    marginBottom: 16,
+  },
+  picker: {
+    height: 50,
+    color: COLORS.text,
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  categoryChip: {
+    margin: 4,
+  },
+  ticketSection: {
     marginTop: 20,
+  },
+  ticketCard: {
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   ticketHeader: {
     flexDirection: 'row',
@@ -562,34 +602,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#444',
-  },
-  addButton: {
-    backgroundColor: '#7FC8C2',
-  },
-  ticketCard: {
-    marginBottom: 12,
-    backgroundColor: '#f9f9f9',
-  },
-  ticketCardHeader: {
+  ticketInputRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 8,
   },
-  ticketTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#555',
+  ticketInput: {
+    flex: 1,
+    marginHorizontal: 4,
+    backgroundColor: COLORS.background,
   },
-  submitButton: {
+  addTicketButton: {
+    marginVertical: 16,
+  },
+  submitButtonContainer: {
     marginTop: 24,
-    marginBottom: 12,
-    paddingVertical: 6,
-    backgroundColor: '#7FC8C2',
+    marginBottom: 40,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: 14,
+    marginTop: 4,
   },
 });
 

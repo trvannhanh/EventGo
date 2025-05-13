@@ -39,8 +39,7 @@ ALLOWED_HOSTS = ['10.0.2.2', 'localhost', '127.0.0.1', "192.168.1.41", "10.17.50
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
+    'django.contrib.contenttypes',    'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'events.apps.EventsConfig',
@@ -59,7 +58,8 @@ INSTALLED_APPS = [
     'push_notifications', # 4/5
     'cloudinary',
     'cloudinary_storage',
-    'drf_yasg'
+    'drf_yasg',
+    'channels',  # For real-time chat
 ]
 
 
