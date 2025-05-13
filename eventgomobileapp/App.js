@@ -20,6 +20,7 @@ import { Provider as PaperProvider, DefaultTheme, ActivityIndicator } from 'reac
 import MyStyles from './components/styles/MyStyles';
 import { View, Text, LogBox } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PaymentSuccess from './components/Home/PaymentSuccess';
 
 // Bỏ qua một số cảnh báo không cần thiết
 LogBox.ignoreLogs([
@@ -36,6 +37,7 @@ const StackNavigator = () => {
       <Stack.Screen name="Home" component={Home} options={{ title: 'Trang chủ' }} />
       <Stack.Screen name="EventDetail" component={EventDetail} options={{ title: 'Chi tiết sự kiện' }} />
       <Stack.Screen name="BookTicket" component={BookTicket} options={{ title: 'Đặt vé' }} />
+      <Stack.Screen name="PaymentSuccess" component={PaymentSuccess} options={{ title: 'Thanh toán Thành Công' }} />
       <Stack.Screen name="ReviewList" component={ReviewList} options={{ title: 'Đánh giá sự kiện' }} />
       <Stack.Screen name="CreateEvent" component={CreateEvent} options={{ title: 'Tạo sự kiện' }} />
     </Stack.Navigator>

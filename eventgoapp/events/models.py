@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from cloudinary.models import CloudinaryField
 from django.db import models
 from django.contrib.auth.models import AbstractUser
@@ -147,13 +149,21 @@ class Order(BaseModel):
         CREDIT_CARD = 'credit_card', 'Credit Card'
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
-    tickets = models.ManyToManyField(Ticket, through='OrderDetail')
+    ticket = models.ForeignKey('Ticket', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_status = models.CharField(max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
-    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, null=True, blank=True)
+    quantity = models.PositiveIntegerField(default=1)  # Tổng số vé đặt trong đơn hàng
+    expiration_time = models.DateTimeField(null=True, blank=True)  # Thời gian hết hạn thanh toán
 
     def __str__(self):
         return f"Order #{self.id} by {self.user.username}"
+
+    def save(self, *args, **kwargs):
+        """Tự động đặt expiration_time khi tạo Order mới với trạng thái PENDING."""
+        if not self.id and self.payment_status == self.PaymentStatus.PENDING:
+            self.expiration_time = now() + timedelta(minutes=15)  # Hết hạn sau 15 phút
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = "Order"
@@ -164,7 +174,6 @@ class Order(BaseModel):
 class OrderDetail(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_details')
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
-    quantity = models.PositiveIntegerField()
     qr_code = models.CharField(max_length=255, unique=True)
     qr_image = models.ImageField(upload_to='tickets/%Y/%m/%d/', blank=True, null=True)
     checked_in = models.BooleanField(default=False)
