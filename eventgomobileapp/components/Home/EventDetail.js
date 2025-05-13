@@ -31,18 +31,262 @@ const { width, height } = Dimensions.get('window');
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
-  const [event, setEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [event, setEvent] = useState(null); const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const user = useContext(MyUserContext);
+
   const [canReview, setCanReview] = useState(false);
   const [hasReviewed, setHasReviewed] = useState(false);
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: COLORS.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    imageContainer: {
+      position: 'relative',
+      height: 250,
+    },
+    eventImage: {
+      width: '100%',
+      height: '100%',
+    },
+    imageOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      justifyContent: 'flex-end',
+    },
+    backButton: {
+      position: 'absolute',
+      top: 16,
+      left: 16,
+      zIndex: 10,
+      backgroundColor: 'rgba(255,255,255,0.8)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shareButton: {
+      position: 'absolute',
+      top: 16,
+      right: 16,
+      zIndex: 10,
+      backgroundColor: 'rgba(255,255,255,0.8)',
+      borderRadius: 20,
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    contentContainer: {
+      padding: 16,
+      marginTop: -20,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      backgroundColor: COLORS.background,
+    },
+    eventTitle: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: COLORS.text,
+      marginBottom: 8,
+    },
+    eventByline: {
+      fontSize: 14,
+      color: COLORS.textSecondary,
+      marginBottom: 16,
+    },
+    chipContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginVertical: 8,
+    },
+    chip: {
+      marginRight: 8,
+      marginBottom: 8,
+      backgroundColor: COLORS.primaryLight,
+    },
+    chipText: {
+      color: COLORS.primary,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: COLORS.primary,
+      marginVertical: 12,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    infoIcon: {
+      marginRight: 12,
+      width: 24,
+      alignItems: 'center',
+    },
+    infoText: {
+      flex: 1,
+      fontSize: 15,
+      color: COLORS.text,
+    },
+    descriptionContainer: {
+      marginVertical: 16,
+    },
+    description: {
+      fontSize: 15,
+      color: COLORS.text,
+      lineHeight: 22,
+    },
+    ticketSection: {
+      marginVertical: 16,
+    },
+    ticketRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+      padding: 12,
+      backgroundColor: COLORS.background,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+    },
+    ticketType: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: COLORS.text,
+    },
+    ticketPrice: {
+      fontSize: 15,
+      color: COLORS.primary,
+      fontWeight: 'bold',
+    },
+    ticketDescription: {
+      fontSize: 13,
+      color: COLORS.textSecondary,
+      marginTop: 4,
+    },
+    ticketsRemaining: {
+      fontSize: 13,
+      color: COLORS.textSecondary,
+    },
+    organizerSection: {
+      marginVertical: 16,
+    },
+    organizerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    organizerInfo: {
+      marginLeft: 12,
+      flex: 1,
+    },
+    organizerName: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: COLORS.text,
+    },
+    reviewsSection: {
+      marginVertical: 16,
+    },
+    reviewCard: {
+      marginBottom: 12,
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: COLORS.background,
+      borderWidth: 1,
+      borderColor: COLORS.border,
+    },
+    reviewHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    reviewUser: {
+      fontSize: 15,
+      fontWeight: 'bold',
+      marginLeft: 8,
+    },
+    starContainer: {
+      flexDirection: 'row',
+      marginVertical: 8,
+    },
+    reviewContent: {
+      fontSize: 14,
+      color: COLORS.text,
+      marginTop: 4,
+    },
+    modalContainer: {
+      backgroundColor: 'white',
+      padding: 20,
+      margin: 20,
+      borderRadius: 12,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      marginBottom: 16,
+      color: COLORS.primary,
+      textAlign: 'center',
+    },
+    starRatingContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      marginVertical: 16,
+    },
+    modalActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 16,
+    },
+    fab: {
+      position: 'absolute',
+      margin: 16,
+      right: 0,
+      bottom: 0,
+      backgroundColor: COLORS.primary,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    noReviewsText: {
+      textAlign: 'center',
+      color: COLORS.textSecondary,
+      marginVertical: 16,
+    },
+    reviewDate: {
+      fontSize: 12,
+      color: COLORS.textSecondary,
+      marginLeft: 'auto',
+    },
+    ratingText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: COLORS.text,
+      textAlign: 'center',
+      marginVertical: 8,
+    },
+    modalInput: {
+      marginVertical: 12,
+      backgroundColor: COLORS.background,
+    },
+  });
   useEffect(() => {
     const fetchEvent = async () => {
       try {
@@ -76,6 +320,7 @@ const EventDetail = ({ route, navigation }) => {
 
     fetchEvent();
     fetchReviews();
+
   }, [eventId, user]);
 
   const submitReview = async () => {
@@ -86,13 +331,16 @@ const EventDetail = ({ route, navigation }) => {
 
     if (rating < 1 || !comment) {
       Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin đánh giá');
+
       return;
     }
 
     setReviewSubmitting(true);
 
     try {
+      // Đảm bảo rating là số nguyên
       const reviewData = {
+
         event_id: eventId,
         rating: rating,
         comment: comment,
@@ -102,14 +350,17 @@ const EventDetail = ({ route, navigation }) => {
       await authApi.post(endpoints.reviews, reviewData);
 
       Alert.alert('Thành công', 'Đánh giá của bạn đã được gửi');
+
       setModalVisible(false);
       setRating(5);
       setComment('');
+
 
       const res = await api.get(endpoints.eventReviews(eventId));
       setReviews(res.data.reviews || []);
       setHasReviewed(true);
     } catch (err) {
+
       console.error('Lỗi khi gửi đánh giá:', err.response?.data || err.message);
       if (err.response && err.response.status === 401) {
         Alert.alert(
@@ -126,12 +377,85 @@ const EventDetail = ({ route, navigation }) => {
         Alert.alert(
           'Lỗi',
           err.response?.data?.detail || 'Không thể gửi đánh giá. Vui lòng thử lại sau.',
+
         );
       }
     } finally {
       setReviewSubmitting(false);
     }
   };
+  const fetchEventData = async (isRefreshing = false) => {
+    if (isRefreshing) {
+      setRefreshing(true);
+    }
+
+    try {
+      // Fetch event details
+      const eventRes = await api.get(endpoints.eventDetail(eventId));
+      setEvent(eventRes.data);
+
+      // Fetch reviews
+      const reviewsRes = await api.get(endpoints.eventReviews(eventId));
+      setReviews(reviewsRes.data.reviews || []);
+
+      // Check if user has reviewed
+      if (user) {
+        const userReviewed = reviewsRes.data.reviews.some(review => review.user === user.username);
+        setHasReviewed(userReviewed);
+
+        // If user hasn't reviewed, default to allowing reviews
+        if (!userReviewed) {
+          setCanReview(true);
+        }
+      }
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+      Alert.alert("Lỗi", "Không thể tải dữ liệu mới. Vui lòng thử lại sau.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setReviewsLoading(false);
+    }
+  };
+
+  const onRefresh = useCallback(() => {
+    fetchEventData(true);
+  }, [eventId, user]);
+
+  const shareEvent = async () => {
+    if (!event) return;
+
+    try {
+      await Share.share({
+        message: `Tham gia sự kiện "${event.name}" tại ${event.venue || 'EventGo'}! Ngày: ${event.event_date}, Giờ: ${event.event_time || 'Đang cập nhật'}. Xem chi tiết và đặt vé trên ứng dụng EventGo.`,
+        title: `Sự kiện: ${event.name}`,
+      });
+    } catch (error) {
+      console.error("Error sharing event:", error);
+    }
+  };
+
+  const openMap = () => {
+    if (event?.google_maps_link) {
+      Linking.openURL(event.google_maps_link);
+    } else {
+      Alert.alert("Thông báo", "Sự kiện này chưa cập nhật địa điểm trên bản đồ.");
+    }
+  };
+
+  const bookTicket = (ticketType) => {
+    setSelectedTicketType(ticketType);
+    setQuantity(1);
+    setBookingModalVisible(true);
+  };
+
+  const confirmBooking = async () => {
+    if (!user) {
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt vé");
+      navigation.navigate('Login');
+      return;
+    }
+
 
   const handleBookTicket = () => {
     if (!user) {
@@ -160,10 +484,16 @@ const EventDetail = ({ route, navigation }) => {
                   ? event.image
                   : `https://res.cloudinary.com/dqpkxxzaf/${event.image}`,
               }}
+
               style={styles.eventImage}
               resizeMode="cover"
             />
+          ) : (
+            <View style={[styles.eventImage, { backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center' }]}>
+              <MaterialCommunityIcons name="calendar-blank" size={80} color={COLORS.primary} />
+            </View>
           )}
+
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
@@ -310,6 +640,7 @@ const EventDetail = ({ route, navigation }) => {
           onDismiss={() => setModalVisible(false)}
           contentContainerStyle={styles.modalContainer}
         >
+
           <Title style={styles.modalTitle}>Đánh giá sự kiện</Title>
 
           <Text style={styles.modalSubtitle}>Cho điểm</Text>
@@ -329,6 +660,7 @@ const EventDetail = ({ route, navigation }) => {
           </View>
 
           <TextInput
+            mode="outlined"
             label="Nhận xét của bạn"
             value={comment}
             onChangeText={setComment}
@@ -349,11 +681,13 @@ const EventDetail = ({ route, navigation }) => {
               mode="contained"
               onPress={submitReview}
               style={styles.submitButton}
+
               loading={reviewSubmitting}
-              disabled={reviewSubmitting}
+              disabled={reviewSubmitting || !comment}
+              style={{ backgroundColor: COLORS.primary }}
             >
               Gửi đánh giá
-            </PaperButton>
+            </Button>
           </View>
         </Modal>
       </Portal>

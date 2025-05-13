@@ -392,6 +392,7 @@ const BookTicket = ({ route }) => {
       </View>
     </View>
   );
+
 };
 
 const styles = StyleSheet.create({

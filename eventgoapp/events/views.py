@@ -14,7 +14,7 @@ from django.db import transaction, models
 from django.utils.timezone import now
 from google_auth_oauthlib.flow import Flow
 from httplib2 import Credentials
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, Font
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from rest_framework import viewsets, permissions, generics, status, parsers
@@ -224,10 +224,17 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             event.status = Event.EventStatus.COMPLETED
             event.save(update_fields=['status'])
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
+        return Response(serializer.data, status=status.HTTP_201_CREATED)    
+    
     @action(methods=['post'], url_path='review', detail=True)
     def submit_review(self, request, pk=None):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Bạn cần đăng nhập để đánh giá sự kiện này."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+            
         event = get_object_or_404(Event, id=pk)
 
         if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event,
@@ -235,14 +242,27 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             return Response(
                 {"error": "Bạn không thể đánh giá sự kiện mà bạn không tham gia."},
                 status=status.HTTP_403_FORBIDDEN
-            )
-
+            )        
         rating = request.data.get('rating')
         comment = request.data.get('comment')
 
         if not rating or not comment:
             return Response(
                 {"error": "Vui lòng cung cấp cả đánh giá và nhận xét."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Ensure rating is an integer
+        try:
+            rating = int(rating)
+            if rating < 1 or rating > 5:
+                return Response(
+                    {"error": "Đánh giá phải từ 1 đến 5 sao."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Đánh giá phải là một số từ 1 đến 5."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1765,7 +1785,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='my-reviews', permission_classes=[permissions.IsAuthenticated])
     def my_reviews(self, request):
         """Lấy tất cả đánh giá của người dùng hiện tại"""
+        print("User id:", request.user.id)
         reviews = self.get_queryset().filter(user=request.user)
+        print("Số lượng review tìm được:", reviews.count())
         serializer = self.get_serializer(reviews, many=True)
         return Response(serializer.data)
     

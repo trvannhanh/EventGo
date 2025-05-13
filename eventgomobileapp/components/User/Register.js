@@ -1,38 +1,67 @@
 import React, { useState } from 'react';
 import { View, Alert, StyleSheet, Text, TouchableOpacity, Image, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import MyStyles from '../styles/MyStyles';
-import { TextInput as PaperTextInput, Button as PaperButton, Paragraph, HelperText, Switch } from 'react-native-paper';
+import MyStyles, { COLORS } from '../styles/MyStyles';
+import { TextInput, Button, HelperText, Switch, Surface, ActivityIndicator, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import Apis, { endpoints } from '../../configs/Apis';
-
 
 const Register = () => {
     const styles = StyleSheet.create({
         container: {
             flex: 1,
-            backgroundColor: '#FFF5F7',
+            backgroundColor: COLORS.background,
             padding: 20,
             justifyContent: 'center',
         },
         title: {
-            fontSize: 24,
+            fontSize: 28,
             fontWeight: 'bold',
-            color: '#333',
+            color: COLORS.primary,
+            textAlign: 'center',
+            marginBottom: 10,
+        },
+        subtitle: {
+            fontSize: 16,
+            color: COLORS.textSecondary,
             textAlign: 'center',
             marginBottom: 20,
         },
         input: {
             marginBottom: 15,
-            backgroundColor: '#FFF',
+            backgroundColor: COLORS.background,
+        },
+        button: {
+            marginVertical: 15,
+            borderRadius: 10,
+            paddingVertical: 8,
+            backgroundColor: COLORS.primary,
         },
         socialButton: {
-            marginVertical: 5,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginVertical: 8,
+            borderRadius: 10,
+            paddingVertical: 12,
+            borderWidth: 1,
+            borderColor: COLORS.divider,
+            backgroundColor: COLORS.background,
+        },
+        socialText: {
+            marginLeft: 10,
+            fontWeight: '500',
+            color: COLORS.text,
         },
         signInText: {
             textAlign: 'center',
-            marginTop: 10,
+            marginTop: 20,
+            color: COLORS.textSecondary,
+        },
+        signInLink: {
+            color: COLORS.primary,
+            fontWeight: 'bold',
         },
         avatar: { 
             width: 100,
@@ -40,6 +69,13 @@ const Register = () => {
             borderRadius: 50,
             margin: 10,
             alignSelf: 'center',
+            borderWidth: 2,
+            borderColor: COLORS.primary,
+            backgroundColor: COLORS.primaryLight,
+        },
+        photoPlaceholder: {
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         switchContainer: {
             flexDirection: 'row',
@@ -48,44 +84,67 @@ const Register = () => {
         },
         switchLabel: {
             marginRight: 10,
-            color: '#333',
+            color: COLORS.text,
             fontSize: 16,
         },
+        errorText: {
+            color: COLORS.error,
+            marginBottom: 10,
+            textAlign: 'center',
+        },
+        card: {
+            ...MyStyles.card,
+            padding: 20,
+            marginHorizontal: 0,
+        },        photoButton: {
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            backgroundColor: COLORS.primary,
+            borderRadius: 20,
+            width: 40,
+            height: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
     });
-
+    
     const info = [{
             label: 'Họ và tên lót',
             field: 'last_name',
-            icon: 'text',
+            icon: 'account-details',
             secureTextEntry: false
         }, {
             label: 'Tên',
             field: 'first_name',
-            icon: 'text',
+            icon: 'account',
             secureTextEntry: false
         }, {
             label: 'Tên đăng nhập',
             field: 'username',
-            icon: 'account',
+            icon: 'at',
             secureTextEntry: false
         }, {
             label: 'Mật khẩu',
             field: 'password',
-            icon: 'eye',
+            icon: 'lock',
             secureTextEntry: true
         },  {
             label: 'Xác nhận mật khẩu',
             field: 'confirm',
-            icon: 'eye',
+            icon: 'lock-check',
             secureTextEntry: true
         }];
-
-
+        
     const [user, setUser] = useState({});
     const [loading, setLoading] = useState(false);
-    const [msg, setMsg] = useState();
+    const [msg, setMsg] = useState("");
     const nav = useNavigation();
     const [isEnabled, setIsEnabled] = useState(false);
+    const [passwordVisible, setPasswordVisible] = useState({
+        password: false,
+        confirm: false
+    });
 
     const setState = (value, field) => {
         setUser({...user, [field]: value})
@@ -96,15 +155,26 @@ const Register = () => {
         if (status !== 'granted') {
             alert("Permissions denied!");
         } else {
-            const result = await ImagePicker.launchImageLibraryAsync();
+            const result = await ImagePicker.launchImageLibraryAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
             
             if (!result.canceled)
                 setState(result.assets[0], 'avatar');
         }
     }
+    
+    const togglePasswordVisibility = (field) => {
+        setPasswordVisible({
+            ...passwordVisible,
+            [field]: !passwordVisible[field]
+        });
+    };
 
     const toggleSwitch = () => {
-        setIsEnabled(previousState => !previousState)
+        setIsEnabled(previousState => !previousState);
     };
 
     const validate = () => {
@@ -127,8 +197,6 @@ const Register = () => {
         setMsg('');
         return true;
     }
-
-
 
     const register = async () => {
         if (validate() === true) {
@@ -166,70 +234,113 @@ const Register = () => {
                 console.error(ex);
             } finally {
                 setLoading(false);
-            }
-        }
+            }        }
     }
-
+    
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.container}>
-                <HelperText type="error" visible={msg}>
-                    {msg}
-                </HelperText>
-                <Text style={styles.title}>Sign up</Text>
+                <Surface style={styles.card} elevation={1}>
+                    <Text style={styles.title}>Đăng ký tài khoản</Text>
+                    <Text style={styles.subtitle}>Tham gia cùng EventGo ngay hôm nay</Text>
+                    
+                    {msg ? (
+                        <Text style={styles.errorText}>{msg}</Text>
+                    ) : null}
 
-                {info.map(i =>  <PaperTextInput
-                    key={i.field}
-                    secureTextEntry={i.secureTextEntry}
-                    mode="outlined"
-                    label={i.label}
-                    value={user[i.field]}
-                    onChangeText={t => setState(t, i.field)}
-                    style={styles.input}
-                    outlineColor="#A49393"
-                    activeOutlineColor="#4A90E2"
-                    textColor="#333"
-                    left={<PaperTextInput.Icon name="account" color="#4A90E2" />}
-                />)}
+                    <View style={{ alignItems: 'center', marginVertical: 15 }}>
+                        <View style={{ position: 'relative' }}>
+                            <TouchableOpacity onPress={picker}>
+                                {user?.avatar?.uri ? (
+                                    <Image source={{ uri: user.avatar.uri }} style={styles.avatar} />
+                                ) : (
+                                    <View style={[styles.avatar, styles.photoPlaceholder]}>
+                                        <MaterialCommunityIcons name="account" size={50} color={COLORS.primary} />
+                                    </View>
+                                )}
+                                <View style={styles.photoButton}>
+                                    <MaterialCommunityIcons name="camera" size={20} color="white" />
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
-                <View style={styles.switchContainer}>
-                    <Text style={styles.switchLabel}>
-                        {isEnabled ? 'Organizer' : 'Attendee'}
+                    {info.map(i => (
+                        <TextInput
+                            key={i.field}
+                            secureTextEntry={i.secureTextEntry && !passwordVisible[i.field]}
+                            mode="outlined"
+                            label={i.label}
+                            value={user[i.field]}
+                            onChangeText={t => setState(t, i.field)}
+                            style={styles.input}
+                            outlineColor={COLORS.border}
+                            activeOutlineColor={COLORS.primary}
+                            textColor={COLORS.text}
+                            left={<TextInput.Icon icon={i.icon} color={COLORS.primary} />}
+                            right={i.secureTextEntry ? 
+                                <TextInput.Icon 
+                                    icon={passwordVisible[i.field] ? 'eye-off' : 'eye'} 
+                                    color={COLORS.primary} 
+                                    onPress={() => togglePasswordVisibility(i.field)}
+                                /> : null
+                            }
+                        />
+                    ))}
+
+                    <View style={styles.switchContainer}>
+                        <Text style={styles.switchLabel}>
+                            Bạn là: {isEnabled ? 'Nhà tổ chức sự kiện' : 'Người tham dự sự kiện'}
+                        </Text>
+                        <Switch
+                            value={isEnabled}
+                            onValueChange={toggleSwitch}
+                            color={COLORS.primary}
+                        />
+                    </View>
+                    
+                    <Button 
+                        mode="contained" 
+                        onPress={register} 
+                        loading={loading} 
+                        disabled={loading} 
+                        style={styles.button}
+                        contentStyle={{ paddingVertical: 6 }}
+                        labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+                    >
+                        ĐĂNG KÝ
+                    </Button>
+
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20 }}>
+                        <View style={{ flex: 1, height: 1, backgroundColor: COLORS.divider }} />
+                        <Text style={{ paddingHorizontal: 10, color: COLORS.textSecondary }}>HOẶC</Text>
+                        <View style={{ flex: 1, height: 1, backgroundColor: COLORS.divider }} />
+                    </View>
+
+                    <TouchableOpacity style={styles.socialButton}>
+                        <MaterialCommunityIcons name="google" size={24} color={COLORS.googleRed} />
+                        <Text style={styles.socialText}>Đăng ký với Google</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.socialButton}>
+                        <MaterialCommunityIcons name="facebook" size={24} color={COLORS.facebookBlue} />
+                        <Text style={styles.socialText}>Đăng ký với Facebook</Text>
+                    </TouchableOpacity>
+                </Surface>
+
+                <View style={{ marginTop: 20 }}>
+                    <Text style={styles.signInText}>
+                        Đã có tài khoản? <Text 
+                            style={styles.signInLink}
+                            onPress={() => nav.navigate('login')}
+                        >
+                            Đăng nhập
+                        </Text>
                     </Text>
-                    <Switch
-                        trackColor={{ false: '#767577', true: '#81b0ff' }}
-                        thumbColor={isEnabled ? '#f5dd4b' : '#f4f3f4'}
-                        ios_backgroundColor="#3e3e3e"
-                        onValueChange={toggleSwitch}
-                        value={isEnabled}
-                    />
                 </View>
-                
-                <TouchableOpacity style={MyStyles.m} onPress={picker}>
-                    <Text>Chọn ảnh đại diện...</Text>
-                </TouchableOpacity>
-
-                {user?.avatar?.uri && <Image source={{ uri: user.avatar.uri }} style={styles.avatar} />}
-
-                <PaperButton mode="contained" onPress={register} loading={loading} disabled={loading} style={{ backgroundColor: '#6D4AFF', marginVertical: 10 }} labelStyle={{ color: '#FFF' }}>
-                    SIGN UP
-                </PaperButton>
-                <Paragraph style={{ textAlign: 'center', color: '#666' }}>OR</Paragraph>
-                <PaperButton mode="outlined" icon="google" onPress={() => {}} style={[styles.socialButton, { borderColor: '#DB4437' }]} labelStyle={{ color: '#DB4437' }}>
-                    Login with Google
-                </PaperButton>
-                <PaperButton mode="outlined" icon="facebook" onPress={() => {}} style={[styles.socialButton, { borderColor: '#3B5998' }]} labelStyle={{ color: '#3B5998' }}>
-                    Login with Facebook
-                </PaperButton>
-                <TouchableOpacity style={styles.signInText}>
-                    <Text style={{ color: '#6D4AFF' }}>Already have an account? Sign in</Text>
-                </TouchableOpacity>
             </View>
         </TouchableWithoutFeedback>
-        
     );
 }
-
-
 
 export default Register;
