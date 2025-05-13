@@ -1,11 +1,33 @@
-import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { ScrollView, ActivityIndicator, Image, Text, View, Alert, TouchableOpacity, Linking, StyleSheet, RefreshControl, Share } from 'react-native';
-import { Button, Avatar, Divider, Portal, Modal, TextInput, List, Surface, Chip, IconButton, FAB } from 'react-native-paper';
+import React, { useEffect, useState, useContext } from 'react';
+import {
+  ScrollView,
+  ActivityIndicator,
+  Image,
+  Text,
+  View,
+  Alert,
+  TouchableOpacity,
+  Linking,
+  StyleSheet,
+  Dimensions,
+} from 'react-native';
+import {
+  Card,
+  Title,
+  Paragraph,
+  Button as PaperButton,
+  Avatar,
+  Divider,
+  Portal,
+  Modal,
+  TextInput,
+} from 'react-native-paper';
 import { MaterialCommunityIcons, AntDesign, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import api, { endpoints, authApis } from '../../configs/Apis';
-import MyStyles, { COLORS } from '../styles/MyStyles';
-import { MyUserContext } from "../../configs/MyContexts";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import MyStyles from '../styles/MyStyles';
+import { MyUserContext } from '../../configs/MyContexts';
+
+const { width, height } = Dimensions.get('window');
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
@@ -18,9 +40,8 @@ const EventDetail = ({ route, navigation }) => {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [selectedTicketType, setSelectedTicketType] = useState(null);
-  const [quantity, setQuantity] = useState(1);
-  const user = useContext(MyUserContext); // Sửa lại để không sử dụng destructuring
+  const user = useContext(MyUserContext);
+
   const [canReview, setCanReview] = useState(false);
   const [hasReviewed, setHasReviewed] = useState(false);
 
@@ -267,17 +288,50 @@ const EventDetail = ({ route, navigation }) => {
     },
   });
   useEffect(() => {
-    fetchEventData();
+    const fetchEvent = async () => {
+      try {
+        const res = await api.get(endpoints.eventDetail(eventId));
+        setEvent(res.data);
+      } catch (err) {
+        setEvent(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const fetchReviews = async () => {
+      try {
+        const res = await api.get(endpoints.eventReviews(eventId));
+        setReviews(res.data.reviews || []);
+        if (user) {
+          const userReviewed = res.data.reviews.some(review => review.user === user.username);
+          setHasReviewed(userReviewed);
+          if (!userReviewed) {
+            setCanReview(true);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải đánh giá:', err);
+        setReviews([]);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    fetchEvent();
+    fetchReviews();
+
   }, [eventId, user]);
 
   const submitReview = async () => {
     if (!user) {
-      Alert.alert("Thông báo", "Vui lòng đăng nhập để đánh giá");
+      Alert.alert('Thông báo', 'Vui lòng đăng nhập để đánh giá');
       return;
     }
 
-    if (rating < 1 || rating > 5 || !comment) {
-      Alert.alert("Lỗi", "Vui lòng chọn số sao (1-5) và nhập nhận xét");
+    if (rating < 1 || !comment) {
+      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin đánh giá');
+
       return;
     }
 
@@ -286,86 +340,44 @@ const EventDetail = ({ route, navigation }) => {
     try {
       // Đảm bảo rating là số nguyên
       const reviewData = {
-        rating: parseInt(rating, 10),
-        comment: comment.trim(),
-        event_id: eventId
+
+        event_id: eventId,
+        rating: rating,
+        comment: comment,
       };
-      console.log("Gửi đánh giá với dữ liệu:", reviewData);
-      console.log("URL endpoint:", endpoints.submitReview(eventId));
-      console.log("Authentication status:", user ? "Logged in" : "Not logged in");
 
-      // Sử dụng authApis thay vì api.post với headers
       const authApi = authApis(user.access_token);
-      const response = await authApi.post(endpoints.submitReview(eventId), reviewData);
+      await authApi.post(endpoints.reviews, reviewData);
 
-      console.log("Phản hồi từ server:", response.data);
+      Alert.alert('Thành công', 'Đánh giá của bạn đã được gửi');
 
-      Alert.alert("Thành công", "Đánh giá của bạn đã được gửi");
       setModalVisible(false);
       setRating(5);
       setComment('');
 
-      // Làm mới danh sách đánh giá
+
       const res = await api.get(endpoints.eventReviews(eventId));
       setReviews(res.data.reviews || []);
       setHasReviewed(true);
     } catch (err) {
-      console.error("Lỗi khi gửi đánh giá:", err);
-      console.error("Chi tiết lỗi:", JSON.stringify(err.response?.data || err.message, null, 2));
-      console.error("Status code:", err.response?.status);
-      console.error("Response headers:", JSON.stringify(err.response?.headers, null, 2));
 
-      // Xử lý khi token hết hạn hoặc chưa đăng nhập
+      console.error('Lỗi khi gửi đánh giá:', err.response?.data || err.message);
       if (err.response && err.response.status === 401) {
         Alert.alert(
-          "Cần đăng nhập",
-          "Bạn cần đăng nhập để đánh giá sự kiện này.",
-          [{ text: "Đăng nhập", onPress: () => navigation.navigate('Login') }]
+          'Phiên đăng nhập hết hạn',
+          'Vui lòng đăng nhập lại để tiếp tục.',
+          [{ text: 'Đăng nhập', onPress: () => navigation.navigate('Login') }],
         );
-      }
-      // Xử lý lỗi không được phép (chưa tham gia sự kiện)
-      else if (err.response && err.response.status === 403) {
+      } else if (err.response?.data?.non_field_errors) {
         Alert.alert(
-          "Không thể đánh giá",
-          err.response?.data?.error || "Bạn không thể đánh giá sự kiện mà bạn không tham gia."
+          'Không thể đánh giá',
+          err.response.data.non_field_errors[0] || 'Bạn cần tham gia sự kiện trước khi đánh giá.',
         );
-      }
-      // Xử lý lỗi dữ liệu không hợp lệ
-      else if (err.response && err.response.status === 400) {
+      } else {
         Alert.alert(
-          "Dữ liệu không hợp lệ",
-          err.response?.data?.error || "Vui lòng kiểm tra lại thông tin đánh giá của bạn."
-        );
-      }
-      // Xử lý lỗi server (500 Internal Server Error)
-      else if (err.response && err.response.status === 500) {
-        Alert.alert(
-          "Lỗi máy chủ",
-          "Đã xảy ra lỗi ở máy chủ. Vui lòng thử lại sau hoặc liên hệ quản trị viên."
-        );
-      }
-      // Xử lý lỗi không được phép đánh giá (chưa tham gia sự kiện)
-      else if (err.response?.data?.non_field_errors) {
-        // Hiển thị thông báo lỗi cụ thể từ server
-        Alert.alert(
-          "Không thể đánh giá",
-          err.response.data.non_field_errors[0] || "Bạn cần tham gia sự kiện trước khi đánh giá."
-        );
-      }
-      // Kiểm tra chi tiết lỗi từ API khác nhau
-      else if (err.response?.data?.error) {
-        Alert.alert(
-          "Lỗi",
-          err.response.data.error
-        );
-      }      // Xử lý các lỗi khác
-      else {
-        Alert.alert(
-          "Lỗi",
-          err.response?.data?.detail ||
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          "Không thể gửi đánh giá. Vui lòng thử lại sau."
+          'Lỗi',
+          err.response?.data?.detail || 'Không thể gửi đánh giá. Vui lòng thử lại sau.',
+
         );
       }
     } finally {
@@ -444,107 +456,35 @@ const EventDetail = ({ route, navigation }) => {
       return;
     }
 
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        Alert.alert("Phiên đăng nhập hết hạn", "Vui lòng đăng nhập lại");
-        navigation.navigate('Login');
-        return;
-      }
 
-      navigation.navigate('BookTicket', {
-        eventId: event.id,
-        ticketTypeId: selectedTicketType.id,
-        quantity: quantity
-      });
-      setBookingModalVisible(false);
-    } catch (error) {
-      console.error("Error navigating to booking:", error);
-      Alert.alert("Lỗi", "Không thể đặt vé. Vui lòng thử lại sau.");
+  const handleBookTicket = () => {
+    if (!user) {
+      Alert.alert('Thông báo', 'Vui lòng đăng nhập để đặt vé.', [
+        { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+        { text: 'Hủy', style: 'cancel' },
+      ]);
+      return;
     }
+    // Chuyển hướng đến màn hình BookTicket với eventId
+    navigation.navigate('BookTicket', { eventId: event.id });
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Đang cập nhật';
-
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const date = new Date(dateString);
-    return date.toLocaleDateString('vi-VN', options);
-  };
-
-  const formatTime = (timeString) => {
-    return timeString ? timeString.substring(0, 5) : 'Đang cập nhật';
-  };
-
-  const renderStars = (rating) => {
-    return (
-      <View style={styles.starContainer}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <AntDesign
-            key={star}
-            name={star <= rating ? 'star' : 'staro'}
-            size={16}
-            color={star <= rating ? '#FFD700' : COLORS.border}
-            style={{ marginRight: 2 }}
-          />
-        ))}
-      </View>
-    );
-  };
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={{ marginTop: 16, color: COLORS.textSecondary }}>Đang tải thông tin sự kiện...</Text>
-      </View>
-    );
-  }
-
-  if (!event) {
-    return (
-      <View style={styles.loadingContainer}>
-        <MaterialCommunityIcons name="calendar-remove" size={60} color={COLORS.error} />
-        <Text style={{ marginTop: 16, color: COLORS.error, textAlign: 'center' }}>
-          Không tìm thấy thông tin sự kiện. Sự kiện có thể đã bị xóa hoặc không tồn tại.
-        </Text>
-        <Button
-          mode="contained"
-          onPress={() => navigation.goBack()}
-          style={{ marginTop: 20, backgroundColor: COLORS.primary }}
-        >
-          Quay lại
-        </Button>
-      </View>
-    );
-  }
-
-  const getEventImage = () => {
-    if (!event.image) return null;
-
-    if (event.image.startsWith('http')) {
-      return { uri: event.image };
-    } else {
-      return { uri: `https://res.cloudinary.com/dqpkxxzaf/${event.image}` };
-    }
-  };
+  if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
+  if (!event) return <Paragraph style={{ margin: 20, color: 'red' }}>Không tìm thấy sự kiện.</Paragraph>;
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[COLORS.primary]}
-            tintColor={COLORS.primary}
-          />
-        }
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Hình ảnh sự kiện */}
         <View style={styles.imageContainer}>
-          {getEventImage() ? (
+          {event.image && (
             <Image
-              source={getEventImage()}
+              source={{
+                uri: event.image.startsWith('http')
+                  ? event.image
+                  : `https://res.cloudinary.com/dqpkxxzaf/${event.image}`,
+              }}
+
               style={styles.eventImage}
               resizeMode="cover"
             />
@@ -553,232 +493,170 @@ const EventDetail = ({ route, navigation }) => {
               <MaterialCommunityIcons name="calendar-blank" size={80} color={COLORS.primary} />
             </View>
           )}
-          <View style={styles.imageOverlay} />
+
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
+        <Card style={styles.card}>
+          <Card.Content>
+            {/* Tiêu đề sự kiện */}
+            <Title style={styles.title}>{event.name}</Title>
 
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={shareEvent}
-        >
-          <MaterialCommunityIcons name="share-variant" size={24} color={COLORS.primary} />
-        </TouchableOpacity>
-
-        <Surface style={styles.contentContainer} elevation={0}>
-          <Text style={styles.eventTitle}>{event.name}</Text>
-          <Text style={styles.eventByline}>Được tổ chức bởi {event.organizer?.username || 'EventGo'}</Text>
-
-          {event.categories && event.categories.length > 0 && (
-            <View style={styles.chipContainer}>
-              {event.categories.map((category, index) => (
-                <Chip
-                  key={index}
-                  style={styles.chip}
-                  textStyle={styles.chipText}
-                >
-                  {category.name}
-                </Chip>
-              ))}
+            {/* Thông tin cơ bản */}
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="calendar" size={20} color="#7FC8C2" />
+              <Text style={styles.infoText}>{new Date(event.date).toLocaleString()}</Text>
             </View>
-          )}
-
-          <Text style={styles.sectionTitle}>Thông tin sự kiện</Text>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="calendar" size={24} color={COLORS.primary} />
+            <View style={styles.infoRow}>
+              <MaterialIcons name="location-on" size={20} color="#7FC8C2" />
+              <Text style={styles.infoText}>{event.location}</Text>
             </View>
-            <Text style={styles.infoText}>{formatDate(event.event_date)}</Text>
-          </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="clock-outline" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.infoText}>{formatTime(event.event_time)}</Text>
-          </View>
+            {/* Bản đồ địa điểm */}
+            {event.google_maps_link && (
+              <TouchableOpacity
+                style={styles.mapButton}
+                onPress={() => Linking.openURL(event.google_maps_link)}
+              >
+                <FontAwesome5 name="map-marked-alt" size={20} color="#4285F4" />
+                <Text style={styles.mapButtonText}>Xem trên Google Maps</Text>
+              </TouchableOpacity>
+            )}
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="map-marker" size={24} color={COLORS.primary} />
-            </View>
-            <Text style={styles.infoText}>{event.venue || 'Đang cập nhật địa điểm'}</Text>
-          </View>
+            {/* Mô tả sự kiện */}
+            <Paragraph style={styles.description}>
+              <Text style={styles.label}>Mô tả: </Text>
+              <Text>{event.description}</Text>
+            </Paragraph>
 
-          {event.google_maps_link && (
-            <Button
-              mode="outlined"
-              icon="map-marker"
-              onPress={openMap}
-              style={{ marginTop: 8, borderColor: COLORS.primary }}
-              labelStyle={{ color: COLORS.primary }}
-            >
-              Xem trên Google Maps
-            </Button>
-          )}
-
-          <View style={styles.descriptionContainer}>
-            <Text style={styles.sectionTitle}>Mô tả</Text>
-            <Text style={styles.description}>{event.description}</Text>
-          </View>
-
-          {event.tickets && event.tickets.length > 0 && (
-            <View style={styles.ticketSection}>
-              <Text style={styles.sectionTitle}>Đặt vé</Text>
-
-              {event.tickets.map((ticket, index) => (
-                <Surface key={index} style={[styles.ticketRow, { elevation: 1 }]}>
-                  <View>
-                    <Text style={styles.ticketType}>{ticket.name}</Text>
-                    <Text style={styles.ticketDescription}>{ticket.description || 'Vé tham dự sự kiện'}</Text>
-                    <Text style={styles.ticketsRemaining}>
-                      {ticket.quantity > 0
-                        ? `Còn ${ticket.quantity} vé`
-                        : 'Hết vé'}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.ticketPrice}>{ticket.price.toLocaleString('vi-VN')} VNĐ</Text>
-                    <Button
-                      mode="contained"
-                      disabled={ticket.quantity <= 0}
-                      onPress={() => bookTicket(ticket)}
-                      style={{ marginTop: 4, backgroundColor: COLORS.primary }}
-                      labelStyle={{ fontSize: 12 }}
-                      compact
-                    >
-                      Đặt vé
-                    </Button>
-                  </View>
-                </Surface>
-              ))}
-            </View>
-          )}
-
-          {event.organizer && (
-            <View style={styles.organizerSection}>
-              <Text style={styles.sectionTitle}>Thông tin nhà tổ chức</Text>
-              <Surface style={[styles.organizerRow, { padding: 12, borderRadius: 8, elevation: 1 }]}>
-                <Avatar.Icon
-                  icon="account"
-                  size={50}
-                  style={{ backgroundColor: COLORS.primary }}
-                />
-                <View style={styles.organizerInfo}>
-                  <Text style={styles.organizerName}>{event.organizer.username}</Text>
-                  <Text style={{ color: COLORS.textSecondary }}>Đã tổ chức {event.organizer.event_count || 0} sự kiện</Text>
-                </View>
-              </Surface>
-            </View>
-          )}
-
-          <View style={styles.reviewsSection}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.sectionTitle}>Đánh giá và nhận xét</Text>
-              {reviews.length > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <AntDesign name="star" size={18} color="#FFD700" />
-                  <Text style={{ marginLeft: 4, fontWeight: 'bold' }}>
-                    {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+            {/* Đánh giá và nhận xét */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Title style={styles.sectionTitle}>Đánh giá và nhận xét</Title>
+                <View style={styles.ratingContainer}>
+                  <AntDesign name="star" size={20} color="#FFD700" />
+                  <Text style={styles.ratingText}>
+                    {reviews.length > 0
+                      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+                      : 'Chưa có'}
                   </Text>
-                  <Text style={{ marginLeft: 2, color: COLORS.textSecondary }}>({reviews.length})</Text>
+                  <Text style={styles.reviewCount}>({reviews.length})</Text>
                 </View>
+              </View>
+
+              <Divider style={styles.divider} />
+
+              {user && canReview && !hasReviewed && (
+                <PaperButton
+                  mode="outlined"
+                  onPress={() => setModalVisible(true)}
+                  style={styles.reviewButton}
+                  icon="star"
+                >
+                  Viết đánh giá
+                </PaperButton>
+              )}
+
+              {hasReviewed && (
+                <Paragraph style={styles.reviewedText}>
+                  Bạn đã đánh giá sự kiện này
+                </Paragraph>
+              )}
+
+              {reviewsLoading ? (
+                <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+              ) : reviews.length > 0 ? (
+                reviews.slice(0, 3).map((review, index) => (
+                  <View key={index} style={styles.reviewCard}>
+                    <View style={styles.reviewHeader}>
+                      <Avatar.Icon size={36} icon="account" style={styles.avatar} />
+                      <View style={styles.reviewUser}>
+                        <Text style={styles.reviewUserName}>{review.user}</Text>
+                        <Text style={styles.reviewDate}>
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.reviewStars}>
+                      {Array(5)
+                        .fill(0)
+                        .map((_, i) => (
+                          <AntDesign
+                            key={i}
+                            name={i < review.rating ? 'star' : 'staro'}
+                            size={16}
+                            color={i < review.rating ? '#FFD700' : '#aaa'}
+                            style={{ marginRight: 2 }}
+                          />
+                        ))}
+                    </View>
+                    <Paragraph style={styles.reviewComment}>{review.comment}</Paragraph>
+                  </View>
+                ))
+              ) : (
+                <Paragraph style={styles.noReviews}>
+                  Chưa có đánh giá nào cho sự kiện này.
+                </Paragraph>
+              )}
+
+              {reviews.length > 3 && (
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('ReviewList', { eventId: eventId, eventName: event.name })
+                  }
+                  style={styles.viewAllReviews}
+                >
+                  <Text style={styles.viewAllText}>
+                    Xem tất cả {reviews.length} đánh giá
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
-
-            {reviewsLoading ? (
-              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 16 }} />
-            ) : reviews.length > 0 ? (
-              <>
-                {reviews.slice(0, 3).map((review, index) => (
-                  <Surface key={index} style={[styles.reviewCard, { elevation: 1 }]}>
-                    <View style={styles.reviewHeader}>
-                      <Avatar.Icon
-                        size={36}
-                        icon="account"
-                        style={{ backgroundColor: COLORS.primaryLight }}
-                      />
-                      <Text style={styles.reviewUser}>{review.user}</Text>
-                      <Text style={styles.reviewDate}>
-                        {new Date(review.created_date).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    {renderStars(review.rating)}
-                    <Text style={styles.reviewContent}>{review.comment}</Text>
-                  </Surface>
-                ))}
-
-                {reviews.length > 3 && (
-                  <Button
-                    mode="outlined"
-                    onPress={() => navigation.navigate('ReviewList', { eventId: event.id, eventName: event.name })}
-                    style={{ marginTop: 8, borderColor: COLORS.primary }}
-                    labelStyle={{ color: COLORS.primary }}
-                  >
-                    Xem tất cả {reviews.length} đánh giá
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Text style={styles.noReviewsText}>
-                Chưa có đánh giá nào cho sự kiện này
-              </Text>
-            )}
-
-            {user && canReview && !hasReviewed && (
-              <Button
-                mode="contained"
-                icon="star"
-                onPress={() => setModalVisible(true)}
-                style={{ marginTop: 16, backgroundColor: COLORS.primary }}
-              >
-                Viết đánh giá
-              </Button>
-            )}
-
-            {hasReviewed && (
-              <Text style={{ fontStyle: 'italic', textAlign: 'center', marginTop: 8, color: COLORS.textSecondary }}>
-                Bạn đã đánh giá sự kiện này
-              </Text>
-            )}
-          </View>
-        </Surface>
+          </Card.Content>
+        </Card>
       </ScrollView>
 
-      <FAB
-        style={styles.fab}
-        icon="ticket-percent"
-        label="Đặt vé"
-        onPress={() => navigation.navigate('BookTicket', { eventId: event.id })}
-      />
+      {/* Nút đặt vé cố định ở dưới cùng */}
+      <View style={styles.fixedButtonContainer}>
+        <PaperButton
+          mode="contained"
+          onPress={handleBookTicket}
+          style={styles.fixedBookButton}
+          labelStyle={styles.fixedBookButtonLabel}
+        >
+          Đặt vé
+        </PaperButton>
+      </View>
 
-      {/* Rating Modal */}
+      {/* Modal đánh giá */}
       <Portal>
         <Modal
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
           contentContainerStyle={styles.modalContainer}
         >
-          <Text style={styles.modalTitle}>Đánh giá sự kiện</Text>
 
-          <Text style={styles.ratingText}>Chọn số sao ({rating}/5)</Text>
-          <View style={styles.starRatingContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                <AntDesign
-                  name={star <= rating ? 'star' : 'staro'}
-                  size={36}
-                  color={star <= rating ? '#FFD700' : COLORS.border}
-                  style={{ marginHorizontal: 4 }}
-                />
-              </TouchableOpacity>
-            ))}
+          <Title style={styles.modalTitle}>Đánh giá sự kiện</Title>
+
+          <Text style={styles.modalSubtitle}>Cho điểm</Text>
+          <View style={styles.ratingStars}>
+            {Array(5)
+              .fill(0)
+              .map((_, i) => (
+                <TouchableOpacity key={i} onPress={() => setRating(i + 1)}>
+                  <AntDesign
+                    name={i < rating ? 'star' : 'staro'}
+                    size={32}
+                    color={i < rating ? '#FFD700' : '#aaa'}
+                    style={{ marginHorizontal: 4 }}
+                  />
+                </TouchableOpacity>
+              ))}
           </View>
 
           <TextInput
@@ -788,23 +666,22 @@ const EventDetail = ({ route, navigation }) => {
             onChangeText={setComment}
             multiline
             numberOfLines={4}
-            style={styles.modalInput}
-            outlineColor={COLORS.border}
-            activeOutlineColor={COLORS.primary}
+            style={styles.commentInput}
           />
 
-          <View style={styles.modalActions}>
-            <Button
+          <View style={styles.modalButtons}>
+            <PaperButton
               mode="outlined"
               onPress={() => setModalVisible(false)}
-              style={{ borderColor: COLORS.border }}
+              style={styles.cancelButton}
             >
               Hủy
-            </Button>
-
-            <Button
+            </PaperButton>
+            <PaperButton
               mode="contained"
               onPress={submitReview}
+              style={styles.submitButton}
+
               loading={reviewSubmitting}
               disabled={reviewSubmitting || !comment}
               style={{ backgroundColor: COLORS.primary }}
@@ -814,76 +691,225 @@ const EventDetail = ({ route, navigation }) => {
           </View>
         </Modal>
       </Portal>
-
-      {/* Booking Modal */}
-      <Portal>
-        <Modal
-          visible={bookingModalVisible}
-          onDismiss={() => setBookingModalVisible(false)}
-          contentContainerStyle={styles.modalContainer}
-        >
-          {selectedTicketType && (
-            <>
-              <Text style={styles.modalTitle}>Đặt vé {selectedTicketType.name}</Text>
-
-              <Text style={{ fontSize: 18, fontWeight: 'bold', textAlign: 'center', color: COLORS.primary }}>
-                {selectedTicketType.price.toLocaleString('vi-VN')} VNĐ / vé
-              </Text>
-
-              <Text style={{ marginTop: 8, color: COLORS.textSecondary, marginBottom: 16, textAlign: 'center' }}>
-                {selectedTicketType.description || 'Vé tham dự sự kiện'}
-              </Text>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 16 }}>
-                <IconButton
-                  icon="minus"
-                  size={24}
-                  onPress={() => quantity > 1 && setQuantity(quantity - 1)}
-                  disabled={quantity <= 1}
-                  style={{ backgroundColor: COLORS.border }}
-                />
-                <Text style={{ marginHorizontal: 16, fontSize: 20, fontWeight: 'bold' }}>
-                  {quantity}
-                </Text>
-                <IconButton
-                  icon="plus"
-                  size={24}
-                  onPress={() => quantity < selectedTicketType.quantity && setQuantity(quantity + 1)}
-                  disabled={quantity >= selectedTicketType.quantity}
-                  style={{ backgroundColor: COLORS.primary }}
-                  color="white"
-                />
-              </View>
-
-              <View style={{ marginVertical: 16 }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', textAlign: 'center' }}>
-                  Tổng tiền: {(selectedTicketType.price * quantity).toLocaleString('vi-VN')} VNĐ
-                </Text>
-              </View>
-
-              <View style={styles.modalActions}>
-                <Button
-                  mode="outlined"
-                  onPress={() => setBookingModalVisible(false)}
-                  style={{ borderColor: COLORS.border }}
-                >
-                  Hủy
-                </Button>
-
-                <Button
-                  mode="contained"
-                  onPress={confirmBooking}
-                  style={{ backgroundColor: COLORS.primary }}
-                >
-                  Tiếp tục
-                </Button>
-              </View>
-            </>
-          )}
-        </Modal>
-      </Portal>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scrollContent: {
+    paddingBottom: 100, // Để không bị che bởi nút cố định
+  },
+  imageContainer: {
+    position: 'relative',
+    width: '100%',
+    height: height * 0.3,
+  },
+  eventImage: {
+    width: '100%',
+    height: '100%',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    padding: 8,
+  },
+  card: {
+    marginTop: -20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: '#FFF',
+    paddingBottom: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  infoText: {
+    marginLeft: 8,
+    color: '#555',
+    fontSize: 16,
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 12,
+    justifyContent: 'center',
+  },
+  mapButtonText: {
+    marginLeft: 8,
+    color: '#4285F4',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  description: {
+    marginVertical: 12,
+    color: '#555',
+    fontSize: 16,
+  },
+  label: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  section: {
+    marginVertical: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginLeft: 6,
+  },
+  fixedButtonContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+  },
+  fixedBookButton: {
+    backgroundColor: '#6D4AFF', 
+    borderRadius: 12,
+    paddingVertical: 12, 
+  },
+  fixedBookButtonLabel: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 18, 
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 'auto',
+  },
+  ratingText: {
+    marginLeft: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  reviewCount: {
+    marginLeft: 4,
+    color: '#666',
+    fontSize: 16,
+  },
+  divider: {
+    marginVertical: 8,
+  },
+  reviewButton: {
+    marginVertical: 8,
+    borderColor: '#7FC8C2',
+  },
+  reviewedText: {
+    marginVertical: 8,
+    fontStyle: 'italic',
+    color: '#666',
+    textAlign: 'center',
+  },
+  reviewCard: {
+    marginVertical: 8,
+    padding: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    backgroundColor: '#7FC8C2',
+  },
+  reviewUser: {
+    marginLeft: 8,
+  },
+  reviewUserName: {
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  reviewComment: {
+    color: '#555',
+  },
+  noReviews: {
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 16,
+    color: '#666',
+  },
+  viewAllReviews: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  viewAllText: {
+    color: '#7FC8C2',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    margin: 20,
+    borderRadius: 10,
+  },
+  modalTitle: {
+    textAlign: 'center',
+    marginBottom: 16,
+    color: '#7FC8C2',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  modalSubtitle: {
+    textAlign: 'center',
+    marginBottom: 8,
+    color: '#333',
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  commentInput: {
+    backgroundColor: '#f5f5f5',
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  cancelButton: {
+    borderColor: '#7FC8C2',
+  },
+  submitButton: {
+    backgroundColor: '#7FC8C2',
+  },
+});
 
 export default EventDetail;

@@ -15,13 +15,16 @@ export const endpoints = {
     events: API_BASE + "events/",
     eventDetail: (id) => API_BASE + `events/${id}/detail/`,
     ticketsOfEvent: (id) => API_BASE + `events/${id}/tickets/`,
-    bookTicket: (id) => API_BASE + `events/${id}/book-ticket/`,
+    createOrder: (id) => API_BASE + `events/${id}/create-order/`,
     recommendedEvents: API_BASE + "events/recommended/",
     trendingEvents: API_BASE + "events/trending/",
     searchEvents: API_BASE + "events/search-events/",
     createEvent: API_BASE + "events/create/",
     createTicket: (eventId) => API_BASE + `events/${eventId}/tickets/create/`,
     eventCategories: API_BASE + "event-categories/",
+    discounts: (id) => API_BASE + `events/${id}/discounts/`, 
+    discountsCheck: (id) => API_BASE + `events/${id}/check-discount/`,
+    payOrder: (id) => API_BASE + `orders/${id}/pay/`,
     
     // User related endpoints
     myTickets: API_BASE + "users/my-tickets/",
