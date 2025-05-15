@@ -2,7 +2,7 @@ import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-export const API_BASE = 'http://192.168.1.41:8000/';
+export const API_BASE = 'http://192.168.79.102:8000/';
 
 export const endpoints = {
     // Auth endpoints
@@ -25,6 +25,7 @@ export const endpoints = {
     discounts: (id) => API_BASE + `events/${id}/discounts/`, 
     discountsCheck: (id) => API_BASE + `events/${id}/check-discount/`,
     payOrder: (id) => API_BASE + `orders/${id}/pay/`,
+    checkInTicket: (eventId) => `/events/${eventId}/checkin/`,
     
     // User related endpoints
     myTickets: API_BASE + "users/my-tickets/",
