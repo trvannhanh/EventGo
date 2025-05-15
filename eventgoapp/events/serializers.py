@@ -185,7 +185,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderDetail
-        fields = ['id', 'ticket', 'quantity', 'qr_code']
+        fields = ['id', 'ticket', 'qr_code']
 
 class OrderSerializer(serializers.ModelSerializer):
     """Serializer đơn hàng"""
@@ -195,7 +195,7 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'total_amount', 'payment_method', 'payment_status', 'created_at', 'details']
+        fields = ['id', 'user', 'total_amount','quantity', 'payment_method', 'payment_status', 'created_at', 'details']
 
 class ReviewSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)  # Display username instead of ID

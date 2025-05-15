@@ -21,7 +21,9 @@ import { Provider as PaperProvider, ActivityIndicator } from 'react-native-paper
 import MyStyles, { AppTheme, COLORS } from './components/styles/MyStyles';
 import { View, Text, LogBox } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { authApis, endpoints } from './configs/Apis';
+
 
 // Bỏ qua một số cảnh báo không cần thiết
 LogBox.ignoreLogs([
@@ -34,6 +36,7 @@ LogBox.ignoreLogs([
 const Stack = createNativeStackNavigator();
 const StackNavigator = () => {
   return (
+
     <Stack.Navigator screenOptions={{
       headerShown: false,
     }}>
