@@ -380,11 +380,10 @@ const MyTickets = () => {
           ? 'Bạn chưa có vé cho sự kiện nào sắp tới' 
           : 'Bạn chưa tham gia sự kiện nào'}
       </Text>
-      <Button 
-        mode="contained" 
+      <Button        mode="contained" 
         icon="ticket-percent" 
         style={{ marginTop: 16, backgroundColor: COLORS.primary }}
-        onPress={() => navigation.navigate('Home')}
+        onPress={() => navigation.navigate('home')}
       >
         Khám phá sự kiện
       </Button>
@@ -440,12 +439,11 @@ const MyTickets = () => {
           }
         />
       )}
-      
-      <FAB
+        <FAB
         style={styles.fab}
         icon="calendar-search"
         color="white"
-        onPress={() => navigation.navigate('Home')}
+        onPress={() => navigation.navigate('home')}
       />
     </View>
   );

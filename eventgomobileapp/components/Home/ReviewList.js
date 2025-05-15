@@ -212,7 +212,7 @@ const ReviewList = ({ route, navigation }) => {
                 // Xóa token hiện tại vì đã hết hạn
                 await AsyncStorage.removeItem('token');
                 await AsyncStorage.removeItem('refresh_token');
-                navigation.navigate('Login');
+                navigation.navigate('login');
               }
             }
           ]

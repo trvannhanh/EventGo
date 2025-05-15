@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { View, Text, Alert, Image, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Dimensions, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MyStyles, { COLORS } from '../styles/MyStyles';
@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button, TextInput, Card, Avatar, Title, Paragraph, Surface, Divider, List, IconButton, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5, Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function Profile({ navigation }) {
     const { width } = Dimensions.get('window');
@@ -16,10 +17,45 @@ export default function Profile({ navigation }) {
         container: {
             flex: 1,
             backgroundColor: COLORS.background,
-        },
-        headerContainer: {
+        },        headerContainer: {
             height: 320,
             position: 'relative',
+        },
+        notificationButton: {
+            position: 'absolute',
+            top: 50,
+            right: 20,
+            zIndex: 999,
+            backgroundColor: 'rgba(255, 255, 255, 0.3)',
+            borderRadius: 25,
+            width: 45,
+            height: 45,
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 3,
+            elevation: 5,
+        },
+        notificationBadge: {
+            position: 'absolute',
+            top: -5,
+            right: -5,
+            backgroundColor: COLORS.error,
+            borderRadius: 15,
+            minWidth: 20,
+            height: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 1.5,
+            borderColor: '#fff',
+        },
+        notificationBadgeText: {
+            color: '#fff',
+            fontSize: 10,
+            fontWeight: 'bold',
+            textAlign: 'center',
         },
         headerBackground: {
             width: '100%',
@@ -361,8 +397,7 @@ export default function Profile({ navigation }) {
             fontSize: 12,
             textAlign: 'center',
             color: COLORS.textSecondary,
-        },
-        footerContainer: {
+        },        footerContainer: {
             alignItems: 'center',
             marginTop: 10,
             marginBottom: 20,
@@ -371,15 +406,75 @@ export default function Profile({ navigation }) {
             fontSize: 12,
             color: COLORS.textSecondary,
         },
+        settingItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 12,
+            marginBottom: 10,
+            backgroundColor: 'rgba(245, 245, 255, 0.5)',
+            padding: 15,
+            borderRadius: 12,
+            borderWidth: 0.5,
+            borderColor: 'rgba(200, 200, 200, 0.3)',
+        },
+        settingIconContainer: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: 'rgba(230, 230, 255, 0.6)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 15,
+        },
+        settingContent: {
+            flex: 1,
+        },
+        settingTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            color: COLORS.text,
+            marginBottom: 4,
+        },
+        settingDescription: {
+            fontSize: 13,
+            color: COLORS.textSecondary,
+        },
     });
       const user = useContext(MyUserContext);
     const dispatch = useContext(MyDispatchContext);
     const [phone, setPhone] = useState('');
     const [avatar, setAvatar] = useState(null);
     const [updating, setUpdating] = useState(false);
-    const [avatarKey, setAvatarKey] = useState(Date.now());
-    const [userData, setUserData] = useState(null);
+    const [avatarKey, setAvatarKey] = useState(Date.now());    const [userData, setUserData] = useState(null);
     const [showStats, setShowStats] = useState(true);
+    const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+    
+    // Lấy số lượng thông báo chưa đọc mỗi khi màn hình được focus
+    useFocusEffect(
+        useCallback(() => {
+            const fetchNotificationsCount = async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    if (!token) return;
+                    
+                    const authApi = authApis(token);
+                    const response = await authApi.get(endpoints.myNotifications);
+                    const unreadCount = response.data.filter(notification => !notification.is_read).length;
+                    setUnreadNotificationsCount(unreadCount);
+                } catch (error) {
+                    console.error("Lỗi khi lấy thông báo:", error);
+                }
+            };
+            
+            if (user) {
+                fetchNotificationsCount();
+            }
+            
+            return () => {
+                // Cleanup nếu cần
+            };
+        }, [user])
+    );
     
     // Thêm hàm lấy thông tin người dùng từ API
     useEffect(() => {
@@ -387,11 +482,8 @@ export default function Profile({ navigation }) {
             try {
                 const token = await AsyncStorage.getItem('token');
                 if (!token) return;
-                
                 const authApi = authApis(token);
                 const response = await authApi.get(endpoints.currentUser);
-                console.log("User data from API:", response.data);
-                
                 setUserData(response.data);
                 setPhone(response.data.phone || '');
                 setAvatar(response.data.avatar || null);
@@ -399,13 +491,9 @@ export default function Profile({ navigation }) {
                 console.error("Lỗi khi lấy thông tin người dùng:", error);
             }
         };
-        
-        // Lấy thông tin người dùng khi component mount hoặc khi user thay đổi
         if (user) {
-            // Nếu có thông tin trong context, dùng trước
             setPhone(user.phone || '');
             setAvatar(user.avatar || null);
-            // Sau đó vẫn gọi API để lấy thông tin mới nhất
             fetchUserData();
         }
     }, [user]);
@@ -450,15 +538,12 @@ export default function Profile({ navigation }) {
                                 await AsyncStorage.removeItem('refresh_token');
                                 
                                 // Cập nhật state global
-                                dispatch({ type: 'logout' });
+                                dispatch({ type: 'LOGOUT' });
                                 
                                 Alert.alert('Đăng xuất thành công', 'Hẹn gặp lại bạn!');
                                 
                                 // Điều hướng về màn hình Login
-                                navigation.reset({
-                                    index: 0,
-                                    routes: [{ name: 'Login' }]
-                                });
+                                // navigation.navigate('login');
                             } catch (error) {
                                 console.error("Lỗi khi đăng xuất:", error);
                                 Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
@@ -544,7 +629,7 @@ export default function Profile({ navigation }) {
                 Alert.alert(
                     "Phiên đăng nhập hết hạn",
                     "Vui lòng đăng nhập lại để tiếp tục.",
-                    [{ text: "Đăng nhập", onPress: () => navigation.navigate('Login') }]
+                    [{ text: "Đăng nhập", onPress: () => navigation.navigate('login') }]
                 );
                 return;
             }
@@ -568,7 +653,7 @@ export default function Profile({ navigation }) {
             });
             
             // Cập nhật thông tin người dùng trong context global
-            dispatch({ type: 'login', payload: res.data });
+            dispatch({ type: 'LOGIN', payload: res.data });
             
             Alert.alert(
                 'Cập nhật thành công', 
@@ -620,7 +705,7 @@ export default function Profile({ navigation }) {
                     <Animatable.View animation="fadeInUp" delay={300}>
                         <Button 
                             mode="contained" 
-                            onPress={() => navigation.navigate('Login')} 
+                            onPress={() => navigation.navigate('login')} 
                             style={styles.loginButton}
                             contentStyle={{ paddingVertical: 8 }}
                             labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
@@ -641,8 +726,7 @@ export default function Profile({ navigation }) {
     const backgroundImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
     return (
-        <ScrollView style={styles.container}>
-            <View style={styles.headerContainer}>
+        <ScrollView style={styles.container}>            <View style={styles.headerContainer}>
                 <ImageBackground 
                     source={{ uri: backgroundImage }}
                     style={styles.headerBackground}
@@ -652,6 +736,21 @@ export default function Profile({ navigation }) {
                         colors={['rgba(94, 53, 177, 0.4)', 'rgba(94, 53, 177, 0.8)']}
                         style={styles.gradientOverlay}
                     />
+                    
+                    {/* Nút thông báo */}
+                    <TouchableOpacity 
+                        style={styles.notificationButton}
+                        onPress={() => navigation.navigate('Notifications')}
+                    >
+                        <MaterialCommunityIcons name="bell" size={24} color="#fff" />
+                        {unreadNotificationsCount > 0 && (
+                            <View style={styles.notificationBadge}>
+                                <Text style={styles.notificationBadgeText}>
+                                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                                </Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
                     
                     <View style={styles.headerContentWrapper}>
                         <Animatable.View 
@@ -716,7 +815,7 @@ export default function Profile({ navigation }) {
                                     color="#fff" 
                                 />
                                 <Text style={styles.userRoleText}>
-                                    {displayData.role === 'organizer' ? 'Nhà tổ chức sự kiện' : 'Người tham dự'}
+                                    {displayData.role === 'attendee' ? 'Người tham dự' : dispatch.role === 'organizer' ? 'Nhà tổ chức sự kiện': 'Quản trị viên'}
                                 </Text>
                             </Animatable.View>
                         </Animatable.View>
@@ -857,8 +956,37 @@ export default function Profile({ navigation }) {
                                 Đăng xuất
                             </Button>
                         </View>
+                    </View>                </Animatable.View>
+                
+                {/* <Animatable.View 
+                    animation="fadeInUp"
+                    duration={600}
+                    delay={1000}
+                    style={styles.card}
+                >
+                    <View style={styles.cardHeader}>
+                        <View style={styles.sectionHeader}>
+                            <MaterialCommunityIcons name="bell-outline" size={24} style={styles.sectionIcon} />
+                            <Text style={styles.sectionTitle}>Thông báo</Text>
+                        </View>
                     </View>
-                </Animatable.View>
+                    
+                    <View style={styles.cardContent}>
+                        <TouchableOpacity 
+                            style={styles.settingItem}
+                            onPress={() => navigation.navigate('Notifications')}
+                        >
+                            <View style={styles.settingIconContainer}>
+                                <MaterialCommunityIcons name="bell-ring-outline" size={24} color={COLORS.primary} />
+                            </View>
+                            <View style={styles.settingContent}>
+                                <Text style={styles.settingTitle}>Quản lý thông báo</Text>
+                                <Text style={styles.settingDescription}>Xem các thông báo về sự kiện và cập nhật</Text>
+                            </View>
+                            <MaterialIcons name="keyboard-arrow-right" size={24} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+                </Animatable.View> */}
                 
                 {/* Footer */}
                 <Animatable.View 

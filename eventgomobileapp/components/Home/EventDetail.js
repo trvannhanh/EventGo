@@ -6,6 +6,7 @@ import api, { endpoints, authApis } from '../../configs/Apis';
 import MyStyles, { COLORS } from '../styles/MyStyles';
 import { MyUserContext } from "../../configs/MyContexts";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MapView, { Marker } from 'react-native-maps';
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
@@ -320,7 +321,7 @@ const EventDetail = ({ route, navigation }) => {
         Alert.alert(
           "Cần đăng nhập",
           "Bạn cần đăng nhập để đánh giá sự kiện này.",
-          [{ text: "Đăng nhập", onPress: () => navigation.navigate('Login') }]
+          [{ text: "Đăng nhập", onPress: () => navigation.navigate('login') }]
         );
       }
       // Xử lý lỗi không được phép (chưa tham gia sự kiện)
@@ -440,7 +441,7 @@ const EventDetail = ({ route, navigation }) => {
   const confirmBooking = async () => {
     if (!user) {
       Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt vé");
-      navigation.navigate('Login');
+      navigation.navigate('login');
       return;
     }
 
@@ -448,7 +449,7 @@ const EventDetail = ({ route, navigation }) => {
       const token = await AsyncStorage.getItem('token');
       if (!token) {
         Alert.alert("Phiên đăng nhập hết hạn", "Vui lòng đăng nhập lại");
-        navigation.navigate('Login');
+        navigation.navigate('login');
         return;
       }
 
@@ -610,6 +611,51 @@ const EventDetail = ({ route, navigation }) => {
             </View>
             <Text style={styles.infoText}>{event.venue || 'Đang cập nhật địa điểm'}</Text>
           </View>
+
+          {/* Bản đồ mini chỉ xem vị trí */}
+          {event.google_maps_link && (
+            <View style={{ height: 180, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+              <MapView
+                style={{ flex: 1 }}
+                pointerEvents="none" // Không cho tương tác
+                initialRegion={(() => {
+                  // Cố gắng lấy lat/lng từ link Google Maps
+                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  if (match) {
+                    return {
+                      latitude: parseFloat(match[1]),
+                      longitude: parseFloat(match[2]),
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    };
+                  }
+                  // Nếu không parse được thì trả về vị trí mặc định (TP.HCM)
+                  return {
+                    latitude: 10.762622,
+                    longitude: 106.660172,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  };
+                })()}
+              >
+                {/* Marker nếu parse được vị trí */}
+                {(() => {
+                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  if (match) {
+                    return (
+                      <Marker
+                        coordinate={{
+                          latitude: parseFloat(match[1]),
+                          longitude: parseFloat(match[2]),
+                        }}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+              </MapView>
+            </View>
+          )}
 
           {event.google_maps_link && (
             <Button

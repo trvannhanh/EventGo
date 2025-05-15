@@ -43,7 +43,7 @@ from rest_framework.permissions import IsAuthenticated
 from .recommendation_engine import RecommendationEngine
 from .utils import get_customer_rank
 
-from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend
+from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend, Notification
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
     EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer
 
@@ -107,6 +107,31 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         from events.serializers import OrderDetailSerializer
         serializer = OrderDetailSerializer(order_details, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+        
+    @action(methods=['get'], url_path='my-notifications', detail=False, permission_classes=[IsAuthenticated])
+    def my_notifications(self, request):
+        user = request.user
+        notifications = Notification.objects.filter(user=user).order_by('-created_at')
+        from events.serializers import NotificationSerializer
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(methods=['patch'], url_path='mark-notification-read/(?P<pk>[0-9]+)', detail=False, permission_classes=[IsAuthenticated])
+    def mark_notification_read(self, request, pk=None):
+        user = request.user
+        try:
+            notification = Notification.objects.get(id=pk, user=user)
+            notification.is_read = True
+            notification.save()
+            return Response({"message": "Đánh dấu thông báo đã đọc thành công"}, status=status.HTTP_200_OK)
+        except Notification.DoesNotExist:
+            return Response({"error": "Không tìm thấy thông báo"}, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(methods=['patch'], url_path='mark-all-notifications-read', detail=False, permission_classes=[IsAuthenticated])
+    def mark_all_notifications_read(self, request):
+        user = request.user
+        Notification.objects.filter(user=user, is_read=False).update(is_read=True)
+        return Response({"message": "Đánh dấu tất cả thông báo đã đọc thành công"}, status=status.HTTP_200_OK)
 
 
 
@@ -154,13 +179,12 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             try:
                 filters &= Q(category_id=int(cate_id))
             except ValueError:
-                raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})
-
-        if status:
-            valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
+                raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})        
+            if status:
+                valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
             if status not in valid_statuses:
                 raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
-            filters &= Q(status=status.upper())
+            filters &= Q(status=status)
 
         # Áp dụng bộ lọc
         if filters:
@@ -179,16 +203,38 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         serializer = EventSerializer(event)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-        
     @action(methods=['put', 'patch'], url_path='update', detail=True, permission_classes=[IsAuthenticated])
     def update_event(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
         user = request.user
         if not user.is_superuser and event.organizer != user:
             return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
+        
+        previous_data = EventSerializer(event).data
         serializer = EventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        updated_event = serializer.save()
+        
+        # Check if significant fields were updated
+        significant_updates = []
+        
+        if 'name' in request.data and previous_data['name'] != request.data['name']:
+            significant_updates.append(f"Tên sự kiện đã được thay đổi thành: {request.data['name']}")
+        
+        if 'date' in request.data and previous_data['date'] != request.data['date']:
+            significant_updates.append(f"Ngày diễn ra sự kiện đã thay đổi thành: {request.data['date']}")
+        
+        if 'location' in request.data and previous_data['location'] != request.data['location']:
+            significant_updates.append(f"Địa điểm sự kiện đã thay đổi thành: {request.data['location']}")
+            
+        if significant_updates:
+            # Create update message
+            update_message = f"Sự kiện {updated_event.name} đã được cập nhật:\n" + "\n".join(significant_updates)
+            
+            # Send notification asynchronously
+            from events.tasks import send_event_update_notifications
+            send_event_update_notifications.delay(updated_event.id, update_message)
+        
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['delete'], url_path='delete', detail=True, permission_classes=[IsAuthenticated])
@@ -198,21 +244,25 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         if not user.is_superuser and event.organizer != user:
             return Response({"error": "Bạn không có quyền xóa sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
         event.delete()
-        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)
-
-    @action(methods=['post'], url_path='create', detail=False)
+        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)    
+    
+    
+    @action(methods=['post'], url_path='create', detail=False, permission_classes=[permissions.IsAuthenticated])
     def create_event(self, request):
-
-        if not request.user.is_superuser and request.user.role != User.Role.ORGANIZER:
+        print(request.user.role)
+        if not request.user.is_superuser and request.user.role != 'organizer':
             return Response(
                 {"error": "Bạn không có quyền tạo sự kiện"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         data = request.data.copy()
-        data['organizer'] = request.user.id
+        data['organizer_id'] = request.user.id
+        
+        
+        print("Dữ liệu gửi đến serializer:", data)
 
-        serializer = EventSerializer(data=data)
+        serializer = EventSerializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
 
@@ -221,7 +271,25 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         current_time = now()
         if event.date < current_time and event.status == Event.EventStatus.UPCOMING:  # 6/4
             event.status = Event.EventStatus.COMPLETED
-            event.save(update_fields=['status'])
+            event.save(update_fields=['status'])        # Tạo thông báo cho tất cả người dùng về sự kiện mới
+        message = f"Sự kiện mới '{event.name}' đã được tạo và sẽ diễn ra vào {event.date.strftime('%d/%m/%Y')}"
+        
+        # Lấy tất cả người dùng có vai trò là người tham dự (attendee)
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        attendees = User.objects.filter(role='attendee', is_active=True)
+        
+        # Tạo thông báo trong ứng dụng cho mỗi người dùng
+        for user in attendees:
+            Notification.objects.create(
+                user=user,
+                message=message,
+                event=event
+            )
+        
+        # Gọi celery task để gửi email thông báo
+        from events.tasks import send_new_event_notifications
+        send_new_event_notifications.delay(event.id)
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)    
     

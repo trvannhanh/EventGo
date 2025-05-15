@@ -11,6 +11,8 @@ class BaseSerializer(serializers.ModelSerializer):
         return d
 
 class UserSerializer(serializers.ModelSerializer):
+    event_count = serializers.SerializerMethodField(read_only=True)
+    
     def validate_email(self, value):
         if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', value):
             raise serializers.ValidationError("Email không hợp lệ.")
@@ -19,7 +21,11 @@ class UserSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         d = super().to_representation(instance)
         d['avatar'] = instance.avatar.url if instance.avatar else None # Check if image is null
+        d['event_count'] = self.get_event_count(instance)
         return d
+        
+    def get_event_count(self, obj):
+        return Event.objects.filter(organizer=obj, active=True).count()
 
     def validate_phone(self, value):
         if value and not re.match(r'^\d{10}$', value):
@@ -56,11 +62,9 @@ class UserSerializer(serializers.ModelSerializer):
         u.save()
         return u
 
-
-
     class Meta:
         model = User
-        fields = ["id", "username", "email", "password", "role", "phone", "address", "avatar"]
+        fields = ["id", "username", "email", "password", "role", "phone", "address", "avatar", "event_count"]
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},  # Không bắt buộc khi cập nhật
             'username': {'required': False},  # Không bắt buộc khi cập nhật
@@ -92,6 +96,26 @@ class EventSerializer(BaseSerializer):
     average_rating = serializers.SerializerMethodField(read_only=True)
     review_count = serializers.SerializerMethodField(read_only=True)
     
+    # Thêm các trường để map đúng cho frontend
+    event_date = serializers.SerializerMethodField(read_only=True)
+    event_time = serializers.SerializerMethodField(read_only=True)
+    venue = serializers.SerializerMethodField(read_only=True)
+    
+    # Thêm các trường để có thể nhận dữ liệu từ client
+    organizer_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        source='organizer',
+        required=False, 
+        write_only=True
+    )
+    
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=EventCategory.objects.all(),
+        source='category',
+        required=True,
+        write_only=True
+    )
+    
     def get_average_rating(self, obj):
         reviews = obj.reviews.all()
         if not reviews:
@@ -100,7 +124,49 @@ class EventSerializer(BaseSerializer):
     
     def get_review_count(self, obj):
         return obj.reviews.count()
-
+    
+    def get_event_date(self, obj):
+        if obj.date:
+            return obj.date.strftime('%Y-%m-%d')
+        return None
+        
+    def get_event_time(self, obj):
+        if obj.date:
+            return obj.date.strftime('%H:%M')
+        return None
+    
+    def get_venue(self, obj):
+        return obj.location
+      # Thêm phương thức validate để ghi log dữ liệu trước khi lưu
+    def validate(self, data):
+        print("Dữ liệu nhận được trong serializer:", data)
+        return data
+    
+    # Override to_representation để đảm bảo các trường frontend cần được đưa vào response
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Đảm bảo các trường cho frontend được set đúng
+        data['venue'] = instance.location
+        
+        # Thêm thông tin chi tiết về người tổ chức
+        if instance.organizer:
+            data['organizer'] = {
+                'id': instance.organizer.id,
+                'username': instance.organizer.username,
+                'email': instance.organizer.email,
+                'avatar': instance.organizer.avatar.url if instance.organizer.avatar else None,
+                'event_count': Event.objects.filter(organizer=instance.organizer).count()
+            }
+        
+        return data
+        
+    # Override create để đảm bảo organizer được gán đúng
+    def create(self, validated_data):
+        print("Dữ liệu đã xác thực trước khi tạo:", validated_data)
+        # Đảm bảo rằng nếu organizer không được cung cấp từ client, sẽ lấy từ request        if 'organizer' not in validated_data and self.context.get('request'):
+        validated_data['organizer'] = self.context.get('request').user
+        return super().create(validated_data)
+        
     class Meta:
         model = Event
         fields = '__all__'
@@ -192,3 +258,19 @@ class DiscountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Discount
         fields = ['id', 'event', 'code', 'discount_percent', 'expiration_date', 'target_rank']
+
+class NotificationSerializer(serializers.ModelSerializer):
+    event_name = serializers.SerializerMethodField()
+    event_image = serializers.SerializerMethodField()
+    
+    def get_event_name(self, obj):
+        return obj.event.name if obj.event else None
+        
+    def get_event_image(self, obj):
+        if obj.event and obj.event.image:
+            return obj.event.image.url
+        return None
+    
+    class Meta:
+        model = Notification
+        fields = ['id', 'user', 'event', 'message', 'is_read', 'created_at', 'event_name', 'event_image']
