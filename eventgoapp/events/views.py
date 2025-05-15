@@ -143,6 +143,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         q = self.request.query_params.get('q')
         cate_id = self.request.query_params.get('cateId')
         status = self.request.query_params.get('status')
+        organizer = self.request.query_params.get('organizer')
 
         filters = Q()
 
@@ -162,6 +163,21 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             if status not in valid_statuses:
                 raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
             filters &= Q(status=status.upper())
+
+        # Lọc theo nhà tổ chức
+        if organizer:
+            if organizer == 'me':
+                if not self.request.user.is_authenticated:
+                    raise ValidationError({"error": "Cần đăng nhập để lấy sự kiện của bạn."})
+                if self.request.user.role not in [User.Role.ORGANIZER, User.Role.ADMIN]:
+                    raise ValidationError({"error": "Chỉ nhà tổ chức hoặc admin mới có thể xem sự kiện của mình."})
+                filters &= Q(organizer=self.request.user)
+            else:
+                try:
+                    organizer_id = int(organizer)
+                    filters &= Q(organizer_id=organizer_id)
+                except ValueError:
+                    raise ValidationError({"error": "Tham số organizer phải là 'me' hoặc ID hợp lệ."})
 
         # Áp dụng bộ lọc
         if filters:
