@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 const { width } = Dimensions.get('window');
 
 const Home = ({ navigation }) => {
-    
+
     const [eventCates, setEventCates] = useState([]);
     const [events, setEvents] = useState([]);
     const [trendingEvents, setTrendingEvents] = useState([]);
@@ -19,16 +19,14 @@ const Home = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [page, setPage] = useState(1);
-    const [cateId, setCateId] = useState(null);
+    const [page, setPage] = useState(1);    const [cateId, setCateId] = useState(null);
     const [hasMore, setHasMore] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [filterVisible, setFilterVisible] = useState(false);
+    const [eventStatus, setEventStatus] = useState('upcoming');
     const nav = useNavigation();
     const [location, setLocation] = useState('TP. Hồ Chí Minh');
-    const user = useContext(MyUserContext);
-
-    // Ánh xạ tên danh mục sang icon
+    const user = useContext(MyUserContext);    // Ánh xạ tên danh mục sang icon
     const categoryIcons = {
         'Lễ Hội': 'music-note',
         "Thể Thao": 'soccer',
@@ -41,6 +39,14 @@ const Home = ({ navigation }) => {
         // Mặc định
         "default": 'calendar-month'
     };
+    
+    // Định nghĩa các trạng thái sự kiện
+    const eventStatusOptions = [
+        { value: 'upcoming', label: 'Sắp diễn ra', icon: 'calendar-clock' },
+        { value: 'ongoing', label: 'Đang diễn ra', icon: 'calendar-check' },
+        { value: 'completed', label: 'Đã kết thúc', icon: 'calendar-check-outline' },
+        { value: 'canceled', label: 'Đã hủy', icon: 'calendar-remove' }
+    ];
 
     const loadEventCates = async () => {
         try {
@@ -50,16 +56,19 @@ const Home = ({ navigation }) => {
             console.error('Failed to load event categories:', error);
             setLoadError('Không thể tải danh mục sự kiện');
         }
-    };
-
-    const loadEvents = async (pageToLoad = 1, shouldRefresh = false) => {
+    };    const loadEvents = async (pageToLoad = 1, shouldRefresh = false) => {
         if (!hasMore && pageToLoad > 1 && !shouldRefresh) return;
-        
+
         try {
             setLoading(true);
             setLoadError(null);
-            
-            let url = `${endpoints['events']}?page=${pageToLoad}&status=upcoming`;
+
+            let url = `${endpoints['events']}?page=${pageToLoad}`;
+
+            // Thêm trạng thái lọc
+            if (eventStatus) {
+                url = `${url}&status=${eventStatus}`;
+            }
 
             if (search) {
                 url = `${url}&q=${search}`
@@ -70,7 +79,7 @@ const Home = ({ navigation }) => {
             }
 
             const res = await Apis.get(url);
-            
+
             if (shouldRefresh || pageToLoad === 1) {
                 setEvents(res.data.results || []);
             } else {
@@ -79,7 +88,7 @@ const Home = ({ navigation }) => {
 
             setHasMore(res.data.next !== null);
             setPage(pageToLoad);
-            
+
         } catch (error) {
             console.error('Error loading events:', error);
             setLoadError('Không thể tải sự kiện');
@@ -99,9 +108,7 @@ const Home = ({ navigation }) => {
             console.error('Error loading trending events:', error);
             // Không hiển thị lỗi cho trending, chỉ log
         }
-    };
-    
-    // Refresh tất cả dữ liệu
+    };    // Refresh tất cả dữ liệu
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         setPage(1);
@@ -113,7 +120,7 @@ const Home = ({ navigation }) => {
         ]).finally(() => {
             setRefreshing(false);
         });
-    }, [search, cateId]);
+    }, [search, cateId, eventStatus]);
 
     // Load dữ liệu ban đầu khi component mount
     useEffect(() => {
@@ -124,9 +131,7 @@ const Home = ({ navigation }) => {
         ]).finally(() => {
             loadEvents(1, true);
         });
-    }, []);
-
-    // Load sự kiện khi search hoặc category thay đổi
+    }, []);    // Load sự kiện khi search, category hoặc trạng thái thay đổi
     useEffect(() => {
         const timer = setTimeout(() => {
             setPage(1);
@@ -134,7 +139,7 @@ const Home = ({ navigation }) => {
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [search, cateId]);
+    }, [search, cateId, eventStatus]);
 
     // Đảm bảo refresh dữ liệu khi quay lại tab này
     useFocusEffect(
@@ -143,10 +148,10 @@ const Home = ({ navigation }) => {
             if (!initialLoading) {
                 onRefresh();
             }
-            return () => {};
+            return () => { };
         }, [initialLoading, onRefresh])
     );
-    
+
     const loadMore = () => {
         if (!loading && hasMore) {
             loadEvents(page + 1);
@@ -155,12 +160,16 @@ const Home = ({ navigation }) => {
         setCateId(cateId === id ? null : id); // Toggle danh mục
     };
 
+    // Xử lý khi chọn trạng thái sự kiện
+    const handleEventStatusPress = (status) => {
+        setEventStatus(status);
+    };
+
     // Kiểm tra xem user có phải là đối tượng hợp lệ hay không
     const isValidUser = user && typeof user === 'object' && (user.role !== undefined || user.username !== undefined || user.id !== undefined);
     const isOrganizer = isValidUser && (user.role === 'organizer' || user.role === 'admin');
-    console.log("User context:", user);
-    console.log("Is valid user:", isValidUser);
     
+
     const handleCreateEvent = () => {
         if (isOrganizer) {
             navigation.navigate('CreateEvent');
@@ -175,7 +184,32 @@ const Home = ({ navigation }) => {
 
     // Hiển thị dialog filter
     const showFilterDialog = () => setFilterVisible(true);
-    const hideFilterDialog = () => setFilterVisible(false);
+    const hideFilterDialog = () => setFilterVisible(false);    // Render Event Status Chip
+    const renderEventStatusChip = useCallback((status) => (
+        <Chip
+            key={status.value}
+            selected={eventStatus === status.value}
+            onPress={() => handleEventStatusPress(status.value)}
+            style={[
+                styles.statusChip,
+                eventStatus === status.value && styles.statusChipSelected
+            ]}
+            textStyle={[
+                styles.statusChipText,
+                eventStatus === status.value && styles.statusChipTextSelected
+            ]}
+            icon={props => (
+                <MaterialCommunityIcons
+                    name={status.icon}
+                    {...props}
+                    size={16}
+                    color={eventStatus === status.value ? COLORS.onPrimary : COLORS.primary}
+                />
+            )}
+        >
+            {status.label}
+        </Chip>
+    ), [eventStatus]);
 
     // Render Category Chip
     const renderCategoryChip = useCallback((category) => (
@@ -207,24 +241,24 @@ const Home = ({ navigation }) => {
     // Render Trending Event Card
     const renderTrendingEventCard = useCallback((event) => {
         if (!event || !event.id) return null;
-        
+
         const imageUri = event.image || 'https://via.placeholder.com/300x200?text=No+Image';
         const eventDate = event.date ? new Date(event.date) : new Date();
         const eventName = event.name || 'Sự kiện không tên';
         const eventLocation = event.location || 'Chưa cập nhật địa điểm';
         const eventCategory = event.category_name || 'Danh mục';
-        
+
         return (
             <Card key={`trending-${event.id}`} style={styles.trendingCard} mode="elevated">
                 <TouchableOpacity
                     activeOpacity={0.8}
                     onPress={() => navigation.navigate('EventDetail', { 'eventId': event.id })}
                 >
-                    <Card.Cover 
-                        source={{ uri: imageUri }} 
+                    <Card.Cover
+                        source={{ uri: imageUri }}
                         style={styles.trendingImage}
                     />
-                    <Badge 
+                    <Badge
                         style={{
                             position: 'absolute',
                             top: 10,
@@ -248,11 +282,11 @@ const Home = ({ navigation }) => {
                             </Text>
                         </View>
                         <Text style={styles.trendingDate}>
-                            {eventDate.toLocaleDateString('vi-VN', { 
+                            {eventDate.toLocaleDateString('vi-VN', {
                                 weekday: 'short',
                                 day: '2-digit',
                                 month: 'short',
-                                year: 'numeric' 
+                                year: 'numeric'
                             })}
                         </Text>
                     </Card.Content>
@@ -264,16 +298,16 @@ const Home = ({ navigation }) => {
     // Render Event Card
     const renderEventCard = useCallback((event) => {
         if (!event || !event.id) return null;
-        
+
         const imageUri = event.image || 'https://via.placeholder.com/300x200?text=No+Image';
         const eventDate = event.date ? new Date(event.date) : new Date();
         const eventName = event.name || 'Sự kiện không tên';
         const eventLocation = event.location || 'Chưa cập nhật địa điểm';
         const eventCategory = event.category_name || 'Danh mục';
-        
+
         return (
-            <Card 
-                key={`event-${event.id}`} 
+            <Card
+                key={`event-${event.id}`}
                 style={styles.eventCard}
                 mode="elevated"
             >
@@ -281,8 +315,8 @@ const Home = ({ navigation }) => {
                     activeOpacity={0.8}
                     onPress={() => navigation.navigate('EventDetail', { 'eventId': event.id })}
                 >
-                    <Card.Cover 
-                        source={{ uri: imageUri }} 
+                    <Card.Cover
+                        source={{ uri: imageUri }}
                         style={styles.eventImage}
                     />
                     <Card.Content style={styles.eventDetails}>
@@ -293,25 +327,25 @@ const Home = ({ navigation }) => {
                             {eventName}
                         </Text>
                         <View style={styles.eventMetaRow}>
-                            <MaterialCommunityIcons 
-                                name="calendar" 
-                                size={14} 
-                                style={styles.eventMetaIcon} 
+                            <MaterialCommunityIcons
+                                name="calendar"
+                                size={14}
+                                style={styles.eventMetaIcon}
                             />
                             <Text style={styles.eventMetaText}>
-                                {eventDate.toLocaleDateString('vi-VN', { 
+                                {eventDate.toLocaleDateString('vi-VN', {
                                     weekday: 'short',
                                     day: '2-digit',
                                     month: 'short',
-                                    year: 'numeric' 
+                                    year: 'numeric'
                                 })}
                             </Text>
                         </View>
                         <View style={styles.eventMetaRow}>
-                            <MaterialCommunityIcons 
-                                name="map-marker" 
-                                size={14} 
-                                style={styles.eventMetaIcon} 
+                            <MaterialCommunityIcons
+                                name="map-marker"
+                                size={14}
+                                style={styles.eventMetaIcon}
                             />
                             <Text style={styles.eventMetaText} numberOfLines={1}>
                                 {eventLocation}
@@ -372,8 +406,8 @@ const Home = ({ navigation }) => {
                 }}
                 scrollEventThrottle={400}
                 refreshControl={
-                    <RefreshControl 
-                        refreshing={refreshing} 
+                    <RefreshControl
+                        refreshing={refreshing}
                         onRefresh={onRefresh}
                         colors={[COLORS.primary]}
                         tintColor={COLORS.primary}
@@ -384,8 +418,8 @@ const Home = ({ navigation }) => {
                     <View style={styles.errorContainer}>
                         <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.error} />
                         <Text style={styles.errorText}>{loadError}</Text>
-                        <Button 
-                            mode="contained" 
+                        <Button
+                            mode="contained"
                             onPress={onRefresh}
                             style={styles.retryButton}
                         >
@@ -398,16 +432,16 @@ const Home = ({ navigation }) => {
                 <View style={styles.trendingContainer}>
                     <View style={styles.categoryHeaderContainer}>
                         <Text style={styles.sectionHeader}>Sự kiện nổi bật</Text>
-                        <TouchableOpacity onPress={() => {}}>
+                        <TouchableOpacity onPress={() => { }}>
                             <Text style={styles.categorySeeAll}>Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
-                    
+
                     {trendingEvents.length === 0 ? (
                         renderEmptyState("Không có sự kiện nổi bật", "star-off")
                     ) : (
-                        <ScrollView 
-                            horizontal 
+                        <ScrollView
+                            horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={styles.trendingScroll}
                         >
@@ -416,23 +450,26 @@ const Home = ({ navigation }) => {
                     )}
                 </View>
 
-                <Divider style={styles.divider} />
-
-                {/* All Events */}
+                <Divider style={styles.divider} />                {/* All Events */}
                 <View style={styles.eventsContainer}>
                     <View style={styles.categoryHeaderContainer}>
-                        <Text style={styles.sectionHeader}>Sự kiện sắp diễn ra</Text>
-                        <TouchableOpacity onPress={() => {}}>
-                            <Text style={styles.categorySeeAll}>Xem tất cả</Text>
+                        <Text style={styles.sectionHeader}>
+                            {eventStatus === 'upcoming' && 'Sự kiện sắp diễn ra'}
+                            {eventStatus === 'ongoing' && 'Sự kiện đang diễn ra'}
+                            {eventStatus === 'completed' && 'Sự kiện đã kết thúc'}
+                            {eventStatus === 'canceled' && 'Sự kiện đã hủy'}
+                        </Text>
+                        <TouchableOpacity onPress={showFilterDialog}>
+                            <Text style={styles.categorySeeAll}>Bộ lọc</Text>
                         </TouchableOpacity>
                     </View>
-                    
+
                     {events.length === 0 ? (
                         renderEmptyState("Không có sự kiện nào được tìm thấy", "calendar-blank")
                     ) : (
                         events.map(event => renderEventCard(event))
                     )}
-                    
+
                     {renderLoading()}
                 </View>
             </ScrollView>
@@ -442,11 +479,12 @@ const Home = ({ navigation }) => {
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
             <StatusBar style="auto" />
-            
+
             <View style={styles.container}>
                 {/* Header */}
                 <View style={styles.header}>
-                    <View style={styles.headerRow}>                        <View>
+                    <View style={styles.headerRow}>                        
+                        <View>
                             <Text style={styles.greeting}>
                                 {isValidUser ? `Xin chào, ${user.firstName || 'Bạn'}!` : 'Khám phá sự kiện'}
                             </Text>
@@ -455,15 +493,14 @@ const Home = ({ navigation }) => {
                                 <Text style={styles.locationText}>{location}</Text>
                             </TouchableOpacity>
                         </View>
-                        
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.userAvatar}
-                            onPress={() => isValidUser ? navigation.navigate('Profile') : navigation.navigate('Login')}
+                            onPress={() => isValidUser ? navigation.navigate('account') : navigation.navigate('login')}
                         >
                             {isValidUser && user.avatar ? (
-                                <Image 
-                                    source={{ uri: user.avatar }} 
-                                    style={{ width: 40, height: 40, borderRadius: 20 }} 
+                                <Image
+                                    source={{ uri: user.avatar }}
+                                    style={{ width: 40, height: 40, borderRadius: 20 }}
                                 />
                             ) : (
                                 <Text style={styles.userAvatarText}>
@@ -472,9 +509,8 @@ const Home = ({ navigation }) => {
                             )}
                         </TouchableOpacity>
                     </View>
-                    
-                    {/* Search Bar */}
-                    <View style={styles.searchContainer}>
+
+                    {/* Search Bar */}                    <View style={styles.searchContainer}>
                         <Searchbar
                             placeholder="Tìm kiếm sự kiện..."
                             onChangeText={setSearch}
@@ -482,14 +518,24 @@ const Home = ({ navigation }) => {
                             style={styles.searchInput}
                             icon="magnify"
                             clearIcon="close-circle"
+                            right={() => (
+                                <TouchableOpacity 
+                                    style={{marginRight: 8}} 
+                                    onPress={showFilterDialog}
+                                >
+                                    <MaterialCommunityIcons 
+                                        name="filter-variant" 
+                                        size={24} 
+                                        color={COLORS.primary} 
+                                    />
+                                </TouchableOpacity>
+                            )}
                         />
                     </View>
-                </View>
-                
-                {/* Categories */}
+                </View>                {/* Categories */}
                 <View style={styles.categoryContainer}>
-                    <ScrollView 
-                        horizontal 
+                    <ScrollView
+                        horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.categoryScroll}
                     >
@@ -497,9 +543,20 @@ const Home = ({ navigation }) => {
                     </ScrollView>
                 </View>
                 
+                {/* Event Status Filters */}
+                <View style={styles.statusContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.statusScroll}
+                    >
+                        {eventStatusOptions.map(status => renderEventStatusChip(status))}
+                    </ScrollView>
+                </View>
+
                 {/* Main Content */}
                 {renderContent()}
-                  {/* Create Event FAB */}
+                {/* Create Event FAB */}
                 {isOrganizer && (
                     <FAB
                         style={styles.fab}
@@ -507,18 +564,44 @@ const Home = ({ navigation }) => {
                         color={COLORS.onPrimary}
                         onPress={handleCreateEvent}
                     />
-                )}
-                
-                {/* Filter Dialog */}
+                )}                {/* Filter Dialog */}
                 <Portal>
                     <Dialog visible={filterVisible} onDismiss={hideFilterDialog} style={styles.filterDialog}>
                         <Dialog.Title style={styles.dialogTitle}>Bộ lọc sự kiện</Dialog.Title>
                         <Dialog.Content>
-                            <Text style={styles.filterLabel}>Tính năng đang được phát triển</Text>
+                            <Text style={styles.filterSectionTitle}>Trạng thái sự kiện</Text>
+                            <View style={styles.filterOptionContainer}>
+                                {eventStatusOptions.map((status) => (
+                                    <TouchableOpacity 
+                                        key={status.value}
+                                        style={[
+                                            styles.filterOption,
+                                            eventStatus === status.value && styles.filterOptionSelected
+                                        ]}
+                                        onPress={() => {
+                                            setEventStatus(status.value);
+                                            hideFilterDialog();
+                                        }}
+                                    >
+                                        <MaterialCommunityIcons 
+                                            name={status.icon} 
+                                            size={20} 
+                                            color={eventStatus === status.value ? COLORS.onPrimary : COLORS.textSecondary} 
+                                        />
+                                        <Text 
+                                            style={[
+                                                styles.filterOptionText,
+                                                eventStatus === status.value && styles.filterOptionTextSelected
+                                            ]}
+                                        >
+                                            {status.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
                         </Dialog.Content>
                         <Dialog.Actions>
                             <Button onPress={hideFilterDialog}>Đóng</Button>
-                            <Button mode="contained" onPress={hideFilterDialog}>Áp dụng</Button>
                         </Dialog.Actions>
                     </Dialog>
                 </Portal>
@@ -603,9 +686,29 @@ const styles = StyleSheet.create({
     categorySeeAll: {
         fontSize: 14,
         color: COLORS.primary,
-    },
-    categoryScroll: {
+    },    categoryScroll: {
         paddingBottom: 8,
+    },
+    statusContainer: {
+        paddingBottom: 8,
+        paddingHorizontal: 16,
+    },
+    statusScroll: {
+        paddingBottom: 8,
+    },
+    statusChip: {
+        marginRight: 8,
+        backgroundColor: COLORS.surface,
+        borderRadius: 20,
+    },
+    statusChipSelected: {
+        backgroundColor: COLORS.primary,
+    },
+    statusChipText: {
+        color: COLORS.textSecondary,
+    },
+    statusChipTextSelected: {
+        color: COLORS.onPrimary,
     },
     categoryChip: {
         marginRight: 8,
@@ -767,8 +870,7 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.divider,
         marginHorizontal: 16,
         marginVertical: 8,
-    },
-    filterDialog: {
+    },    filterDialog: {
         backgroundColor: COLORS.background,
         borderRadius: 20,
     },
@@ -776,9 +878,35 @@ const styles = StyleSheet.create({
         color: COLORS.primary,
         fontWeight: 'bold',
     },
-    filterLabel: {
+    filterSectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 12,
+        color: COLORS.text,
+    },
+    filterOptionContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginBottom: 16,
+    },
+    filterOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        marginRight: 8,
         marginBottom: 8,
+        borderRadius: 20,
+        backgroundColor: COLORS.surface,
+    },
+    filterOptionSelected: {
+        backgroundColor: COLORS.primary,
+    },
+    filterOptionText: {
+        marginLeft: 8,
         color: COLORS.textSecondary,
+    },    filterOptionTextSelected: {
+        color: COLORS.onPrimary,
     },
     centerContent: {
         flex: 1,
@@ -800,7 +928,7 @@ const styles = StyleSheet.create({
         paddingVertical: 40,
     },
     emptyStateImage: {
-        width: 100, 
+        width: 100,
         height: 100,
         marginBottom: 16,
         tintColor: COLORS.textSecondary,

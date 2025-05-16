@@ -19,10 +19,21 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.trieuvy.eventgo",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAh1zei22knWD5ddlB_fKKHvjcSYQcmO8s"
+        }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9df1f3b0-32a8-4c89-a609-d15f3ddda9fe"
+      }
     }
   }
 }

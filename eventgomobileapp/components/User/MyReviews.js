@@ -16,7 +16,7 @@ const MyReviews = () => {
   const [refreshing, setRefreshing] = useState(false);
   const user = useContext(MyUserContext);
   const navigation = useNavigation();
-    const fetchMyReviews = async (isRefreshing = false) => {
+  const fetchMyReviews = async (isRefreshing = false) => {
     try {
       if (isRefreshing) {
         setRefreshing(true);
@@ -24,44 +24,44 @@ const MyReviews = () => {
         setLoading(true);
       }
 
-     
-      
+
+
       const token = await AsyncStorage.getItem('token');
-      
-      
+
+
       if (!token) {
         console.log("No authentication token found");
         setLoading(false);
         setRefreshing(false);
         return;
       }
-      
+
       console.log("Using token to fetch reviews:", token ? "Token exists" : "No token");
-      
+
       // Use authApis with token
       const authApi = authApis(token);
       const res = await authApi.get(endpoints.myReviews);
       console.log("Reviews API response:", res.data);
       const reviewsData = res.data || [];
       setReviews(reviewsData);
-      
+
     } catch (err) {
       console.error("Error loading reviews:", err);
       if (err.response && err.response.status === 401) {
         // Token expired, need to login again
         Alert.alert(
-          "Session expired", 
+          "Session expired",
           "Please login again to continue.",
           [
-            { 
-              text: "Login", 
-              onPress: () => navigation.navigate('Login') 
+            {
+              text: "Login",
+              onPress: () => navigation.navigate('login')
             }
           ]
         );
       } else {
         Alert.alert(
-          "Error", 
+          "Error",
           "Could not load your reviews. Please try again later."
         );
       }
@@ -70,7 +70,7 @@ const MyReviews = () => {
       setRefreshing(false);
     }
   };
-  
+
   // Initial fetch
   useEffect(() => {
     if (user) {
@@ -79,14 +79,13 @@ const MyReviews = () => {
       setLoading(false);
     }
   }, [user]);
-  
+
   // Pull-to-refresh functionality
   const onRefresh = useCallback(() => {
     if (user) {
       fetchMyReviews(true);
     }
   }, [user]);
-  
   const deleteReview = async (reviewId) => {
     Alert.alert(
       "Confirm Deletion",
@@ -104,33 +103,63 @@ const MyReviews = () => {
               const token = await AsyncStorage.getItem('token');
               if (!token) {
                 Alert.alert("Login Required", "Please login to use this feature");
-                navigation.navigate('Login');
+                navigation.navigate('login');
                 return;
               }
-              
+
               const authApi = authApis(token);
-              await authApi.delete(endpoints.deleteReview(reviewId));
               
-              // Update the list after deletion
+              // Set a longer timeout to handle network issues
+              const response = await authApi.delete(endpoints.deleteReview(reviewId), {
+                timeout: 15000 // 15 seconds timeout
+              });
+              
+              // Log the response status for debugging
+              console.log("Delete review response status:", response.status);
+              
+              // Update the list after successful deletion
               setReviews(reviews.filter(review => review.id !== reviewId));
               Alert.alert("Success", "Review deleted successfully");
             } catch (err) {
               console.error("Error deleting review:", err);
+              
+              // Check for network error specifically
+              if (!err.response && err.message && err.message.includes('Network Error')) {
+                
+                setReviews(reviews.filter(review => review.id !== reviewId));
+                
+                Alert.alert(
+                  "Review Deleted",
+                  "Your review was likely deleted successfully, but we encountered a network issue. We've updated your review list.",
+                  [
+                    {
+                      text: "Refresh List",
+                      onPress: () => fetchMyReviews()
+                    },
+                    {
+                      text: "OK",
+                      style: "default"
+                    }
+                  ]
+                );
+                return;
+              }
+              
               if (err.response && err.response.status === 401) {
                 // Token expired, need to login again
                 Alert.alert(
-                  "Session expired", 
+                  "Session expired",
                   "Please login again to continue.",
                   [
-                    { 
-                      text: "Login", 
-                      onPress: () => navigation.navigate('Login') 
+                    {
+                      text: "Login",
+                      onPress: () => navigation.navigate('login')
                     }
                   ]
                 );
               } else {
                 Alert.alert(
-                  "Error", 
+                  "Error",
                   "Could not delete review. Please try again later."
                 );
               }
@@ -162,12 +191,12 @@ const MyReviews = () => {
   const renderReviewItem = ({ item }) => {
     const reviewDate = new Date(item.created_date || item.created_at);
     const formattedDate = reviewDate.toLocaleDateString('vi-VN');
-    
+
     return (
       <Surface style={styles.reviewCard}>
         <Card.Content style={styles.reviewCardContent}>
           <View style={styles.reviewHeader}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 if (item.event_id) {
                   navigation.navigate('EventDetail', { eventId: item.event_id });
@@ -180,15 +209,15 @@ const MyReviews = () => {
               <Text style={styles.eventName}>
                 {item.event_name || "Unknown Event"}
               </Text>
-                <Chip 
-                icon="calendar" 
+              <Chip
+                icon="calendar"
                 style={styles.dateChip}
                 textStyle={{ fontSize: 12, color: COLORS.primary }}
               >
                 <Text>{formattedDate}</Text>
               </Chip>
             </TouchableOpacity>
-            
+
             <IconButton
               icon="delete-outline"
               size={20}
@@ -197,15 +226,15 @@ const MyReviews = () => {
               onPress={() => deleteReview(item.id)}
             />
           </View>
-          
+
           <View style={styles.ratingContainer}>
             {renderRatingStars(item.rating)}
             <Text style={styles.ratingText}>{item.rating}/5</Text>
           </View>
-          
+
           <Paragraph style={styles.reviewContent}>{item.comment}</Paragraph>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => {
               if (item.event_id) {
@@ -234,9 +263,9 @@ const MyReviews = () => {
   if (!user) {
     return (
       <View style={styles.loginContainer}>
-        <Animatable.View 
-          animation="fadeIn" 
-          duration={800} 
+        <Animatable.View
+          animation="fadeIn"
+          duration={800}
           style={styles.loginCard}
         >
           <Animatable.View animation="pulse" iterationCount="infinite" duration={2000}>
@@ -246,30 +275,30 @@ const MyReviews = () => {
           <Text style={styles.loginMessage}>
             Vui lòng đăng nhập để xem đánh giá của bạn về các sự kiện đã tham gia
           </Text>
-          <Animatable.View animation="fadeInUp" delay={300}>              <Button 
-              mode="contained" 
-              onPress={() => navigation.navigate('Login')} 
-              style={styles.loginButton}
-              contentStyle={{ paddingVertical: 8 }}
-              labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
-              icon={({size, color}) => (
-                <MaterialCommunityIcons name="login" size={size} color={color} />
-              )}
-            >
-              <Text>Đăng nhập ngay</Text>
-            </Button>
+          <Animatable.View animation="fadeInUp" delay={300}>              
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate('login')}
+            style={styles.loginButton}
+            contentStyle={{ paddingVertical: 8 }}
+            labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
+            icon={({ size, color }) => (
+              <MaterialCommunityIcons name="login" size={size} color={color} />
+            )}
+          >Đăng nhập ngay
+          </Button>
           </Animatable.View>
         </Animatable.View>
       </View>
     );
   }
-    // Background image for header
+  // Background image for header
   const backgroundImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <ImageBackground 
+        <ImageBackground
           source={{ uri: backgroundImage }}
           style={styles.headerBackground}
           resizeMode="cover"
@@ -278,23 +307,23 @@ const MyReviews = () => {
             colors={['rgba(94, 53, 177, 0.4)', 'rgba(94, 53, 177, 0.8)']}
             style={styles.headerGradient}
           >
-            <Animatable.View 
-              animation="fadeIn" 
-              duration={1000} 
+            <Animatable.View
+              animation="fadeIn"
+              duration={1000}
               style={styles.headerContent}
             >
-              <Animatable.Text 
-                animation="fadeInUp" 
-                duration={700} 
-                delay={300} 
+              <Animatable.Text
+                animation="fadeInUp"
+                duration={700}
+                delay={300}
                 style={styles.title}
               >
                 Đánh giá của tôi
               </Animatable.Text>
-              <Animatable.Text 
-                animation="fadeInUp" 
-                duration={700} 
-                delay={400} 
+              <Animatable.Text
+                animation="fadeInUp"
+                duration={700}
+                delay={400}
                 style={styles.subtitle}
               >
                 Quản lý tất cả đánh giá bạn đã gửi cho các sự kiện
@@ -306,7 +335,7 @@ const MyReviews = () => {
         data={reviews}
         keyExtractor={item => item.id?.toString()}
         renderItem={renderReviewItem}
-        contentContainerStyle={styles.listContainer}        refreshControl={
+        contentContainerStyle={styles.listContainer} refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
@@ -317,9 +346,9 @@ const MyReviews = () => {
           />
         }
         ListEmptyComponent={
-          <Animatable.View 
-            animation="fadeIn" 
-            duration={800} 
+          <Animatable.View
+            animation="fadeIn"
+            duration={800}
             style={styles.emptyContainer}
           >
             <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
@@ -329,16 +358,16 @@ const MyReviews = () => {
               Bạn chưa đánh giá sự kiện nào. Tham gia một sự kiện và chia sẻ trải nghiệm của bạn!
             </Text>
             <Animatable.View animation="fadeInUp" delay={400}>              <Button
-                mode="contained"
-                onPress={() => navigation.navigate('Home')}
-                style={{ backgroundColor: COLORS.primary, marginTop: 20 }}
-                contentStyle={{ paddingVertical: 8, paddingHorizontal: 15 }}
-                icon={({size, color}) => (
-                  <MaterialCommunityIcons name="calendar-search" size={size} color={color} />
-                )}
-              >
-                <Text>Khám phá sự kiện</Text>
-              </Button>
+              mode="contained"
+              onPress={() => navigation.navigate('home')}
+              style={{ backgroundColor: COLORS.primary, marginTop: 20 }}
+              contentStyle={{ paddingVertical: 8, paddingHorizontal: 15 }}
+              icon={({ size, color }) => (
+                <MaterialCommunityIcons name="calendar-search" size={size} color={color} />
+              )}
+            >
+              Khám phá sự kiện
+            </Button>
             </Animatable.View>
           </Animatable.View>
         }
@@ -461,9 +490,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   emptyContainer: {
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 25,
     marginTop: 40,
   },
