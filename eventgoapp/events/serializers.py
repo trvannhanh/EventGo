@@ -1,3 +1,4 @@
+from cloudinary.utils import cloudinary_url
 from rest_framework import serializers
 import re
 
@@ -180,12 +181,11 @@ class TicketSerializer(serializers.ModelSerializer):
         fields = ['id', 'event', 'type', 'price', 'quantity']
 
 class OrderDetailSerializer(serializers.ModelSerializer):
-    """Serializer chi tiết đơn hàng"""
     ticket = TicketSerializer(read_only=True)
 
     class Meta:
         model = OrderDetail
-        fields = ['id', 'ticket', 'qr_code']
+        fields = ['id', 'ticket', 'qr_code', 'qr_image', 'checked_in', 'checkin_time']
 
 class OrderSerializer(serializers.ModelSerializer):
     """Serializer đơn hàng"""

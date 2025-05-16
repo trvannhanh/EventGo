@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions,
   Linking,
+  Platform,
 } from 'react-native';
 import { Title, Paragraph, Button as PaperButton, RadioButton, Divider } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
@@ -82,20 +83,23 @@ const BookTicket = ({ route }) => {
     }
     try {
       const token = user?.access_token || (await AsyncStorage.getItem('token'));
-      const res = await authApis(token).get(endpoints.discountsCheck(eventId), {
-        params: { discount_code: code },
-      });
-      if (res.data) {
+      const res = await authApis(token).post(
+        endpoints.discountsCheck(eventId),
+        { discount_code: code }
+      );
+      if (res.status === 200 && res.data) {
         setDiscountApplied(res.data);
         Alert.alert('Thành công', `Mã giảm giá ${code} đã được áp dụng: Giảm ${res.data.discount_percent}%`);
-      } else {
-        setDiscountApplied(null);
-        Alert.alert('Lỗi', 'Mã giảm giá không hợp lệ hoặc không áp dụng cho sự kiện này.');
       }
     } catch (ex) {
-      console.error('Error applying discount:', ex);
       setDiscountApplied(null);
-      Alert.alert('Lỗi', 'Không thể áp dụng mã giảm giá.');
+      if (ex.response?.status === 400) {
+        Alert.alert('Lỗi', ex.response.data.error || 'Mã giảm giá không hợp lệ hoặc hết hạn.');
+      } else if (ex.response?.status === 403) {
+        Alert.alert('Lỗi', ex.response.data.error || 'Mã không áp dụng cho hạng của bạn.');
+      } else {
+        Alert.alert('Lỗi', 'Không thể áp dụng mã giảm giá.');
+      }
     }
   }, [eventId, user]);
 
@@ -106,7 +110,9 @@ const BookTicket = ({ route }) => {
       if (res.data.status === 'PAID') {
         setPaymentStatus('success');
         Alert.alert('Thành công', 'Thanh toán thành công! Vé của bạn đã được đặt.');
-        navigation.navigate('MyTickets'); // Điều hướng đến màn hình vé của tôi
+        navigation.navigate('home', {
+                      screen: 'MyOrders',
+                    })
       } else if (res.data.status === 'FAILED') {
         setPaymentStatus('failed');
         Alert.alert('Thất bại', 'Thanh toán không thành công. Vui lòng thử lại.');
@@ -158,10 +164,13 @@ const BookTicket = ({ route }) => {
         // Mở payUrl để chuyển hướng đến MoMo hoặc trang web thanh toán
         await Linking.openURL(payUrl);
         Alert.alert('Thông báo', 'Vui lòng hoàn tất thanh toán trên MoMo. Sau khi thanh toán, hệ thống sẽ kiểm tra trạng thái.');
-
+        navigation.navigate('home', {
+                      screen: 'MyOrders',
+                    })
         // Bước 4: Kiểm tra trạng thái đơn hàng sau khi người dùng thanh toán
         setTimeout(() => {
           checkOrderStatus(token, newOrderId);
+
         }, 5000); // Chờ 5 giây để người dùng hoàn tất thanh toán
       } else {
         // Fallback nếu không mở được MoMo
@@ -207,10 +216,13 @@ const BookTicket = ({ route }) => {
     loadInitialData();
   }, [loadEvent, loadTickets, loadDiscounts, user]);
 
+  // Tính toán tổng tiền với kiểm tra lỗi
   const selectedTicketData = tickets.find((ticket) => ticket.id === selectedTicket);
-  const ticketPrice = selectedTicketData ? selectedTicketData.price : 0;
-  const subtotal = ticketPrice * quantity;
-  const discountAmount = discountApplied ? (subtotal * discountApplied.discount_percent) / 100 : 0;
+  const ticketPrice = selectedTicketData && !isNaN(selectedTicketData.price) ? Number(selectedTicketData.price) : 0;
+  const subtotal = ticketPrice * (quantity || 1);
+  const discountAmount = discountApplied && !isNaN(discountApplied.discount_percent)
+    ? (subtotal * Number(discountApplied.discount_percent)) / 100
+    : 0;
   const total = subtotal - discountAmount;
 
   if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
@@ -393,7 +405,6 @@ const BookTicket = ({ route }) => {
       </View>
     </View>
   );
-
 };
 
 const styles = StyleSheet.create({
@@ -477,17 +488,16 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   discountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
     marginTop: 8,
-  },
-  discountInput: {
-    flex: 1,
-    backgroundColor: '#FFF',
     borderWidth: 1,
     borderColor: '#A49393',
     borderRadius: 4,
-    height: 40,
+    backgroundColor: '#FFF',
+    overflow: 'hidden', // Ngăn Picker tràn ra ngoài
+  },
+  discountInput: {
+    height: Platform.OS === 'ios' ? 150 : 50, // Tăng chiều cao trên iOS để hiển thị tốt hơn
+    color: '#333',
   },
   pickerItem: {
     fontSize: 16,

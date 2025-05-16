@@ -1,3 +1,5 @@
+import logging
+
 import qrcode
 import io
 from django.core.files.base import ContentFile
@@ -5,11 +7,19 @@ from django.core.files.base import ContentFile
 from django.db.models import Sum
 from .models import User, Order, OrderDetail
 
+logger = logging.getLogger(__name__)
+
 def generate_qr_image(qr_data):
-    qr = qrcode.make(qr_data)
-    buffer = io.BytesIO()
-    qr.save(buffer, format='PNG')
-    return ContentFile(buffer.getvalue(), name=f'{qr_data}.png')
+    try:
+        qr = qrcode.make(qr_data)
+        buffer = io.BytesIO()
+        qr.save(buffer, format='PNG')
+        buffer.seek(0)
+        logger.info(f"Generated QR image for {qr_data}, size: {buffer.getbuffer().nbytes}")
+        return buffer
+    except Exception as e:
+        logger.error(f"Error generating QR image for {qr_data}: {str(e)}")
+        raise
 
 
 

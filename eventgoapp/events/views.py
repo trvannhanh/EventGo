@@ -1,9 +1,12 @@
 import base64
 from datetime import timezone, timedelta
+from decimal import Decimal
 from io import BytesIO
 
 
 import openpyxl
+import cloudinary.uploader
+import logging
 from django.http import HttpResponse
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -38,7 +41,7 @@ import hmac
 from django.db.models import F, Sum, Avg, ExpressionWrapper, DurationField, Q
 
 from . import paginators
-from .utils import generate_qr_image
+from .utils import generate_qr_image, logger
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .recommendation_engine import RecommendationEngine
@@ -46,7 +49,7 @@ from .utils import get_customer_rank
 
 from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend, Notification
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
-    EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer
+    EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer, OrderDetailSerializer
 
 
 # 29/3
@@ -503,7 +506,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                     return Response({"error": "Mã giảm giá không áp dụng cho hạng của bạn"},
                                     status=status.HTTP_403_FORBIDDEN)
 
-                total_price = total_price * (1 - discount.discount_percent / 100)
+                total_price = total_price * Decimal(str(1 - discount.discount_percent / 100))
 
             # Tạo Order
             order = Order.objects.create(
@@ -837,11 +840,26 @@ class PaymentViewSet(viewsets.ViewSet):
                         qr_code=qr_code
                     )
 
-                    qr_image = generate_qr_image(qr_code)
-                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
-                    order_detail.save()
+                    try:
+                        qr_image = generate_qr_image(qr_code)  # Trả về BytesIO
+                        upload_result = cloudinary.uploader.upload(
+                            qr_image,
+                            folder='tickets',
+                            public_id=qr_code,
+                            resource_type='image',
+                            format='png'
+                        )
+                        order_detail.qr_image = upload_result['public_id']
+                        order_detail.save()
+                        qr_url = upload_result['secure_url']
+                        logger.info(f"QR image uploaded: public_id={upload_result['public_id']}, url={qr_url}")
+                        qr_image_urls.append(qr_url)
+                    except Exception as e:
+                        logger.error(f"Lỗi khi tải ảnh QR {qr_code} lên Cloudinary: {str(e)}")
+                        order_detail.qr_image = None
+                        order_detail.save()
+                        qr_image_urls.append(None)
 
-                    qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
 
                 send_mail(
                     subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
@@ -981,10 +999,17 @@ class PaymentViewSet(viewsets.ViewSet):
                     )
 
                     qr_image = generate_qr_image(qr_code)
-                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+                    qr_image.seek(0)
+                    upload_result = cloudinary.uploader.upload(
+                        qr_image,
+                        folder='tickets',
+                        public_id=f"QR_{order.id}_{ticket.id}_{i + 1}",
+                        resource_type='image',
+                        overwrite=True
+                    )
+                    order_detail.qr_image = upload_result['public_id']
                     order_detail.save()
-
-                    qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
+                    qr_image_urls.append(upload_result['secure_url'])
 
                 ticket.quantity -= quantity
                 ticket.save()
@@ -1087,11 +1112,28 @@ class PaymentViewSet(viewsets.ViewSet):
                         qr_code=qr_code
                     )
 
-                    qr_image = generate_qr_image(qr_code)
-                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
-                    order_detail.save()
+                    try:
+                        qr_image = generate_qr_image(qr_code)  # Trả về BytesIO
+                        upload_result = cloudinary.uploader.upload(
+                            qr_image,
+                            folder='tickets',
+                            public_id=qr_code,
+                            resource_type='image',
+                            format='png'
+                        )
+                        order_detail.qr_image = upload_result['public_id']
+                        order_detail.save()
+                        qr_url = upload_result['secure_url']
+                        logger.info(f"QR image uploaded: public_id={upload_result['public_id']}, url={qr_url}")
+                        qr_image_urls.append(qr_url)
+                    except Exception as e:
+                        logger.error(f"Lỗi khi tải ảnh QR {qr_code} lên Cloudinary: {str(e)}")
+                        order_detail.qr_image = None
+                        order_detail.save()
+                        qr_image_urls.append(None)
 
-                    qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
+                ticket.quantity -= quantity
+                ticket.save()
 
                 send_mail(
                     subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
@@ -1140,14 +1182,10 @@ class PaymentViewSet(viewsets.ViewSet):
                     except Exception as e:
                         print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
 
-                # Giảm số lượng vé đã bán
-                ticket.quantity -= quantity
-                ticket.save()
-
                 return Response({
                     "message": "Thanh toán thành công! Kiểm tra email của bạn để xem mã QR hoặc gọi GET /orders/{id}/",
                     "order_id": order.id,
-                    "redirect_url": f"/payment-success?order_id={order.id}"  # Chuyển hướng đến trang thành công
+                    "redirect_url": f"/payment-success?order_id={order.id}"
                 }, status=status.HTTP_200_OK)
             else:
                 # Nhả vé nếu thanh toán thất bại
@@ -1233,10 +1271,17 @@ class PaymentViewSet(viewsets.ViewSet):
                     )
 
                     qr_image = generate_qr_image(qr_code)
-                    order_detail.qr_image.save(f"{qr_code}.png", qr_image)
+                    qr_image.seek(0)
+                    upload_result = cloudinary.uploader.upload(
+                        qr_image,
+                        folder='tickets',
+                        public_id=f"QR_{order.id}_{ticket.id}_{i + 1}",
+                        resource_type='image',
+                        overwrite=True
+                    )
+                    order_detail.qr_image = upload_result['public_id']
                     order_detail.save()
-
-                    qr_image_urls.append(f"/media/tickets/{order_detail.qr_image.name}")
+                    qr_image_urls.append(upload_result['secure_url'])
 
                 ticket.quantity -= quantity
                 ticket.save()
@@ -1313,9 +1358,35 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated]
     lookup_field = 'id'
+    pagination_class = paginators.ItemPaginator
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
+        queryset = Order.objects.filter(user=self.request.user)
+        payment_status = self.request.query_params.get('payment_status')
+        print(f"Payment status: {payment_status}")
+        if payment_status:
+            valid_statuses = [status[0] for status in Order.PaymentStatus.choices]
+            print(f"Valid statuses: {valid_statuses}")
+            if payment_status not in valid_statuses:
+                print(f"Invalid status: {payment_status}")
+                raise ValidationError({
+                    "error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."
+                })
+            queryset = queryset.filter(payment_status=payment_status)
+            print(f"Filtered orders count: {queryset.count()}")
+        return queryset.order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        """GET /orders/?payment_status=<status>: Lấy danh sách đơn hàng của người dùng, có thể lọc theo trạng thái."""
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get_object(self):
         return get_object_or_404(Order, id=self.kwargs['id'], user=self.request.user)
@@ -1451,8 +1522,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
                     qr_image_urls.append(request.build_absolute_uri(order_detail.qr_image.url))
 
-                ticket.quantity -= quantity
-                ticket.save()
+
 
                 send_mail(
                     subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
@@ -1510,11 +1580,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    def list(self, request, *args, **kwargs):
-        """GET /orders/: Lấy danh sách đơn hàng của người dùng hiện tại."""
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
     def update(self, request, *args, **kwargs):
         """PUT /orders/{id}/: Cập nhật toàn bộ thông tin đơn hàng."""
@@ -1549,6 +1615,18 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
         order.delete()
         return Response({"message": "Hủy đơn hàng thành công"}, status=status.HTTP_204_NO_CONTENT)
+
+    @action(methods=['get'], url_path='details', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def get_order_details(self, request, id=None):
+        """GET /orders/{id}/details/: Lấy danh sách OrderDetail của một Order."""
+        order = self.get_object()
+        order_details = order.order_details.all()
+        page = self.paginate_queryset(order_details)
+        if page is not None:
+            serializer = OrderDetailSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+        serializer = OrderDetailSerializer(order_details, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['post'], url_path='pay', detail=True, permission_classes=[permissions.IsAuthenticated])
     def pay(self, request, id=None):
@@ -1645,8 +1723,8 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         partner_code = "MOMO"
         access_key = "F8BBA842ECF85"
         secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "http://192.168.79.102:8000/payment/momo-payment-success"
-        ipn_url = "http://192.168.79.102:8000/payment/momo-payment-notify"
+        redirect_url = "http://192.168.79.103:8000/payment/momo-payment-success"
+        ipn_url = "http://192.168.79.103:8000/payment/momo-payment-notify"
 
         raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()

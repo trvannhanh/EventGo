@@ -117,6 +117,7 @@ const MyEvents = () => {
   const renderEventItem = useCallback(
     ({ item }) => {
       const canCheckIn = ['ongoing', 'upcoming'].includes(item.status);
+      const canDiscount = ['ongoing', 'upcoming'].includes(item.status);
       const imageUri = item.image || 'https://via.placeholder.com/300x200?text=No+Image';
 
       return (
@@ -183,6 +184,8 @@ const MyEvents = () => {
               >
                 Chỉ đường
               </Button>
+
+              
               {canCheckIn && (
                 <Button
                   mode="contained"
@@ -197,7 +200,26 @@ const MyEvents = () => {
                 >
                   Check-in
                 </Button>
+
               )}
+
+              {canDiscount && (
+                <Button
+                  mode="contained"
+                  icon="ticket-percent"
+                  style={{ backgroundColor: COLORS.warning ?? '#FFA500', marginVertical: 4 }}
+                  onPress={() => 
+                    navigation.navigate('home', {
+                      screen: 'CreateDiscount',
+                      params: { eventId: item.id },
+                    })
+                  }
+                >
+                  Tạo Discount
+                </Button>
+
+              )}
+              
             </View>
           </View>
         </Surface>
@@ -222,7 +244,9 @@ const MyEvents = () => {
         mode="contained"
         icon="calendar-plus"
         style={{ marginTop: 16, backgroundColor: COLORS.primary }}
-        onPress={() => navigation.navigate('CreateEvent')}
+        onPress={() => navigation.navigate('home', {
+                      screen: 'CreateEvent',
+                    })}
       >
         Tạo sự kiện mới
       </Button>
@@ -294,7 +318,9 @@ const MyEvents = () => {
         style={styles.fab}
         icon="calendar-plus"
         color="white"
-        onPress={() => navigation.navigate('CreateEvent')}
+        onPress={() => navigation.navigate('home', {
+                      screen: 'CreateEvent',
+                    })}
       />
     </View>
   );

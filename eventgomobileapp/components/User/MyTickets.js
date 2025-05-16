@@ -1,430 +1,170 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Image, TouchableOpacity } from 'react-native';
-import { Card, Title, Paragraph, Button, Surface, Chip, Badge, ActivityIndicator, Divider, FAB } from 'react-native-paper';
-import MyStyles, { COLORS } from '../styles/MyStyles';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, Image } from 'react-native';
+import { Button, Surface, ActivityIndicator, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { authApis, endpoints } from '../../configs/Apis';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { MyUserContext } from '../../configs/MyContexts';
-import { useNavigation } from '@react-navigation/native';
+import Apis, { endpoints } from '../../configs/Apis';
+import { COLORS } from '../../components/styles/MyStyles';
 
 const MyTickets = () => {
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: COLORS.background,
-      padding: 16,
-    },
-    header: {
-      marginBottom: 20,
-      alignItems: 'center',
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: COLORS.primary,
-      marginBottom: 8,
-    },
-    subtitle: {
-      fontSize: 16,
-      color: COLORS.textSecondary,
-      marginBottom: 16,
-      textAlign: 'center',
-    },
-    emptyContainer: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-    },
-    emptyText: {
-      fontSize: 16,
-      color: COLORS.textSecondary,
-      textAlign: 'center',
-      marginTop: 16,
-    },
-    ticketCard: {
-      marginBottom: 16,
-      borderRadius: 12,
-      overflow: 'hidden',
-    },
-    ticketHeader: {
-      padding: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    eventTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: COLORS.text,
-    },
-    eventDate: {
-      color: COLORS.textSecondary,
-      marginTop: 4,
-    },
-    ticketDetails: {
-      padding: 16,
-      borderTopWidth: 1,
-      borderTopColor: COLORS.divider,
-    },
-    ticketRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    ticketLabel: {
-      color: COLORS.textSecondary,
-      fontSize: 14,
-    },
-    ticketValue: {
-      color: COLORS.text,
-      fontSize: 14,
-      fontWeight: 'bold',
-    },
-    qrContainer: {
-      alignItems: 'center',
-      marginTop: 16,
-      padding: 16,
-      borderTopWidth: 1,
-      borderTopColor: COLORS.divider,
-    },
-    qrImage: {
-      width: 200,
-      height: 200,
-      marginBottom: 8,
-    },
-    qrText: {
-      fontSize: 12,
-      color: COLORS.textSecondary,
-      textAlign: 'center',
-    },
-    chipContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      marginTop: 8,
-    },
-    chip: {
-      marginRight: 8,
-      marginBottom: 8,
-    },
-    statusChip: {
-      position: 'absolute',
-      top: 16,
-      right: 16,
-    },
-    eventImage: {
-      width: '100%',
-      height: 150,
-      borderTopLeftRadius: 12,
-      borderTopRightRadius: 12,
-    },
-    overlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
-      justifyContent: 'flex-end',
-      borderTopLeftRadius: 12,
-      borderTopRightRadius: 12,
-    },
-    overlayText: {
-      color: 'white',
-      padding: 16,
-    },
-    fab: {
-      position: 'absolute',
-      margin: 16,
-      right: 0,
-      bottom: 0,
-      backgroundColor: COLORS.primary,
-    },
-    tabsContainer: {
-      flexDirection: 'row',
-      marginBottom: 16,
-    },
-    tab: {
-      flex: 1,
-      paddingVertical: 10,
-      alignItems: 'center',
-    },
-    activeTab: {
-      borderBottomWidth: 2,
-      borderBottomColor: COLORS.primary,
-    },
-    tabText: {
-      color: COLORS.textSecondary,
-    },
-    activeTabText: {
-      color: COLORS.primary,
-      fontWeight: 'bold',
-    },
-  });
-
   const user = useContext(MyUserContext);
   const navigation = useNavigation();
+  const route = useRoute();
+  const { orderId } = route.params; // Lấy orderId từ navigation
   const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Khởi tạo loading = false
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState('upcoming');
+  const [error, setError] = useState(null);
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    fetchTickets();
+    console.log('MyTickets mounted, orderId:', orderId);
+    return () => {
+      isMounted.current = false;
+      console.log('MyTickets unmounted');
+    };
   }, []);
 
-  const fetchTickets = async (refresh = false) => {
+  const fetchTickets = useCallback(async () => {
+    if (refreshing || !isMounted.current) {
+      console.log('Bỏ qua fetchTickets: refreshing=', refreshing, 'isMounted=', isMounted.current);
+      return;
+    }
+
     try {
-      if (refresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+      setLoading(true);
+      setError(null);
+      console.log(`Gọi API: orderId=${orderId}, time=${new Date().toISOString()}`);
 
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        console.log("No token found");
+        if (isMounted.current) {
+          setError('Vui lòng đăng nhập để xem vé');
+        }
+        console.log('Không tìm thấy token, thoát fetchTickets');
         return;
       }
 
-      const authApi = authApis(token);
-      const response = await authApi.get(endpoints['my-tickets']);
-      
-      if (response.status === 200) {
-        // Process and organize tickets
-        const ticketsWithDates = response.data.map(ticket => {
-          const eventDate = new Date(ticket.event.event_date);
-          return {
-            ...ticket,
-            parsedDate: eventDate
-          };
-        });
+      const url = `${endpoints['orders']}${orderId}/details/`;
+      console.log('URL API:', url);
+      const response = await Apis.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        setTickets(ticketsWithDates);
+      console.log('Response data:', JSON.stringify(response.data, null, 2));
+      const newTickets = Array.isArray(response.data.results) ? response.data.results : [];
+      if (newTickets.length === 0) {
+        console.log('Không có vé trong results');
+      }
+      if (isMounted.current) {
+        setTickets(newTickets);
+        setRefreshing(false);
       }
     } catch (error) {
-      console.error("Error fetching tickets:", error);
+      console.error('Lỗi khi tải vé:', error.message, error.stack);
+      if (isMounted.current) {
+        setError('Không thể tải danh sách vé. Vui lòng thử lại.');
+        setRefreshing(false);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        console.log('fetchTickets hoàn tất, loading=', false);
+      }
     }
-  };
+  }, [orderId]);
 
-  const onRefresh = () => {
-    fetchTickets(true);
-  };
-
-  const formatDate = (dateString) => {
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const date = new Date(dateString);
-    return date.toLocaleDateString('vi-VN', options);
-  };
-
-  const formatTime = (timeString) => {
-    return timeString ? timeString.substring(0, 5) : '';
-  };
-
-  const getStatusChip = (ticket) => {
-    const now = new Date();
-    const eventDate = new Date(ticket.event.event_date);
-    
-    if (ticket.checked_in) {
-      return (
-        <Chip 
-          icon="check-circle" 
-          style={[styles.statusChip, { backgroundColor: COLORS.success }]} 
-          textStyle={{ color: 'white' }}
-        >
-          Đã check-in
-        </Chip>
-      );
-    } else if (now > eventDate) {
-      return (
-        <Chip 
-          icon="calendar-check" 
-          style={[styles.statusChip, { backgroundColor: COLORS.error }]} 
-          textStyle={{ color: 'white' }}
-        >
-          Đã qua
-        </Chip>
-      );
-    } else {
-      return (
-        <Chip 
-          icon="calendar-clock" 
-          style={[styles.statusChip, { backgroundColor: COLORS.primary }]} 
-          textStyle={{ color: 'white' }}
-        >
-          Sắp diễn ra
-        </Chip>
-      );
+  const onRefresh = useCallback(() => {
+    if (loading || refreshing) {
+      console.log('Bỏ qua onRefresh: loading=', loading, 'refreshing=', refreshing);
+      return;
     }
-  };
+    console.log('Làm mới thủ công');
+    setRefreshing(true);
+    fetchTickets();
+  }, [fetchTickets]);
 
-  const filteredTickets = tickets.filter(ticket => {
-    const now = new Date();
-    const eventDate = ticket.parsedDate;
-    
-    if (activeTab === 'upcoming') {
-      return eventDate >= now && !ticket.checked_in;
-    } else if (activeTab === 'past') {
-      return eventDate < now || ticket.checked_in;
-    }
-    return true;
-  });
+  useEffect(() => {
+    console.log('useEffect chạy, orderId:', orderId);
+    fetchTickets();
+  }, [fetchTickets]);
 
-  const renderTicketItem = ({ item }) => {
-    return (
-      <Surface style={[styles.ticketCard, { elevation: 2 }]}>
-        {item.event.image ? (
-          <Image 
-            source={{ uri: item.event.image }} 
-            style={styles.eventImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.eventImage, { backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center' }]}>
-            <MaterialCommunityIcons name="calendar-blank" size={50} color={COLORS.primary} />
-          </View>
-        )}
-        
-        {getStatusChip(item)}
-        
-        <View style={styles.ticketHeader}>
-          <View>
-            <Text style={styles.eventTitle}>{item.event.name}</Text>
-            <Text style={styles.eventDate}>
-              {formatDate(item.event.event_date)} • {formatTime(item.event.event_time)}
-            </Text>
-          </View>
-        </View>
-        
-        <View style={styles.ticketDetails}>
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Mã vé:</Text>
-            <Text style={styles.ticketValue}>{item.id}</Text>
-          </View>
-          
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Loại vé:</Text>
-            <Text style={styles.ticketValue}>{item.ticket_type.name}</Text>
-          </View>
-          
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Giá:</Text>
-            <Text style={styles.ticketValue}>{item.ticket_type.price.toLocaleString()} VNĐ</Text>
-          </View>
-          
-          <View style={styles.ticketRow}>
-            <Text style={styles.ticketLabel}>Địa điểm:</Text>
-            <Text style={styles.ticketValue}>{item.event.venue || 'Chưa cập nhật'}</Text>
-          </View>
+  const formatDate = useCallback((dateString) => {
+    if (!dateString) return 'Chưa check-in';
+    const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+    return new Date(dateString).toLocaleDateString('vi-VN', options);
+  }, []);
 
-          <View style={styles.chipContainer}>
-            {item.event.categories && item.event.categories.map((category, index) => (
-              <Chip 
-                key={index} 
-                style={[styles.chip, { backgroundColor: COLORS.primaryLight }]}
-                textStyle={{ color: COLORS.primary }}
-              >
-                {category.name}
-              </Chip>
-            ))}
-          </View>
-        </View>
-        
-        {item.qr_image && (
-          <View style={styles.qrContainer}>
-            <Image 
-              source={{ uri: item.qr_image }} 
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.qrText}>Mã QR này được sử dụng để check-in tại sự kiện</Text>
-          </View>
-        )}
-        
-        <Divider />
-        
-        <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-around' }}>
-          <Button 
-            mode="outlined" 
-            icon="information-outline"
-            style={{ borderColor: COLORS.primary }}
-            textColor={COLORS.primary}
-            onPress={() => navigation.navigate('EventDetail', { id: item.event.id })}
-          >
-            Chi tiết
-          </Button>
-          
-          <Button 
-            mode="contained" 
-            icon="google-maps"
-            style={{ backgroundColor: COLORS.primary }}
-            onPress={() => {
-              if (item.event.google_maps_link) {
-                Linking.openURL(item.event.google_maps_link);
-              } else {
-                alert('Không có thông tin địa điểm cho sự kiện này');
-              }
-            }}
-          >
-            Chỉ đường
-          </Button>
-        </View>
-      </Surface>
-    );
-  };
+  const renderTicketItem = useCallback(
+    ({ item }) => {
+      const qrImage = item.qr_image ? `http://res.cloudinary.com/dqpkxxzaf/${item.qr_image}` : 'https://via.placeholder.com/300?text=No+QR+Image';
+      const eventName = item.ticket?.event?.name || 'Chưa xác định';
+      const ticketType = item.ticket?.type || 'Chưa xác định';
 
-  const renderEmptyComponent = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialCommunityIcons name="star-off" size={80} color={COLORS.primary} />
-      <Text style={styles.emptyText}>
-        {activeTab === 'upcoming' 
-          ? 'Bạn chưa có vé cho sự kiện nào sắp tới' 
-          : 'Bạn chưa tham gia sự kiện nào'}
-      </Text>
-      <Button        mode="contained" 
-        icon="ticket-percent" 
-        style={{ marginTop: 16, backgroundColor: COLORS.primary }}
-        onPress={() => navigation.navigate('home')}
-      >
-        Khám phá sự kiện
-      </Button>
-    </View>
+      return (
+        <Surface style={[styles.ticketCard, { elevation: 2 }]}>
+          <View style={styles.ticketCardContent}>
+            <Image source={{ uri: qrImage }} style={styles.qrImage} resizeMode="contain" />
+            <View style={styles.ticketDetails}>
+              <Text style={styles.ticketTitle}>Vé #{item.qr_code}</Text>
+              <View style={styles.ticketRow}>
+                <Text style={styles.ticketLabel}>Sự kiện:</Text>
+                <Text style={styles.ticketValue}>{eventName}</Text>
+              </View>
+              <View style={styles.ticketRow}>
+                <Text style={styles.ticketLabel}>Loại vé:</Text>
+                <Text style={styles.ticketValue}>{ticketType}</Text>
+              </View>
+              <View style={styles.ticketRow}>
+                <Text style={styles.ticketLabel}>Trạng thái:</Text>
+                <Text style={[styles.ticketValue, { color: item.checked_in ? COLORS.success : COLORS.error }]}>
+                  {item.checked_in ? 'Đã check-in' : 'Chưa check-in'}
+                </Text>
+              </View>
+              <View style={styles.ticketRow}>
+                <Text style={styles.ticketLabel}>Thời gian check-in:</Text>
+                <Text style={styles.ticketValue}>{formatDate(item.checkin_time)}</Text>
+              </View>
+            </View>
+          </View>
+        </Surface>
+      );
+    },
+    [formatDate]
   );
+
+  const renderEmptyComponent = useCallback(() => (
+    <View style={styles.emptyContainer}>
+      <MaterialCommunityIcons name="ticket-outline" size={80} color={COLORS.primary} />
+      <Text style={styles.emptyText}>Không có vé nào cho đơn hàng #{orderId}</Text>
+    </View>
+  ), [orderId]);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Vé của tôi</Text>
-        <Text style={styles.subtitle}>Quản lý vé và check-in tại các sự kiện</Text>
+        <Text style={styles.title}>Danh sách vé - Đơn hàng #{orderId}</Text>
+        <Text style={styles.subtitle}>Xem thông tin vé của bạn</Text>
       </View>
-      
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'upcoming' && styles.activeTab]}
-          onPress={() => setActiveTab('upcoming')}
-        >
-          <Text style={[styles.tabText, activeTab === 'upcoming' && styles.activeTabText]}>
-            Sắp diễn ra
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'past' && styles.activeTab]}
-          onPress={() => setActiveTab('past')}
-        >
-          <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
-            Đã tham gia
-          </Text>
-        </TouchableOpacity>
-      </View>
-      
+
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={{ marginTop: 16, color: COLORS.textSecondary }}>Đang tải vé...</Text>
+          <Text style={styles.loadingText}>Đang tải danh sách vé...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={24} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <Button mode="contained" onPress={onRefresh} style={styles.retryButton}>
+            Thử lại
+          </Button>
         </View>
       ) : (
         <FlatList
-          data={filteredTickets}
+          data={tickets}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderTicketItem}
           ListEmptyComponent={renderEmptyComponent}
@@ -439,14 +179,105 @@ const MyTickets = () => {
           }
         />
       )}
-        <FAB
-        style={styles.fab}
-        icon="calendar-search"
-        color="white"
-        onPress={() => navigation.navigate('home')}
-      />
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    padding: 16,
+  },
+  header: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    color: COLORS.textSecondary,
+  },
+  errorContainer: {
+    padding: 20,
+    alignItems: 'center',
+    flex: 1,
+  },
+  errorText: {
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    marginTop: 8,
+    backgroundColor: COLORS.primary,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    flex: 1,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  ticketCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+  },
+  ticketCardContent: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 16,
+  },
+  qrImage: {
+    width: '100%',
+    height: 300, // Tăng kích thước QR lên 300
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  ticketDetails: {
+    padding: 8,
+  },
+  ticketTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  ticketRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  ticketLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+  },
+  ticketValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+});
 
 export default MyTickets;
