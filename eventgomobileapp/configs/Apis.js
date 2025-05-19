@@ -2,7 +2,7 @@ import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-export const API_BASE = 'http://192.168.79.103:8000/';
+export const API_BASE = 'http://192.168.79.100:8000/';
 
 export const endpoints = {
     // Auth endpoints

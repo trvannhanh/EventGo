@@ -174,6 +174,24 @@ const MyOrders = () => {
                 >
                   Xem vé
                 </Button>
+
+              )}
+
+              {item.payment_status === 'paid' && (
+                <Button
+                  mode="contained"
+                  icon="message"
+                  style={{ backgroundColor: COLORS.success, marginVertical: 4 }}
+                  onPress={() => 
+                    navigation.navigate('home', {
+                      screen: 'Chat',
+                      params: { orderId: item.id },
+                    })
+                  }
+                >
+                  Chat
+                </Button>
+
               )}
             </View>
           </View>
