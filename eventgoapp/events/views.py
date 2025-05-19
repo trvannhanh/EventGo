@@ -1723,8 +1723,8 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         partner_code = "MOMO"
         access_key = "F8BBA842ECF85"
         secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "http://192.168.79.103:8000/payment/momo-payment-success"
-        ipn_url = "http://192.168.79.103:8000/payment/momo-payment-notify"
+        redirect_url = "http://192.168.79.100:8000/payment/momo-payment-success"
+        ipn_url = "http://192.168.79.100:8000/payment/momo-payment-notify"
 
         raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
