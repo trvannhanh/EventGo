@@ -1,31 +1,36 @@
 {
   "expo": {
-    "name": "eventgomobileapp",
+    "name": "EventGo",
     "slug": "eventgomobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/eventgo_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-screen.png",
+      "image": "./assets/eventgo_logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/eventgo_icon.png",
+        "backgroundColor": "#000000"
       },
       "package": "com.trieuvy.eventgo",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAh1zei22knWD5ddlB_fKKHvjcSYQcmO8s"
         }
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE", 
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,6 +39,9 @@
       "eas": {
         "projectId": "9df1f3b0-32a8-4c89-a609-d15f3ddda9fe"
       }
-    }
+    },
+    "plugins": [
+      "react-native-vision-camera"
+    ]
   }
 }

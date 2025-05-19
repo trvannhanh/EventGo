@@ -13,7 +13,7 @@ const Login = () => {
         container: {
             flex: 1,
             backgroundColor: COLORS.background,
-            padding: 20, 
+            padding: 20,
             justifyContent: 'center',
         },
         title: {
@@ -94,16 +94,16 @@ const Login = () => {
         },
         logo: {
             alignSelf: 'center',
-            width: 120,
-            height: 120,
-            marginBottom: 20,
+            width: 240,
+            height: 100,
+
         },
         card: {
-            ...MyStyles.card,            padding: 20,
+            ...MyStyles.card, padding: 20,
             marginHorizontal: 0,
         }
     });
-    
+
     const info = [{
         label: 'Tên đăng nhập',
         field: 'username',
@@ -127,9 +127,9 @@ const Login = () => {
     const [passwordVisible, setPasswordVisible] = useState(false);
     const nav = useNavigation();
     const dispatch = useContext(MyDispatchContext);
-    
+
     const setState = (value, field) => {
-        setUser({...user, [field]: value})
+        setUser({ ...user, [field]: value })
     }
 
     const validate = () => {
@@ -147,13 +147,13 @@ const Login = () => {
         setMsg('');
         return true;
     }
-    
+
     const handleLogin = async () => {
         if (validate() === true) {
             try {
                 setLoading(true);
                 let res = await Apis.post(endpoints['login'], {
-                    ...user, 
+                    ...user,
                     client_id: 'm1lijofuYnBkhCeuIHp2Pi44NNGHSDB9WBIEcpHb',
                     client_secret: 'Bs9D3mrYsQwxqmPv4kQ8HcV5QU0TfhdQqL7p7OYBJtPoUDxlhPbQh3K9a2HPk7y4RsjcE8pW9hPo8dMHraSQaTqQvUFPZFbnp2tgmSjWWsqOJn4aOjyJ5DRQGnHaIoWt',
                     grant_type: 'password'
@@ -164,21 +164,21 @@ const Login = () => {
 
                 try {
                     let u = await authApis(res.data.access_token).get(endpoints['currentUser']);
-                    
+
                     // Đảm bảo thêm token vào dữ liệu người dùng trước khi lưu
                     const userData = {
                         ...u.data,
                         access_token: res.data.access_token
                     };
-                    
+
                     // Lưu thông tin người dùng vào AsyncStorage
                     await AsyncStorage.setItem('user', JSON.stringify(userData));
-                    
+
                     dispatch({
                         "type": "LOGIN",
                         "payload": userData
                     });
-                    
+
                     if (res.status === 200)
                         nav.navigate('home');
                 } catch (userError) {
@@ -203,15 +203,15 @@ const Login = () => {
     return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.container}>
-                <Image 
-                    source={require('../../assets/eventgo_logo.png')} 
-                    style={styles.logo} 
+                <Image
+                    source={require('../../assets/eventgo_logo.png')}
+                    style={styles.logo}
                     resizeMode="contain"
                 />
                 <Surface style={styles.card} elevation={1}>
                     <Text style={styles.title}>Đăng nhập</Text>
                     <Text style={styles.subtitle}>Chào mừng trở lại với EventGo</Text>
-                    
+
                     {msg ? (
                         <Text style={styles.errorText}>{msg}</Text>
                     ) : null}
@@ -230,10 +230,10 @@ const Login = () => {
                             activeOutlineColor={COLORS.primary}
                             textColor={COLORS.text}
                             left={<TextInput.Icon icon={i.icon} color={COLORS.primary} />}
-                            right={i.field === 'password' ? 
-                                <TextInput.Icon 
-                                    icon={passwordVisible ? 'eye-off' : 'eye'} 
-                                    color={COLORS.primary} 
+                            right={i.field === 'password' ?
+                                <TextInput.Icon
+                                    icon={passwordVisible ? 'eye-off' : 'eye'}
+                                    color={COLORS.primary}
                                     onPress={() => setPasswordVisible(!passwordVisible)}
                                 /> : null
                             }
@@ -242,10 +242,10 @@ const Login = () => {
 
                     <View style={styles.rememberRow}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Switch 
-                                value={rememberMe} 
-                                onValueChange={setRememberMe} 
-                                color={COLORS.primary} 
+                            <Switch
+                                value={rememberMe}
+                                onValueChange={setRememberMe}
+                                color={COLORS.primary}
                             />
                             <Text style={{ color: COLORS.text, marginLeft: 5 }}>Nhớ mật khẩu</Text>
                         </View>
@@ -253,13 +253,13 @@ const Login = () => {
                             <Text style={styles.forgotPassword}>Quên mật khẩu?</Text>
                         </TouchableOpacity>
                     </View>
-                    
-                    <Button 
-                        mode="contained" 
-                        onPress={handleLogin} 
-                        loading={loading} 
-                        disabled={loading} 
-                        style={styles.loginButton} 
+
+                    <Button
+                        mode="contained"
+                        onPress={handleLogin}
+                        loading={loading}
+                        disabled={loading}
+                        style={styles.loginButton}
                         contentStyle={{ paddingVertical: 6 }}
                         labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
                     >
@@ -276,7 +276,7 @@ const Login = () => {
                         <MaterialCommunityIcons name="google" size={24} color={COLORS.googleRed} />
                         <Text style={styles.socialText}>Đăng nhập với Google</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity style={styles.socialButton}>
                         <MaterialCommunityIcons name="facebook" size={24} color={COLORS.facebookBlue} />
                         <Text style={styles.socialText}>Đăng nhập với Facebook</Text>
@@ -285,7 +285,7 @@ const Login = () => {
 
                 <View style={{ marginTop: 20 }}>
                     <Text style={styles.signUpText}>
-                        Chưa có tài khoản? <Text 
+                        Chưa có tài khoản? <Text
                             style={styles.signUpLink}
                             onPress={() => nav.navigate('register')}
                         >

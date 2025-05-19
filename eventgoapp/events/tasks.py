@@ -18,8 +18,11 @@ def send_event_reminders(self):
             event.send_notifications()
         print("Successfully sent notifications for upcoming events!")
 
+
 @shared_task(bind=True, name='events.tasks.send_event_update_notifications')
 def send_event_update_notifications(self, event_id, update_message):
+    print(f"--- TASK send_event_update_notifications ENTERED ---")
+    print(f"--- SELF: {self}, EVENT_ID: {event_id}, MESSAGE (first 100 chars): '{str(update_message)[:100]}...' ---")
     """
     Task to send notifications when an event is updated.
     
@@ -69,8 +72,9 @@ def send_event_update_notifications(self, event_id, update_message):
     except Exception as e:
         print(f"Error in send_event_update_notifications: {str(e)}")
         return 0
-        
-@shared_task(bind=True, name='events.tasks.send_new_event_notifications')
+
+
+@shared_task(bind= True, name='events.tasks.send_new_event_notifications')
 def send_new_event_notifications(self, event_id):
     """
     Task để gửi thông báo khi một sự kiện mới được tạo.

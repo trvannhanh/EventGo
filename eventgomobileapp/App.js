@@ -8,10 +8,13 @@ import Login from './components/User/Login';
 import Register from './components/User/Register';
 import Profile from './components/User/Profile';
 import MyTickets from './components/User/MyTickets';
+import MyEvents from './components/User/MyEvents';
 import BookTicket from './components/Home/BookTicket';
 import ReviewList from './components/Home/ReviewList';
+import ReplyToReview from './components/Home/ReplyToReview';
 import MyReviews from './components/User/MyReviews';
 import CreateEvent from './components/Home/CreateEvent';
+import CheckIn from './components/Home/CheckIn';
 import Notifications from './components/User/Notifications';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MyUserContext, MyDispatchContext } from './configs/MyContexts';
@@ -35,16 +38,16 @@ LogBox.ignoreLogs([
 
 const Stack = createNativeStackNavigator();
 const StackNavigator = () => {
-  return (
-
-    <Stack.Navigator screenOptions={{
+  return (    <Stack.Navigator screenOptions={{
       headerShown: false,
     }}>
       <Stack.Screen name="Home" component={Home} />
       <Stack.Screen name="EventDetail" component={EventDetail} />
       <Stack.Screen name="BookTicket" component={BookTicket} />
       <Stack.Screen name="ReviewList" component={ReviewList} />
+      <Stack.Screen name="ReplyToReview" component={ReplyToReview} />
       <Stack.Screen name="CreateEvent" component={CreateEvent} />
+      <Stack.Screen name="CheckIn" component={CheckIn} />
     </Stack.Navigator>
   );
 };
@@ -54,45 +57,59 @@ const Tab = createBottomTabNavigator();
 const TabNavigator = () => {
   const user = useContext(MyUserContext);
   return (
-    <Tab.Navigator screenOptions={({ route }) => ({
-      headerShown: false,
-      tabBarStyle: {
-        backgroundColor: AppTheme.colors.surface,
-        borderTopLeftRadius: 18,
-        borderTopRightRadius: 18,
-        height: 64,
-        borderTopWidth: 0,
-        elevation: 8,
-        shadowColor: 'rgba(0, 0, 0, 0.1)',
-        shadowOffset: { width: 0, height: -3 },
-        shadowRadius: 5
-      },
-      tabBarActiveTintColor: AppTheme.colors.primary,
-      tabBarInactiveTintColor: AppTheme.colors.disabled,
-      tabBarLabelStyle: { fontWeight: 'bold', fontSize: 12, marginBottom: 4 },
-      tabBarLabel: ({ focused, color }) => {
-        let label;
-        if (route.name === 'home') {
-          label = 'Sự kiện';
-        } else if (route.name === 'login') {
-          label = 'Đăng nhập';
-        } else if (route.name === 'register') {
-          label = 'Đăng ký';
-        } else if (route.name === 'account') {
-          label = 'Tài khoản';
-        } else if (route.name === 'tickets') {
-          label = 'Vé của tôi';
-        } else if (route.name === 'reviews') {
-          label = 'Đánh giá';
-        }
-        return <Text style={{ color, fontWeight: focused ? 'bold' : 'normal', fontSize: 12 }}>{label}</Text>;
-      }
-    })}>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: AppTheme.colors.surface,
+          borderTopLeftRadius: 18,
+          borderTopRightRadius: 18,
+          height: 64,
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: 'rgba(0, 0, 0, 0.1)',
+          shadowOffset: { width: 0, height: -3 },
+          shadowRadius: 5,
+        },
+        tabBarActiveTintColor: AppTheme.colors.primary,
+        tabBarInactiveTintColor: AppTheme.colors.disabled,
+        tabBarLabelStyle: { fontWeight: 'bold', fontSize: 12, marginBottom: 4 },
+        tabBarLabel: ({ focused, color }) => {
+          let label;
+          if (route.name === 'home') {
+            label = 'Sự kiện';
+          } else if (route.name === 'login') {
+            label = 'Đăng nhập';
+          } else if (route.name === 'register') {
+            label = 'Đăng ký';
+          } else if (route.name === 'account') {
+            label = 'Tài khoản';
+          } else if (route.name === 'tickets') {
+            label = user && user.role === 'organizer' ? 'Sự kiện của tôi' : 'Vé của tôi';
+          } else if (route.name === 'reviews') {
+            label = 'Đánh giá';
+          }
+          return (
+            <Text
+              style={{
+                color,
+                fontWeight: focused ? 'bold' : 'normal',
+                fontSize: 12,
+              }}
+            >
+              {label}
+            </Text>
+          );
+        },
+      })}
+    >
       <Tab.Screen
         name="home"
         component={StackNavigator}
         options={{
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="calendar" color={color} size={size} />
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="calendar" color={color} size={size} />
+          ),
         }}
       />
       {user === null ? (
@@ -101,14 +118,18 @@ const TabNavigator = () => {
             name="login"
             component={Login}
             options={{
-              tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="login" color={color} size={size} />
+              tabBarIcon: ({ color, size }) => (
+                <MaterialCommunityIcons name="login" color={color} size={size} />
+              ),
             }}
           />
           <Tab.Screen
             name="register"
             component={Register}
             options={{
-              tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-plus" color={color} size={size} />
+              tabBarIcon: ({ color, size }) => (
+                <MaterialCommunityIcons name="account-plus" color={color} size={size} />
+              ),
             }}
           />
         </>
@@ -118,21 +139,35 @@ const TabNavigator = () => {
             name="account"
             component={Profile}
             options={{
-              tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account" color={color} size={size} />
+              tabBarIcon: ({ color, size }) => (
+                <MaterialCommunityIcons name="account" color={color} size={size} />
+              ),
             }}
           />
           <Tab.Screen
             name="tickets"
-            component={MyTickets}
+            component={user && user.role === 'organizer' ? MyEvents : MyTickets}
             options={{
-              tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="ticket-confirmation" color={color} size={size} />
+              tabBarIcon: ({ color, size }) => (
+                <MaterialCommunityIcons
+                  name={
+                    user && user.role === 'organizer'
+                      ? 'calendar-text'
+                      : 'ticket-confirmation'
+                  }
+                  color={color}
+                  size={size}
+                />
+              ),
             }}
           />
           <Tab.Screen
             name="reviews"
             component={MyReviews}
             options={{
-              tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="star" color={color} size={size} />
+              tabBarIcon: ({ color, size }) => (
+                <MaterialCommunityIcons name="star" color={color} size={size} />
+              ),
             }}
           />
         </>
@@ -234,9 +269,9 @@ const App = () => {
           <NavigationContainer theme={AppTheme}>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Main" component={TabNavigator} />
-              <Stack.Screen 
-                name="Notifications" 
-                component={Notifications} 
+              <Stack.Screen
+                name="Notifications"
+                component={Notifications}
                 options={{
                   headerShown: true,
                   title: 'Thông báo',

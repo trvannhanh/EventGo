@@ -19,7 +19,8 @@ const Home = ({ navigation }) => {
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [page, setPage] = useState(1);    const [cateId, setCateId] = useState(null);
+    const [page, setPage] = useState(1);    
+    const [cateId, setCateId] = useState(null);
     const [hasMore, setHasMore] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [filterVisible, setFilterVisible] = useState(false);
@@ -56,18 +57,22 @@ const Home = ({ navigation }) => {
             console.error('Failed to load event categories:', error);
             setLoadError('Không thể tải danh mục sự kiện');
         }
-    };    const loadEvents = async (pageToLoad = 1, shouldRefresh = false) => {
+    };    const loadEvents = async (pageToLoad = 1, shouldRefresh = false, status = eventStatus) => {
         if (!hasMore && pageToLoad > 1 && !shouldRefresh) return;
 
         try {
             setLoading(true);
             setLoadError(null);
 
+            // Sử dụng status được truyền vào thay vì eventStatus để tránh bất đồng bộ
+            const currentStatus = status || eventStatus;
+            console.log(`Đang tải sự kiện với: Trang=${pageToLoad}, Status=${currentStatus}, CateId=${cateId}, Search=${search}`);
+
             let url = `${endpoints['events']}?page=${pageToLoad}`;
 
-            // Thêm trạng thái lọc
-            if (eventStatus) {
-                url = `${url}&status=${eventStatus}`;
+            // Thêm trạng thái lọc - sử dụng tham số status được truyền vào
+            if (currentStatus) {
+                url = `${url}&status=${currentStatus}`;
             }
 
             if (search) {
@@ -78,7 +83,9 @@ const Home = ({ navigation }) => {
                 url = `${url}&cateId=${cateId}`;
             }
 
+            console.log(`API URL: ${url}`);
             const res = await Apis.get(url);
+            console.log(`Nhận được ${res.data.results?.length || 0} sự kiện`);
 
             if (shouldRefresh || pageToLoad === 1) {
                 setEvents(res.data.results || []);
@@ -110,36 +117,42 @@ const Home = ({ navigation }) => {
         }
     };    // Refresh tất cả dữ liệu
     const onRefresh = useCallback(() => {
+        console.log(`Đang làm mới dữ liệu với Status=${eventStatus}, CateId=${cateId}, Search=${search}`);
         setRefreshing(true);
         setPage(1);
         setHasMore(true);
         Promise.all([
-            loadEvents(1, true),
             loadTrendingEvents(),
             loadEventCates()
         ]).finally(() => {
+            // Đảm bảo trạng thái hiện tại được sử dụng khi tải lại dữ liệu
+            loadEvents(1, true, eventStatus);
             setRefreshing(false);
         });
-    }, [search, cateId, eventStatus]);
-
-    // Load dữ liệu ban đầu khi component mount
+    }, [search, cateId, eventStatus]);// Load dữ liệu ban đầu khi component mount
     useEffect(() => {
+        console.log('Component Mount - Tải dữ liệu ban đầu');
         setInitialLoading(true);
         Promise.all([
             loadEventCates(),
             loadTrendingEvents()
         ]).finally(() => {
-            loadEvents(1, true);
+            loadEvents(1, true, eventStatus); // Truyền rõ eventStatus khi tải ban đầu
         });
-    }, []);    // Load sự kiện khi search, category hoặc trạng thái thay đổi
+    }, []);
+    
+    // Load sự kiện khi search hoặc category thay đổi
     useEffect(() => {
+        if (initialLoading) return; // Tránh tải lại khi đang tải ban đầu
+        
+        console.log(`Search/Category thay đổi - Search: ${search}, CateId: ${cateId}`);
         const timer = setTimeout(() => {
             setPage(1);
-            loadEvents(1, true);
+            loadEvents(1, true, eventStatus); // Truyền rõ eventStatus khi search/category thay đổi
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [search, cateId, eventStatus]);
+    }, [search, cateId]);
 
     // Đảm bảo refresh dữ liệu khi quay lại tab này
     useFocusEffect(
@@ -157,12 +170,25 @@ const Home = ({ navigation }) => {
             loadEvents(page + 1);
         }
     };    const handleCategoryPress = (id) => {
-        setCateId(cateId === id ? null : id); // Toggle danh mục
-    };
-
-    // Xử lý khi chọn trạng thái sự kiện
+        // Toggle danh mục
+        const newCategoryId = cateId === id ? null : id;
+        setCateId(newCategoryId);
+        
+        // Tải lại dữ liệu ngay lập tức khi chọn danh mục
+        setPage(1);
+        // Sử dụng timeout ngắn để đảm bảo state đã được cập nhật
+        setTimeout(() => {
+            loadEvents(1, true);
+        }, 50);
+    };    // Xử lý khi chọn trạng thái sự kiện
     const handleEventStatusPress = (status) => {
+        console.log(`Chọn trạng thái: ${status}`);
         setEventStatus(status);
+        // Tải lại dữ liệu ngay lập tức khi chọn trạng thái
+        setPage(1);
+        
+        // Tải dữ liệu với trạng thái mới, bất kể danh mục hiện tại
+        loadEvents(1, true, status);
     };
 
     // Kiểm tra xem user có phải là đối tượng hợp lệ hay không
@@ -179,11 +205,19 @@ const Home = ({ navigation }) => {
                 "Chỉ nhà tổ chức và quản trị viên mới có quyền tạo sự kiện.",
                 [{ text: "OK" }]
             );
-        }
-    };
+        }    };
 
-    // Hiển thị dialog filter
-    const showFilterDialog = () => setFilterVisible(true);
+    // Hiển thị tất cả sự kiện và các lựa chọn
+    const showAllEvents = () => {
+        // Đặt lại bộ lọc danh mục nếu đang có
+        if (cateId !== null) {
+            setCateId(null);
+        }
+        
+        // Hiển thị dialog để chọn trạng thái sự kiện
+        setFilterVisible(true);
+    };
+    
     const hideFilterDialog = () => setFilterVisible(false);    // Render Event Status Chip
     const renderEventStatusChip = useCallback((status) => (
         <Chip
@@ -363,31 +397,27 @@ const Home = ({ navigation }) => {
             <MaterialCommunityIcons name={icon} size={60} color={COLORS.textSecondary} />
             <Text style={styles.emptyStateText}>{title}</Text>
         </View>
-    ), []);
-
-    // Render Loading State
+    ), []);    // Render Loading State
     const renderLoading = useCallback(() => {
         if (loading && !refreshing) {
             return (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={COLORS.primary} />
                     <Text style={{ color: COLORS.textSecondary, marginTop: 8 }}>
-                        Đang tải...
+                        Đang tải sự kiện {eventStatus ? `${eventStatusOptions.find(s => s.value === eventStatus)?.label}` : ''}...
                     </Text>
                 </View>
             );
         }
         return null;
-    }, [loading, refreshing]);
-
-    // Render Main Content
+    }, [loading, refreshing, eventStatus]);    // Render Main Content
     const renderContent = () => {
         if (initialLoading) {
             return (
                 <View style={styles.centerContent}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
                     <Text style={{ color: COLORS.textSecondary, marginTop: 16 }}>
-                        Đang tải sự kiện...
+                        Đang tải sự kiện {eventStatus ? `${eventStatusOptions.find(s => s.value === eventStatus)?.label}` : ''}...
                     </Text>
                 </View>
             );
@@ -429,10 +459,9 @@ const Home = ({ navigation }) => {
                 )}
 
                 {/* Trending Events Section */}
-                <View style={styles.trendingContainer}>
-                    <View style={styles.categoryHeaderContainer}>
+                <View style={styles.trendingContainer}>                    <View style={styles.categoryHeaderContainer}>
                         <Text style={styles.sectionHeader}>Sự kiện nổi bật</Text>
-                        <TouchableOpacity onPress={() => { }}>
+                        <TouchableOpacity onPress={showAllEvents}>
                             <Text style={styles.categorySeeAll}>Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
@@ -451,16 +480,14 @@ const Home = ({ navigation }) => {
                 </View>
 
                 <Divider style={styles.divider} />                {/* All Events */}
-                <View style={styles.eventsContainer}>
-                    <View style={styles.categoryHeaderContainer}>
-                        <Text style={styles.sectionHeader}>
+                <View style={styles.eventsContainer}>                    <View style={styles.categoryHeaderContainer}>                        <Text style={styles.sectionHeader}>
                             {eventStatus === 'upcoming' && 'Sự kiện sắp diễn ra'}
                             {eventStatus === 'ongoing' && 'Sự kiện đang diễn ra'}
                             {eventStatus === 'completed' && 'Sự kiện đã kết thúc'}
                             {eventStatus === 'canceled' && 'Sự kiện đã hủy'}
                         </Text>
-                        <TouchableOpacity onPress={showFilterDialog}>
-                            <Text style={styles.categorySeeAll}>Bộ lọc</Text>
+                        <TouchableOpacity onPress={showAllEvents}>
+                            <Text style={styles.categorySeeAll}>Xem tất cả</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -517,14 +544,13 @@ const Home = ({ navigation }) => {
                             value={search}
                             style={styles.searchInput}
                             icon="magnify"
-                            clearIcon="close-circle"
-                            right={() => (
+                            clearIcon="close-circle"                            right={() => (
                                 <TouchableOpacity 
                                     style={{marginRight: 8}} 
-                                    onPress={showFilterDialog}
+                                    onPress={showAllEvents}
                                 >
                                     <MaterialCommunityIcons 
-                                        name="filter-variant" 
+                                        name="view-grid" 
                                         size={24} 
                                         color={COLORS.primary} 
                                     />
@@ -564,10 +590,9 @@ const Home = ({ navigation }) => {
                         color={COLORS.onPrimary}
                         onPress={handleCreateEvent}
                     />
-                )}                {/* Filter Dialog */}
-                <Portal>
+                )}                {/* Filter Dialog */}                <Portal>
                     <Dialog visible={filterVisible} onDismiss={hideFilterDialog} style={styles.filterDialog}>
-                        <Dialog.Title style={styles.dialogTitle}>Bộ lọc sự kiện</Dialog.Title>
+                        <Dialog.Title style={styles.dialogTitle}>Xem tất cả sự kiện</Dialog.Title>
                         <Dialog.Content>
                             <Text style={styles.filterSectionTitle}>Trạng thái sự kiện</Text>
                             <View style={styles.filterOptionContainer}>
@@ -577,9 +602,13 @@ const Home = ({ navigation }) => {
                                         style={[
                                             styles.filterOption,
                                             eventStatus === status.value && styles.filterOptionSelected
-                                        ]}
-                                        onPress={() => {
-                                            setEventStatus(status.value);
+                                        ]}                                        onPress={() => {
+                                            const newStatus = status.value;
+                                            console.log(`Dialog - Chọn trạng thái: ${newStatus}`);
+                                            setEventStatus(newStatus);
+                                            // Immediately load events with the new status
+                                            setPage(1);
+                                            loadEvents(1, true, newStatus);
                                             hideFilterDialog();
                                         }}
                                     >

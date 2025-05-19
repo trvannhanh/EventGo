@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { FlatList, View, Text, ActivityIndicator, Alert, StyleSheet, RefreshControl } from 'react-native';
+import { FlatList, View, Text, ActivityIndicator, Alert, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
 import { Card, Title, Paragraph, Avatar, Divider, Surface, IconButton } from 'react-native-paper';
 import { AntDesign, MaterialCommunityIcons } from '@expo/vector-icons';
 import api, { endpoints, authApis } from '../../configs/Apis';
@@ -146,16 +146,61 @@ const ReviewList = ({ route, navigation }) => {
       color: COLORS.textSecondary,
       textAlign: 'center',
     },
-  });
-  const fetchReviews = async (isRefreshing = false) => {
+    replyContainer: {
+      marginTop: 12,
+      padding: 12,
+      backgroundColor: COLORS.primaryLight || '#e6e6ff',
+      borderRadius: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: COLORS.primary,
+    },
+    replyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    replyAuthor: {
+      fontWeight: 'bold',
+      fontSize: 14,
+      color: COLORS.primary,
+      marginLeft: 6,
+      flex: 1,
+    },
+    replyDate: {
+      fontSize: 12,
+      color: COLORS.textSecondary,
+    },
+    replyText: {
+      color: COLORS.text,
+      marginTop: 4,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    replyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 12,
+      padding: 8,
+      borderRadius: 6,
+      backgroundColor: COLORS.primaryLight || '#e6e6ff',
+      alignSelf: 'flex-start',
+    },
+    replyButtonText: {
+      color: COLORS.primary,
+      marginLeft: 6,
+      fontWeight: '500',
+      fontSize: 14,
+    },
+  });  const fetchReviews = async (isRefreshing = false) => {
     try {
       if (isRefreshing) {
         setRefreshing(true);
+        console.log('Refreshing reviews list...');
       } else if (!refreshing) {
         setLoading(true);
       }
       
-      // Lấy token từ AsyncStorage
+      // Get token from AsyncStorage 
       const token = await AsyncStorage.getItem('token');
       if (!token) {
         console.log("No token found, handling unauthenticated state");
@@ -165,28 +210,29 @@ const ReviewList = ({ route, navigation }) => {
         return;
       }
       
-      // Tạo authApi với token - KHÔNG sử dụng await vì authApis không phải hàm async
+      // Create authApi with token
       const authApi = authApis(token);
       
       const response = await authApi.get(endpoints.eventReviews(eventId));
+      console.log('Reviews fetched successfully, count:', response.data.reviews?.length || 0);
       
-      // Phân tích cấu trúc response để tương thích với cả hai định dạng
+      // Parse response to be compatible with both formats
       if (response.data && response.data.reviews) {
-        // Định dạng mới từ backend: { reviews: [...], average_rating: X, total_reviews: Y }
+        // New format from backend: { reviews: [...], average_rating: X, total_reviews: Y }
         setReviews(response.data.reviews || []);
         setAverageRating(response.data.average_rating || 0);
         setTotalReviews(response.data.total_reviews || 0);
       } else if (Array.isArray(response.data)) {
-        // Định dạng cũ: [...]
+        // Old format: [...]
         setReviews(response.data);
-        // Tính toán số liệu thống kê từ mảng
+        // Calculate statistics from array
         setTotalReviews(response.data.length);
         if (response.data.length > 0) {
           const sum = response.data.reduce((acc, review) => acc + (review.rating || 0), 0);
           setAverageRating(sum / response.data.length);
         }
       } else {
-        // Không có dữ liệu hợp lệ
+        // No valid data
         setReviews([]);
         setAverageRating(0);
         setTotalReviews(0);
@@ -194,10 +240,10 @@ const ReviewList = ({ route, navigation }) => {
       
       setError(null);
     } catch (err) {
-      console.error("Lỗi chi tiết:", JSON.stringify(err.response?.data || err.message));
+      console.error("Error details:", JSON.stringify(err.response?.data || err.message));
       
       if (err.response && err.response.status === 401) {
-        // Cải thiện UX với thông báo đăng nhập lại rõ ràng hơn
+        // Better UX with clear login again message
         Alert.alert(
           "Phiên đăng nhập hết hạn",
           "Bạn cần đăng nhập lại để tiếp tục.",
@@ -209,7 +255,7 @@ const ReviewList = ({ route, navigation }) => {
             {
               text: "Đăng nhập",
               onPress: async () => {
-                // Xóa token hiện tại vì đã hết hạn
+                // Clear current token as it's expired
                 await AsyncStorage.removeItem('token');
                 await AsyncStorage.removeItem('refresh_token');
                 navigation.navigate('login');
@@ -233,6 +279,24 @@ const ReviewList = ({ route, navigation }) => {
   useEffect(() => {
     fetchReviews();
   }, [eventId, user]);
+  
+  // Add an effect to handle reviews refreshed via navigation params
+  useEffect(() => {
+    if (route.params?.refreshReviews && route.params?.updatedReviews) {
+      console.log('ReviewList: Updating reviews with data from navigation params');
+      setReviews(route.params.updatedReviews);
+      
+      // Recalculate average rating and total reviews
+      if (route.params.updatedReviews.length > 0) {
+        const sum = route.params.updatedReviews.reduce((acc, review) => acc + (review.rating || 0), 0);
+        setAverageRating(sum / route.params.updatedReviews.length);
+      }
+      setTotalReviews(route.params.updatedReviews.length);
+      
+      // Clear the params to avoid re-updating on other navigation events
+      navigation.setParams({ refreshReviews: undefined, updatedReviews: undefined });
+    }
+  }, [route.params?.refreshReviews, route.params?.updatedReviews]);
   
   // Pull-to-refresh functionality
   const onRefresh = useCallback(() => {
@@ -303,6 +367,39 @@ const ReviewList = ({ route, navigation }) => {
           </View>
           
           <Text style={styles.reviewComment}>{item.comment || 'Không có nội dung'}</Text>
+          
+          {/* Hiển thị phản hồi từ BTC nếu có */}
+          {item.reply && (
+            <View style={styles.replyContainer}>
+              <View style={styles.replyHeader}>
+                <MaterialCommunityIcons name="reply" size={18} color={COLORS.primary} />
+                <Text style={styles.replyAuthor}>
+                  {item.replied_by_username || 'Ban tổ chức'} đã phản hồi:
+                </Text>
+                {item.replied_at && (
+                  <Text style={styles.replyDate}>
+                    {new Date(item.replied_at).toLocaleDateString()}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.replyText}>{item.reply}</Text>
+            </View>
+          )}
+            {/* Nút phản hồi dành cho BTC hoặc Admin */}
+          {user && (user.is_superuser || (item.event_id && user.role === 'organizer')) && !item.reply && (
+            <TouchableOpacity 
+              style={styles.replyButton}
+              onPress={() => navigation.navigate('ReplyToReview', { 
+                eventId: eventId, 
+                reviewId: item.id,
+                eventName: eventName,
+                fromScreen: 'ReviewList'
+              })}
+            >
+              <MaterialCommunityIcons name="reply" size={16} color={COLORS.primary} />
+              <Text style={styles.replyButtonText}>Phản hồi đánh giá</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </Surface>
     );

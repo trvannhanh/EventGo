@@ -2,7 +2,9 @@ import axios from "axios";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-export const API_BASE = 'http://192.168.79.100:8000/';
+
+export const API_BASE = 'http://192.168.1.41:8000/';
+
 
 export const endpoints = {
     // Auth endpoints
@@ -18,12 +20,14 @@ export const endpoints = {
     createOrder: (id) => API_BASE + `events/${id}/create-order/`,
     recommendedEvents: API_BASE + "events/recommended/",
     trendingEvents: API_BASE + "events/trending/",
-    searchEvents: API_BASE + "events/search-events/",
-    createEvent: API_BASE + "events/create/",
+    searchEvents: API_BASE + "events/search-events/",    createEvent: API_BASE + "events/create/",
     createTicket: (eventId) => API_BASE + `events/${eventId}/tickets/create/`,
+    updateTicket: (eventId, ticketId) => API_BASE + `events/${eventId}/tickets/${ticketId}/update/`,
+    deleteTicket: (eventId, ticketId) => API_BASE + `events/${eventId}/tickets/${ticketId}/delete/`,
     eventCategories: API_BASE + "event-categories/",
     discounts: (id) => API_BASE + `events/${id}/discounts/`, 
     discountsCheck: (id) => API_BASE + `events/${id}/check-discount/`,
+    updateEvent: (eventId) => API_BASE + `events/${eventId}/update/`,
     payOrder: (id) => API_BASE + `orders/${id}/pay/`,
     checkInTicket: (eventId) => `/events/${eventId}/checkin/`,
     orders: API_BASE + "orders/",
@@ -44,6 +48,7 @@ export const endpoints = {
     eventReviews: (eventId) => API_BASE + `events/${eventId}/feedback/`,
     myReviews: API_BASE + "reviews/my-reviews/",
     deleteReview: (reviewId) => API_BASE + `reviews/${reviewId}/`,
+    replyToReview: (eventId, reviewId) => API_BASE + `events/${eventId}/reviews/${reviewId}/reply/`,
 }
 
 export const authApis = (token) => {

@@ -18,14 +18,18 @@ const NotificationItem = ({ notification, onRead, navigation }) => {
       minute: '2-digit'
     });
   };
-
   const handlePress = () => {
     // Mark notification as read
-    onRead(notification.id);
-    
+    onRead(notification.id);    
     // If notification is related to an event, navigate to the event details
     if (notification.event) {
-      navigation.navigate('EventDetail', { eventId: notification.event });
+      navigation.navigate('Main', { 
+        screen: 'home',
+        params: {
+          screen: 'EventDetail',
+          params: { eventId: notification.event }
+        }
+      });
     }
   };
 
