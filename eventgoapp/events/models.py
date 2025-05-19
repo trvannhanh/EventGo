@@ -175,7 +175,7 @@ class OrderDetail(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_details')
     ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
     qr_code = models.CharField(max_length=255, unique=True)
-    qr_image = models.ImageField(upload_to='tickets/%Y/%m/%d/', blank=True, null=True)
+    qr_image = CloudinaryField('image', folder='tickets', blank=True, null=True)
     checked_in = models.BooleanField(default=False)
     checkin_time = models.DateTimeField(null=True)
     google_calendar_event_id = models.CharField(max_length=100, null=True, blank=True)

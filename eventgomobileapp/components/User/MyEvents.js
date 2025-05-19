@@ -190,6 +190,7 @@ const MyEvents = () => {
         isEarlyCheckIn = diffHours <= 24; // Check-in available within 24 hours before event
       }
 
+//       const canDiscount = ['ongoing', 'upcoming'].includes(item.status);
       const imageUri = item.image || 'https://via.placeholder.com/300x200?text=No+Image';
 
       return (
@@ -276,6 +277,7 @@ const MyEvents = () => {
                   Cập nhật sự kiện
                 </Button>
               )}
+
               {canCheckIn && (
                 <Button
                   mode="contained"
@@ -292,7 +294,26 @@ const MyEvents = () => {
                   {item.status === 'ongoing' ? 'Check-in' :
                     isEarlyCheckIn ? 'Early Check-in' : 'Check-in'}
                 </Button>
+
               )}
+
+              {canDiscount && (
+                <Button
+                  mode="contained"
+                  icon="ticket-percent"
+                  style={{ backgroundColor: COLORS.warning ?? '#FFA500', marginVertical: 4 }}
+                  onPress={() => 
+                    navigation.navigate('home', {
+                      screen: 'CreateDiscount',
+                      params: { eventId: item.id },
+                    })
+                  }
+                >
+                  Tạo Discount
+                </Button>
+
+              )}
+              
             </View>
           </View>
         </Surface>
@@ -322,6 +343,9 @@ const MyEvents = () => {
             screen: 'CreateEvent'
           }
         })}
+//         onPress={() => navigation.navigate('home', {
+//                       screen: 'CreateEvent',
+//                     })}
       >
         Tạo sự kiện mới
       </Button>
@@ -423,6 +447,9 @@ const MyEvents = () => {
             screen: 'CreateEvent'
           }
         })}
+//         onPress={() => navigation.navigate('home', {
+//                       screen: 'CreateEvent',
+//                     })}
       />
     </View>
   );
