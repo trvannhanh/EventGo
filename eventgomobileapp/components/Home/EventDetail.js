@@ -24,10 +24,13 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons, AntDesign, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import api, { endpoints, authApis } from '../../configs/Apis';
-import MyStyles from '../styles/MyStyles';
-import { MyUserContext } from '../../configs/MyContexts';
 
-const { width, height } = Dimensions.get('window');
+import MyStyles, { COLORS } from '../styles/MyStyles';
+import { MyUserContext } from "../../configs/MyContexts";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import MapView, { Marker } from 'react-native-maps';
+
+// const { width, height } = Dimensions.get('window');
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
@@ -113,9 +116,38 @@ const EventDetail = ({ route, navigation }) => {
       console.error('Lỗi khi gửi đánh giá:', err.response?.data || err.message);
       if (err.response && err.response.status === 401) {
         Alert.alert(
-          'Phiên đăng nhập hết hạn',
-          'Vui lòng đăng nhập lại để tiếp tục.',
-          [{ text: 'Đăng nhập', onPress: () => navigation.navigate('Login') }],
+          "Cần đăng nhập",
+          "Bạn cần đăng nhập để đánh giá sự kiện này.",
+          [{ text: "Đăng nhập", onPress: () => navigation.navigate('login') }]
+        );
+      }
+      // Xử lý lỗi không được phép (chưa tham gia sự kiện)
+      else if (err.response && err.response.status === 403) {
+        Alert.alert(
+          "Không thể đánh giá",
+          err.response?.data?.error || "Bạn không thể đánh giá sự kiện mà bạn không tham gia."
+        );
+      }
+      // Xử lý lỗi dữ liệu không hợp lệ
+      else if (err.response && err.response.status === 400) {
+        Alert.alert(
+          "Dữ liệu không hợp lệ",
+          err.response?.data?.error || "Vui lòng kiểm tra lại thông tin đánh giá của bạn."
+        );
+      }
+      // Xử lý lỗi server (500 Internal Server Error)
+      else if (err.response && err.response.status === 500) {
+        Alert.alert(
+          "Lỗi máy chủ",
+          "Đã xảy ra lỗi ở máy chủ. Vui lòng thử lại sau hoặc liên hệ quản trị viên."
+        );
+      }
+      // Xử lý lỗi không được phép đánh giá (chưa tham gia sự kiện)
+      else if (err.response?.data?.non_field_errors) {
+        // Hiển thị thông báo lỗi cụ thể từ server
+        Alert.alert(
+          "Không thể đánh giá",
+          err.response.data.non_field_errors[0] || "Bạn cần tham gia sự kiện trước khi đánh giá."
         );
       } else if (err.response?.data?.non_field_errors) {
         Alert.alert(
@@ -135,14 +167,29 @@ const EventDetail = ({ route, navigation }) => {
 
   const handleBookTicket = () => {
     if (!user) {
-      Alert.alert('Thông báo', 'Vui lòng đăng nhập để đặt vé.', [
-        { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
-        { text: 'Hủy', style: 'cancel' },
-      ]);
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt vé");
+      navigation.navigate('login');
       return;
     }
-    // Chuyển hướng đến màn hình BookTicket với eventId
-    navigation.navigate('BookTicket', { eventId: event.id });
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert("Phiên đăng nhập hết hạn", "Vui lòng đăng nhập lại");
+        navigation.navigate('login');
+        return;
+      }
+
+      navigation.navigate('BookTicket', {
+        eventId: event.id,
+        ticketTypeId: selectedTicketType.id,
+        quantity: quantity
+      });
+      setBookingModalVisible(false);
+    } catch (error) {
+      console.error("Error navigating to booking:", error);
+      Alert.alert("Lỗi", "Không thể đặt vé. Vui lòng thử lại sau.");
+    }
   };
 
   if (loading) return <ActivityIndicator style={{ marginTop: 40 }} />;
@@ -198,26 +245,62 @@ const EventDetail = ({ route, navigation }) => {
               </TouchableOpacity>
             )}
 
-            {/* Mô tả sự kiện */}
-            <Paragraph style={styles.description}>
-              <Text style={styles.label}>Mô tả: </Text>
-              <Text>{event.description}</Text>
-            </Paragraph>
+          {/* Bản đồ mini chỉ xem vị trí */}
+          {event.google_maps_link && (
+            <View style={{ height: 180, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+              <MapView
+                style={{ flex: 1 }}
+                pointerEvents="none" // Không cho tương tác
+                initialRegion={(() => {
+                  // Cố gắng lấy lat/lng từ link Google Maps
+                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  if (match) {
+                    return {
+                      latitude: parseFloat(match[1]),
+                      longitude: parseFloat(match[2]),
+                      latitudeDelta: 0.005,
+                      longitudeDelta: 0.005,
+                    };
+                  }
+                  // Nếu không parse được thì trả về vị trí mặc định (TP.HCM)
+                  return {
+                    latitude: 10.762622,
+                    longitude: 106.660172,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
+                  };
+                })()}
+              >
+                {/* Marker nếu parse được vị trí */}
+                {(() => {
+                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  if (match) {
+                    return (
+                      <Marker
+                        coordinate={{
+                          latitude: parseFloat(match[1]),
+                          longitude: parseFloat(match[2]),
+                        }}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
+              </MapView>
+            </View>
+          )}
 
-            {/* Đánh giá và nhận xét */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Title style={styles.sectionTitle}>Đánh giá và nhận xét</Title>
-                <View style={styles.ratingContainer}>
-                  <AntDesign name="star" size={20} color="#FFD700" />
-                  <Text style={styles.ratingText}>
-                    {reviews.length > 0
-                      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
-                      : 'Chưa có'}
-                  </Text>
-                  <Text style={styles.reviewCount}>({reviews.length})</Text>
-                </View>
-              </View>
+          {event.google_maps_link && (
+            <Button
+              mode="outlined"
+              icon="map-marker"
+              onPress={openMap}
+              style={{ marginTop: 8, borderColor: COLORS.primary }}
+              labelStyle={{ color: COLORS.primary }}
+            >
+              Xem trên Google Maps
+            </Button>
+          )}
 
               <Divider style={styles.divider} />
 

@@ -99,11 +99,12 @@ const Login = () => {
             marginBottom: 20,
         },
         card: {
-            ...MyStyles.card,
-            padding: 20,
+            ...MyStyles.card,            padding: 20,
             marginHorizontal: 0,
         }
-    });    const info = [{
+    });
+    
+    const info = [{
         label: 'Tên đăng nhập',
         field: 'username',
         icon: 'account',
@@ -119,8 +120,6 @@ const Login = () => {
         name: "lock"
     }];
 
-    
-
     const [user, setUser] = useState({});
     const [loading, setLoading] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
@@ -128,13 +127,12 @@ const Login = () => {
     const [passwordVisible, setPasswordVisible] = useState(false);
     const nav = useNavigation();
     const dispatch = useContext(MyDispatchContext);
-
+    
     const setState = (value, field) => {
         setUser({...user, [field]: value})
     }
 
-
-     const validate = () => {
+    const validate = () => {
         if (Object.values(user).length == 0) {
             setMsg("Vui lòng nhập thông tin!");
             return false;
@@ -149,31 +147,45 @@ const Login = () => {
         setMsg('');
         return true;
     }
-
+    
     const handleLogin = async () => {
         if (validate() === true) {
             try {
                 setLoading(true);
-    
                 let res = await Apis.post(endpoints['login'], {
                     ...user, 
                     client_id: 'm1lijofuYnBkhCeuIHp2Pi44NNGHSDB9WBIEcpHb',
                     client_secret: 'Bs9D3mrYsQwxqmPv4kQ8HcV5QU0TfhdQqL7p7OYBJtPoUDxlhPbQh3K9a2HPk7y4RsjcE8pW9hPo8dMHraSQaTqQvUFPZFbnp2tgmSjWWsqOJn4aOjyJ5DRQGnHaIoWt',
                     grant_type: 'password'
-                },{
+                }, {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
                 });
                 await AsyncStorage.setItem('token', res.data.access_token);
 
-                let u = await authApis(res.data.access_token).get(endpoints['current-user']);
-                
-                dispatch({
-                    "type": "login",
-                    "payload": u.data
-                });
-
-                if (res.status === 200)
+                try {
+                    let u = await authApis(res.data.access_token).get(endpoints['currentUser']);
+                    
+                    // Đảm bảo thêm token vào dữ liệu người dùng trước khi lưu
+                    const userData = {
+                        ...u.data,
+                        access_token: res.data.access_token
+                    };
+                    
+                    // Lưu thông tin người dùng vào AsyncStorage
+                    await AsyncStorage.setItem('user', JSON.stringify(userData));
+                    
+                    dispatch({
+                        "type": "LOGIN",
+                        "payload": userData
+                    });
+                    
+                    if (res.status === 200)
+                        nav.navigate('home');
+                } catch (userError) {
+                    // Nếu không lấy được thông tin người dùng, vẫn lưu token và đi tiếp
+                    setMsg("Đăng nhập thành công nhưng không lấy được thông tin người dùng");
                     nav.navigate('home');
+                }
 
             } catch (ex) {
                 if (ex.response && ex.response.status === 400) {
@@ -186,7 +198,9 @@ const Login = () => {
                 setLoading(false);
             }
         }
-    };    return (
+    };
+
+    return (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.container}>
                 <Image 
@@ -284,6 +298,5 @@ const Login = () => {
     );
 
 }
-
 
 export default Login;

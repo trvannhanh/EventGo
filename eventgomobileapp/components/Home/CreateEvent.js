@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { View, ScrollView, StyleSheet, Alert, Platform, TouchableOpacity, Image, KeyboardAvoidingView } from 'react-native';
-import { TextInput, Button, Title, Text, ActivityIndicator, Chip, HelperText, Surface, Portal, Modal, FAB, IconButton, Divider } from 'react-native-paper';
+import { TextInput, Button, Title, Text, ActivityIndicator, Chip, HelperText, Surface, Portal, Modal, FAB, IconButton, Divider, Card } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,13 +9,14 @@ import { MyUserContext } from '../../configs/MyContexts';
 import api, { endpoints, authApis } from '../../configs/Apis';
 import MyStyles, { COLORS } from '../styles/MyStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import MapView, { Marker } from 'react-native-maps';
 
-const EVENT_TYPES = [
-  { label: 'Âm nhạc', value: 'music' },
-  { label: 'Hội thảo', value: 'conference' },
-  { label: 'Thể thao', value: 'sports' },
-  { label: 'Workshop', value: 'workshop' },
-];
+// const EVENT_TYPES = [
+//   { label: 'Âm nhạc', value: 'music' },
+//   { label: 'Hội thảo', value: 'conference' },
+//   { label: 'Thể thao', value: 'sports' },
+//   { label: 'Workshop', value: 'workshop' },
+// ];
 
 const CreateEvent = ({ navigation }) => {
   const user = useContext(MyUserContext);
@@ -26,7 +27,7 @@ const CreateEvent = ({ navigation }) => {
   const [location, setLocation] = useState('');
   const [googleMapsLink, setGoogleMapsLink] = useState('');
   const [eventDate, setEventDate] = useState(new Date());
-  const [eventType, setEventType] = useState('music');
+  // const [eventType, setEventType] = useState('music');
   const [image, setImage] = useState(null);
   const [categoryId, setCategoryId] = useState(null);
   
@@ -44,6 +45,18 @@ const CreateEvent = ({ navigation }) => {
   const [categories, setCategories] = useState([]);
   const [errors, setErrors] = useState({});
   
+  const [marker, setMarker] = useState({
+    latitude: 10.762622, // Vị trí mặc định (TP.HCM)
+    longitude: 106.660172,
+  });
+
+  // Khi chọn vị trí trên bản đồ, cập nhật marker và googleMapsLink
+  const handleMapPress = (e) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setMarker({ latitude, longitude });
+    setGoogleMapsLink(`https://www.google.com/maps?q=${latitude},${longitude}`);
+  };
+
   // Fetch event categories on component mount
   useEffect(() => {
     const fetchCategories = async () => {
@@ -64,8 +77,7 @@ const CreateEvent = ({ navigation }) => {
     
     fetchCategories();
   }, []);
-  
-  // Image picker function
+    // Image picker function
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -82,6 +94,7 @@ const CreateEvent = ({ navigation }) => {
     });
     
     if (!result.canceled) {
+      console.log("Image selected:", result.assets[0].uri);
       setImage(result.assets[0].uri);
     }
   };
@@ -177,21 +190,20 @@ const CreateEvent = ({ navigation }) => {
     const token = await AsyncStorage.getItem('token');
     if (!token) {
       Alert.alert('Lỗi', 'Bạn cần đăng nhập để thực hiện chức năng này');
-      navigation.navigate('Login');
+      navigation.navigate('login');
       return;
     }
     
     try {
       setLoading(true);
-      const authApi = authApis(token);
-      
-      // Prepare event data
+      const authApi = authApis(token);      // Prepare event data
       const formData = new FormData();
       formData.append('name', name);
       formData.append('description', description);
       formData.append('date', eventDate.toISOString());
       formData.append('location', location);
-      formData.append('category', categoryId);
+      formData.append('category_id', categoryId); // Sửa category -> category_id
+      formData.append('active', 'true'); // Đảm bảo event active
       
       if (googleMapsLink) {
         formData.append('google_maps_link', googleMapsLink);
@@ -200,36 +212,73 @@ const CreateEvent = ({ navigation }) => {
       // Calculate total tickets
       const totalTickets = tickets.reduce((sum, t) => sum + parseInt(t.quantity || 0), 0);
       formData.append('ticket_limit', totalTickets);
-      
-      // Add image
-      if (image) {
-        const filename = image.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename);
-        const fileType = match ? `image/${match[1]}` : 'image';
-        
-        formData.append('image', {
-          uri: image,
-          name: filename,
-          type: fileType,
-        });
+        // Add image
+      if (image) {        try {
+          const filename = image.split('/').pop();
+          // Xử lý lỗi khi filename không có phần mở rộng
+          const match = /\.(\w+)$/.exec(filename);
+          const fileType = match ? `image/${match[1].toLowerCase()}` : 'image/jpeg';
+          
+          console.log("Preparing image:", {
+            uri: Platform.OS === 'android' ? image : image.replace('file://', ''),
+            name: filename || 'event_image.jpg',
+            type: fileType,
+          });
+          
+          // Đảm bảo đúng định dạng dữ liệu
+          const imageData = {
+            uri: Platform.OS === 'android' ? image : image.replace('file://', ''),
+            name: filename || 'event_image.jpg',
+            type: fileType,
+          };
+          
+          formData.append('image', imageData);
+          
+          // Kiểm tra xem formData có giá trị image chưa
+          console.log("FormData after adding image:", formData);
+          
+        } catch (error) {
+          console.error("Error preparing image:", error);
+          Alert.alert(
+            'Cảnh báo',
+            'Có vấn đề khi xử lý ảnh. Vui lòng thử lại với ảnh khác.',
+            [{ text: 'OK' }]
+          );
+          return; // Dừng việc tạo sự kiện
+        }
       }
       
-      // Create the event
-      const eventResponse = await authApi.post(endpoints.createEvent, formData, {
+      console.log("Sending form data:", Object.fromEntries(formData._parts));
+        // Create the event - thêm timeout dài hơn và bổ sung xử lý lỗi
+      console.log("Endpoint: ", endpoints.createEvent);
+      
+      // Thiết lập lại authApi với timeout dài hơn và xử lý multipart/form-data tốt hơn
+      const eventResponse = await authApis(token).post(endpoints.createEvent, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          'Accept': 'application/json',
         },
+        timeout: 60000, // 60 seconds timeout for image upload
+        transformRequest: (data, headers) => {
+          // Giữ nguyên, không transform, vì đã là FormData
+          return data;
+        }
       });
       
+      console.log("Event created successfully:", eventResponse.data);
       const eventId = eventResponse.data.id;
       
       // Create tickets for the event
       for (const ticket of tickets) {
-        await authApi.post(endpoints.createTicket(eventId), {
-          type: ticket.type,
-          price: ticket.price,
-          quantity: ticket.quantity,
-        });
+        try {
+          await authApi.post(endpoints.createTicket(eventId), {
+            type: ticket.type,
+            price: parseInt(ticket.price),
+            quantity: parseInt(ticket.quantity),
+          });
+        } catch (ticketError) {
+          console.error("Error creating ticket:", ticketError);
+        }
       }
       
       Alert.alert(
@@ -237,12 +286,45 @@ const CreateEvent = ({ navigation }) => {
         'Sự kiện đã được tạo thành công!',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
+        } catch (error) {
+      console.error('Error creating event:', error);
       
-    } catch (error) {
-      console.error('Error creating event:', error.response?.data || error.message);
+      // Xử lý các loại lỗi khác nhau
+      let errorMessage = 'Không thể tạo sự kiện. Vui lòng thử lại sau.';
+      
+      if (error.response) {
+        // Lỗi từ server (có response)
+        console.error('Server error data:', error.response.data);
+        console.error('Server error status:', error.response.status);
+        
+        if (error.response.data && typeof error.response.data === 'object') {
+          // Lấy thông báo lỗi từ server nếu có
+          const serverErrors = Object.entries(error.response.data)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('\n');
+          
+          if (serverErrors) {
+            errorMessage = `Lỗi: ${serverErrors}`;
+          }
+        }
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+          // Chuyển người dùng đến trang đăng nhập nếu cần
+          setTimeout(() => navigation.navigate('login'), 1000);
+        }
+      } else if (error.request) {
+        // Lỗi không nhận được response từ server
+        console.error('No response received:', error.request);
+        errorMessage = 'Không nhận được phản hồi từ máy chủ. Vui lòng kiểm tra kết nối mạng.';
+      } else if (error.message && error.message.includes('timeout')) {
+        // Lỗi timeout
+        errorMessage = 'Quá thời gian kết nối. Vui lòng thử lại sau.';
+      }
+      
       Alert.alert(
         'Lỗi',
-        'Không thể tạo sự kiện. Vui lòng thử lại sau.',
+        errorMessage,
         [{ text: 'OK' }]
       );
     } finally {
@@ -276,7 +358,7 @@ const CreateEvent = ({ navigation }) => {
           />
           {errors.name && <HelperText type="error">{errors.name}</HelperText>}
           
-          <View style={styles.inputGroup}>
+          {/* <View style={styles.inputGroup}>
             <Text style={styles.label}>Loại sự kiện:</Text>
             <Picker
               selectedValue={eventType}
@@ -287,11 +369,11 @@ const CreateEvent = ({ navigation }) => {
                 <Picker.Item key={type.value} label={type.label} value={type.value} />
               ))}
             </Picker>
-          </View>
+          </View> */}
           
           {categories.length > 0 && (
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Danh mục:</Text>
+              <Text style={styles.label}>Loại sự kiện:</Text>
               <Picker
                 selectedValue={categoryId}
                 style={styles.picker}
@@ -366,7 +448,30 @@ const CreateEvent = ({ navigation }) => {
             error={!!errors.location}
           />
           {errors.location && <HelperText type="error">{errors.location}</HelperText>}
-          
+
+          {/* Bản đồ mini chọn vị trí */}
+          <Text style={styles.label}>Chọn vị trí trên bản đồ:</Text>
+          <MapView
+            style={{ height: 200, marginVertical: 10, borderRadius: 8 }}
+            initialRegion={{
+              latitude: marker.latitude,
+              longitude: marker.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            region={{
+              latitude: marker.latitude,
+              longitude: marker.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            onPress={handleMapPress}
+          >
+            <Marker coordinate={marker} />
+          </MapView>
+          <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginBottom: 8 }}>
+            Link Google Maps sẽ tự động cập nhật: {googleMapsLink}
+          </Text>
           <TextInput
             label="Đường dẫn Google Maps (tùy chọn)"
             value={googleMapsLink}
@@ -476,13 +581,14 @@ const CreateEvent = ({ navigation }) => {
       </Card>
     </ScrollView>
   );
-};
-
-const styles = StyleSheet.create({
+};  const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
     padding: 16,
+  },
+  card: {
+    marginBottom: 20,
   },
   scrollContent: {
     flexGrow: 1,
@@ -553,6 +659,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: COLORS.primaryLight,
   },
+  imageContainer: {
+    marginVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 10,
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  imageButton: {
+    width: '100%',
+    marginTop: 8,
+  },
   imageUploadButton: {
     borderWidth: 1,
     borderColor: COLORS.primary,
@@ -614,15 +748,54 @@ const styles = StyleSheet.create({
   },
   addTicketButton: {
     marginVertical: 16,
-  },
-  submitButtonContainer: {
+  },  submitButtonContainer: {
     marginTop: 24,
     marginBottom: 40,
+  },
+  submitButton: {
+    marginTop: 20,
+    paddingVertical: 8,
+    backgroundColor: COLORS.primary || '#6200ee',
   },
   errorText: {
     color: COLORS.error,
     fontSize: 14,
     marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    color: COLORS.text,
+    fontSize: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    marginBottom: 8,
+    color: COLORS.text,
+  },
+  ticketCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ticketTitle: {
+    fontSize: 16,
+    fontWeight: 'bold', 
+    color: COLORS.primary,
+  },
+  ticketsContainer: {
+    marginTop: 20,
+  },
+  addButton: {
+    backgroundColor: COLORS.primary || '#6200ee',
   },
 });
 

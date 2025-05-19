@@ -31,6 +31,9 @@ export const endpoints = {
     // User related endpoints
     myTickets: API_BASE + "users/my-tickets/",
     myRank: API_BASE + "users/my-rank/",
+    myNotifications: API_BASE + "users/my-notifications/",
+    markNotificationRead: (id) => API_BASE + `users/mark-notification-read/${id}/`,
+    markAllNotificationsRead: API_BASE + "users/mark-all-notifications-read/",
     
     // Ticket endpoints
     // Updated to match backend implementation (should be a ticket/order detail endpoint)
@@ -49,10 +52,12 @@ export const authApis = (token) => {
         baseURL: API_BASE,
         headers: {
             'Authorization': `Bearer ${token}`
-        }
+        },
+        timeout: 10000 // Default 10 second timeout
     })
 }
 
 export default axios.create({
-    baseURL: API_BASE
+    baseURL: API_BASE,
+    timeout: 10000 // Default 10 second timeout
 })
