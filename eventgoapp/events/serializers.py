@@ -95,6 +95,7 @@ class EventSerializer(BaseSerializer):
     category = EventCategorySerializer(read_only=True)
     average_rating = serializers.SerializerMethodField(read_only=True)
     review_count = serializers.SerializerMethodField(read_only=True)
+    tickets = serializers.SerializerMethodField(read_only=True)
     
     # Thêm các trường để map đúng cho frontend
     event_date = serializers.SerializerMethodField(read_only=True)
@@ -124,6 +125,10 @@ class EventSerializer(BaseSerializer):
     
     def get_review_count(self, obj):
         return obj.reviews.count()
+    
+    def get_tickets(self, obj):
+        tickets = Ticket.objects.filter(event=obj)
+        return TicketSerializer(tickets, many=True).data
     
     def get_event_date(self, obj):
         if obj.date:
@@ -173,11 +178,26 @@ class EventSerializer(BaseSerializer):
 
 class TicketSerializer(serializers.ModelSerializer):
     """Serializer cho vé sự kiện"""
-    event = EventSerializer(read_only=True)
+    event_id = serializers.PrimaryKeyRelatedField(
+        source='event',
+        queryset=Event.objects.all(),
+        required=False,
+        write_only=True
+    )
+    event = serializers.SerializerMethodField(read_only=True)
+    
+    def get_event(self, obj):
+        # Chỉ trả về ID của event để tránh vòng lặp vô hạn
+        if obj.event:
+            return {
+                'id': obj.event.id,
+                'name': obj.event.name
+            }
+        return None
 
     class Meta:
         model = Ticket
-        fields = ['id', 'event', 'type', 'price', 'quantity']
+        fields = ['id', 'event', 'event_id', 'type', 'price', 'quantity']
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     """Serializer chi tiết đơn hàng"""
@@ -203,7 +223,8 @@ class ReviewSerializer(serializers.ModelSerializer):
     event_id = serializers.IntegerField(write_only=True)
     user_avatar = serializers.SerializerMethodField()
     event_name = serializers.SerializerMethodField()
-    
+    replied_by_username = serializers.SerializerMethodField()
+
     def get_user_avatar(self, obj):
         if obj.user.avatar:
             return obj.user.avatar.url
@@ -211,6 +232,11 @@ class ReviewSerializer(serializers.ModelSerializer):
     
     def get_event_name(self, obj):
         return obj.event.name if obj.event else None
+
+    def get_replied_by_username(self, obj):
+        if obj.replied_by:
+            return obj.replied_by.username
+        return None
     
     def validate_rating(self, value):
         if value < 1 or value > 5:
@@ -251,7 +277,8 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ['id', 'user', 'user_id', 'event_id', 'rating', 'comment', 'created_at', 'user_avatar', 'event_name']
+        fields = ['id', 'user', 'user_id', 'event_id', 'rating', 'comment', 'created_at', 'user_avatar', 'event_name', 'reply', 'replied_by', 'replied_at', 'replied_by_username']
+        read_only_fields = ('replied_by', 'replied_at', 'replied_by_username')
 
 class DiscountSerializer(serializers.ModelSerializer):
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())

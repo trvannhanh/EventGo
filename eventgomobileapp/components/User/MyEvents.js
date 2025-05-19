@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, RefreshControl, Image, TouchableOpaci
 import { Button, Surface, Chip, ActivityIndicator, Divider, FAB } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MyUserContext } from '../../configs/MyContexts';
 import Apis, { endpoints } from '../../configs/Apis';
 import { COLORS } from '../../components/styles/MyStyles';
@@ -18,77 +18,138 @@ const MyEvents = () => {
   const [activeTab, setActiveTab] = useState('upcoming');
   const [loadError, setLoadError] = useState(null);
   const isMounted = useRef(true);
+  // Add pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMoreEvents, setHasMoreEvents] = useState(true);
 
   useEffect(() => {
+    console.log('Component mounted');
+    isMounted.current = true;
+
     return () => {
+      console.log('Component unmounting');
       isMounted.current = false;
     };
   }, []);
 
-  const fetchEvents = useCallback(async (status) => {
-    if (loading || refreshing || !isMounted.current) {
-      console.log('Bỏ qua fetchEvents: loading=', loading, 'refreshing=', refreshing, 'isMounted=', isMounted.current);
+  const fetchEvents = useCallback(async (status, page = 1, shouldRefresh = false) => {
+    console.log(`🔄 fetchEvents được gọi với status=${status}, page=${page}, loading=${loading}, refreshing=${refreshing}, isMounted=${isMounted.current}`);
+
+    if (!isMounted.current) {
+      console.log('Component unmounted, không gọi API');
+      return;
+    }
+
+    if ((loading || refreshing) && !shouldRefresh) {
+      console.log(`⏳ Đang tải dữ liệu, bỏ qua: loading=${loading}, refreshing=${refreshing}`);
       return;
     }
 
     try {
+      console.log(`🚀 Bắt đầu tải sự kiện cho tab: ${status}, trang: ${page}`);
       setLoading(true);
       setLoadError(null);
-      console.log(`Gọi API: status=${status}, time=${new Date().toISOString()}`);
+
+      // Chỉ reset events khi đây là trang đầu tiên hoặc refresh
+      if (page === 1 || shouldRefresh) {
+        setEvents([]);
+      }
 
       const token = await AsyncStorage.getItem('token');
       if (!token) {
-        if (isMounted.current) {
-          setLoadError('Vui lòng đăng nhập để xem sự kiện');
-        }
+        console.log('❌ Không tìm thấy token');
+        setLoadError('Vui lòng đăng nhập để xem sự kiện');
+        setLoading(false);
+        setInitialLoading(false);
+        setHasMoreEvents(false);
         return;
       }
 
-      let url = `${endpoints['events']}?organizer=me&status=${status}`;
+      let url = `${endpoints['events']}?organizer=me&status=${status}&page=${page}`;
+      console.log(`📡 Gọi API: ${url}`);
+
       const response = await Apis.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const newEvents = Array.isArray(response.data.results) ? response.data.results : [];
-      console.log(`Nhận được ${newEvents.length} sự kiện`);
-      if (isMounted.current) {
-        setEvents(newEvents);
-        setInitialLoading(false);
-        setRefreshing(false);
+      // Chỉ tiếp tục nếu component vẫn mounted
+      if (!isMounted.current) {
+        console.log('Component unmounted sau khi gọi API, không cập nhật state');
+        return;
       }
+
+      const newEvents = Array.isArray(response.data.results) ? response.data.results : [];
+      console.log(`✅ Nhận được ${newEvents.length} sự kiện cho trạng thái "${status}" trang ${page}`);
+
+      // Kiểm tra nếu đây là trang cuối cùng
+      const hasNext = response.data.next !== null;
+      setHasMoreEvents(hasNext);
+
+      // Kiểm tra nếu có sự kiện không khớp với trạng thái hiện tại
+      const matchingEvents = newEvents.filter(event => event.status === status);
+      const mismatchedEvents = newEvents.filter(event => event.status !== status);
+
+      if (mismatchedEvents.length > 0) {
+        console.log(`⚠️ Phát hiện ${mismatchedEvents.length} sự kiện không khớp trạng thái:`);
+        console.log(mismatchedEvents.map(e => `${e.id}:${e.name}:${e.status}`));
+      }
+
+      console.log('Tất cả sự kiện nhận được:', newEvents.map(e => `${e.id}:${e.name}:${e.status}`));
+
+      // Sắp xếp sự kiện theo ngày, mới nhất lên đầu
+      const sortedEvents = [...matchingEvents].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // Nối danh sách sự kiện mới vào danh sách cũ nếu đây không phải trang đầu tiên
+      if (page === 1 || shouldRefresh) {
+        setEvents(sortedEvents);
+      } else {
+        setEvents(prevEvents => [...prevEvents, ...sortedEvents]);
+      }
+
+      // Cập nhật currentPage
+      setCurrentPage(page);
+      setInitialLoading(false);
     } catch (error) {
-      console.error('Lỗi khi tải sự kiện:', error.message);
+      console.error('❌ Lỗi khi tải sự kiện:', error.message);
       if (isMounted.current) {
         setLoadError('Không thể tải sự kiện. Vui lòng thử lại.');
-        setInitialLoading(false);
-        setRefreshing(false);
+        setHasMoreEvents(false);
       }
     } finally {
       if (isMounted.current) {
         setLoading(false);
+        setRefreshing(false);
       }
     }
-  }, []); // Loại bỏ loading, refreshing khỏi dependencies
+  }, []);
 
   const onRefresh = useCallback(() => {
-    if (loading || refreshing) {
-      console.log('Bỏ qua onRefresh: loading=', loading, 'refreshing=', refreshing);
-      return;
-    }
-    console.log('Làm mới thủ công, activeTab:', activeTab);
+    console.log(`🔄 onRefresh được gọi, activeTab=${activeTab}`);
     setRefreshing(true);
-    fetchEvents(activeTab);
-  }, [fetchEvents, activeTab]); // Loại bỏ loading, refreshing khỏi dependencies
-
-  useEffect(() => {
-    console.log('useEffect chạy, activeTab:', activeTab);
-    fetchEvents(activeTab);
+    setCurrentPage(1); // Reset to first page
+    fetchEvents(activeTab, 1, true);
   }, [activeTab, fetchEvents]);
 
-  // Debug user thay đổi
+  // Sử dụng useFocusEffect để tải lại dữ liệu khi màn hình được focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔍 Screen focused, reloading data for activeTab:', activeTab);
+      setCurrentPage(1); // Reset to first page when screen gets focus
+      fetchEvents(activeTab, 1);
+
+      return () => {
+        console.log('Screen unfocused');
+      };
+    }, [activeTab, fetchEvents])
+  );
+
+  // Cập nhật khi activeTab thay đổi
   useEffect(() => {
-    console.log('user thay đổi:', user);
-  }, [user]);
+    console.log(`📑 Tab thay đổi: ${activeTab}`);
+    setCurrentPage(1); // Reset to first page when tab changes
+    setHasMoreEvents(true); // Reset hasMoreEvents flag
+    fetchEvents(activeTab, 1);
+  }, [activeTab, fetchEvents]);
 
   const formatDate = useCallback((dateString) => {
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -97,7 +158,7 @@ const MyEvents = () => {
 
   const getStatusChip = useCallback((status) => {
     const chipStyles = {
-      upcoming: { icon: 'calendar-clock', bg: COLORS.primary, text: 'Sắp diễn ra' },
+      upcoming: { icon: 'calendar-clock', bg: COLORS.accent, text: 'Sắp diễn ra' },
       ongoing: { icon: 'calendar-today', bg: COLORS.success, text: 'Đang diễn ra' },
       completed: { icon: 'calendar-check', bg: COLORS.error, text: 'Đã kết thúc' },
       canceled: { icon: 'calendar-remove', bg: COLORS.textSecondary, text: 'Đã hủy' },
@@ -112,11 +173,23 @@ const MyEvents = () => {
         {text}
       </Chip>
     );
-  }, []);
-
-  const renderEventItem = useCallback(
+  }, []); const renderEventItem = useCallback(
     ({ item }) => {
+      console.log(`🎫 Render sự kiện ${item.id} - ${item.name}, status=${item.status}, activeTab=${activeTab}`);
+
+      // Only show check-in button for ongoing and upcoming events
       const canCheckIn = ['ongoing', 'upcoming'].includes(item.status);
+
+      // For upcoming events, check if they're within 24 hours of start time to allow early check-in
+      let isEarlyCheckIn = false;
+      if (item.status === 'upcoming' && item.date) {
+        const eventDate = new Date(item.date);
+        const now = new Date();
+        const diffTime = eventDate - now;
+        const diffHours = diffTime / (1000 * 60 * 60);
+        isEarlyCheckIn = diffHours <= 24; // Check-in available within 24 hours before event
+      }
+
       const imageUri = item.image || 'https://via.placeholder.com/300x200?text=No+Image';
 
       return (
@@ -160,12 +233,14 @@ const MyEvents = () => {
             </View>
             <Divider />
             <View style={styles.actionButtons}>
-              <Button
-                mode="outlined"
+              <Button mode="outlined"
                 icon="information-outline"
                 style={{ borderColor: COLORS.primary, marginVertical: 4 }}
                 textColor={COLORS.primary}
-                onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
+                onPress={() => navigation.navigate('home', {
+                  screen: 'EventDetail',
+                  params: { eventId: item.id }
+                })}
               >
                 Chi tiết
               </Button>
@@ -183,19 +258,39 @@ const MyEvents = () => {
               >
                 Chỉ đường
               </Button>
+              {item.status === 'upcoming' && (
+                <Button
+                  mode="contained"
+                  icon="pencil-outline"
+                  style={{ backgroundColor: COLORS.accent, marginVertical: 4 }} // Or another suitable color
+                  onPress={() => {
+                    navigation.navigate('Main', { // Assuming CreateEvent is within the 'Main' stack, then 'home' tab
+                      screen: 'home', 
+                      params: {
+                        screen: 'CreateEvent',
+                        params: { eventId: item.id, isUpdate: true }
+                      }
+                    });
+                  }}
+                >
+                  Cập nhật sự kiện
+                </Button>
+              )}
               {canCheckIn && (
                 <Button
                   mode="contained"
                   icon="qrcode-scan"
                   style={{ backgroundColor: COLORS.success, marginVertical: 4 }}
-                  onPress={() =>
+                  onPress={() => {
+                    // Navigate directly to the CheckIn screen with the event ID
                     navigation.navigate('home', {
                       screen: 'CheckIn',
-                      params: { eventId: item.id },
-                    })
-                  }
+                      params: { eventId: item.id }
+                    });
+                  }}
                 >
-                  Check-in
+                  {item.status === 'ongoing' ? 'Check-in' :
+                    isEarlyCheckIn ? 'Early Check-in' : 'Check-in'}
                 </Button>
               )}
             </View>
@@ -203,31 +298,55 @@ const MyEvents = () => {
         </Surface>
       );
     },
-    [navigation, formatDate, getStatusChip]
+    [navigation, formatDate, getStatusChip, activeTab]
   );
 
   const renderEmptyComponent = useCallback(() => (
     <View style={styles.emptyContainer}>
-      <MaterialCommunityIcons name="calendar-off" size={80} color={COLORS.primary} />
+      <MaterialCommunityIcons name="calendar-end" size={80} color={COLORS.primary} />
       <Text style={styles.emptyText}>
         {activeTab === 'upcoming'
           ? 'Bạn chưa có sự kiện nào sắp tới'
           : activeTab === 'ongoing'
-          ? 'Bạn chưa có sự kiện nào đang diễn ra'
-          : activeTab === 'completed'
-          ? 'Bạn chưa có sự kiện nào đã kết thúc'
-          : 'Bạn chưa có sự kiện nào bị hủy'}
+            ? 'Bạn chưa có sự kiện nào đang diễn ra'
+            : activeTab === 'completed'
+              ? 'Bạn chưa có sự kiện nào đã kết thúc'
+              : 'Bạn chưa có sự kiện nào bị hủy'}
       </Text>
       <Button
-        mode="contained"
-        icon="calendar-plus"
+        mode="contained" icon="calendar-plus"
         style={{ marginTop: 16, backgroundColor: COLORS.primary }}
-        onPress={() => navigation.navigate('CreateEvent')}
+        onPress={() => navigation.navigate('Main', {
+          screen: 'home',
+          params: {
+            screen: 'CreateEvent'
+          }
+        })}
       >
         Tạo sự kiện mới
       </Button>
     </View>
   ), [activeTab, navigation]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!loading && hasMoreEvents) {
+      console.log(`📜 Tải thêm sự kiện: trang ${currentPage + 1}`);
+      fetchEvents(activeTab, currentPage + 1);
+    }
+  }, [loading, hasMoreEvents, currentPage, activeTab, fetchEvents]);
+
+  const renderFooter = useCallback(() => {
+    if (!hasMoreEvents) return null;
+
+    return (
+      <View style={{ paddingVertical: 20 }}>
+        <ActivityIndicator size="small" color={COLORS.primary} />
+        <Text style={{ textAlign: 'center', marginTop: 8, color: COLORS.textSecondary }}>
+          Đang tải thêm...
+        </Text>
+      </View>
+    );
+  }, [hasMoreEvents]);
 
   return (
     <View style={styles.container}>
@@ -242,18 +361,20 @@ const MyEvents = () => {
             key={tab}
             style={[styles.tab, activeTab === tab && styles.activeTab]}
             onPress={() => {
-              console.log('Chuyển tab:', tab);
-              setActiveTab(tab);
+              if (activeTab !== tab) {
+                console.log(`🔄 Chuyển tab từ ${activeTab} sang ${tab}`);
+                setActiveTab(tab);
+              }
             }}
           >
             <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
               {tab === 'upcoming'
                 ? 'Sắp diễn ra'
                 : tab === 'ongoing'
-                ? 'Đang diễn ra'
-                : tab === 'completed'
-                ? 'Đã kết thúc'
-                : 'Đã hủy'}
+                  ? 'Đang diễn ra'
+                  : tab === 'completed'
+                    ? 'Đã kết thúc'
+                    : 'Đã hủy'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -272,29 +393,36 @@ const MyEvents = () => {
             Thử lại
           </Button>
         </View>
-      ) : (
-        <FlatList
-          data={events}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderEventItem}
-          ListEmptyComponent={renderEmptyComponent}
-          contentContainerStyle={{ flexGrow: 1 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[COLORS.primary]}
-              tintColor={COLORS.primary}
-            />
-          }
-        />
+      ) : (<FlatList
+        data={events}
+        keyExtractor={(item) => `event-${item.id}`}
+        renderItem={renderEventItem}
+        ListEmptyComponent={renderEmptyComponent}
+        contentContainerStyle={{ flexGrow: 1 }}
+        extraData={activeTab} // Ensure FlatList re-renders when activeTab changes
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={renderFooter}
+      />
       )}
 
       <FAB
-        style={styles.fab}
-        icon="calendar-plus"
+        style={styles.fab} icon="calendar-plus"
         color="white"
-        onPress={() => navigation.navigate('CreateEvent')}
+        onPress={() => navigation.navigate('Main', {
+          screen: 'home',
+          params: {
+            screen: 'CreateEvent'
+          }
+        })}
       />
     </View>
   );

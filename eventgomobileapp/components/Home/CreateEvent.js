@@ -18,8 +18,10 @@ import MapView, { Marker } from 'react-native-maps';
 //   { label: 'Workshop', value: 'workshop' },
 // ];
 
-const CreateEvent = ({ navigation }) => {
+const CreateEvent = ({ navigation, route }) => {
   const user = useContext(MyUserContext);
+  const eventId = route.params?.eventId;
+  const isUpdate = route.params?.isUpdate || false;
   
   // Form state
   const [name, setName] = useState('');
@@ -49,6 +51,8 @@ const CreateEvent = ({ navigation }) => {
     latitude: 10.762622, // Vị trí mặc định (TP.HCM)
     longitude: 106.660172,
   });
+  // State to track deleted ticket IDs
+  const [deletedTickets, setDeletedTickets] = useState([]);
 
   // Khi chọn vị trí trên bản đồ, cập nhật marker và googleMapsLink
   const handleMapPress = (e) => {
@@ -76,7 +80,58 @@ const CreateEvent = ({ navigation }) => {
     };
     
     fetchCategories();
-  }, []);
+
+    if (isUpdate && eventId) {
+      const fetchEventDetails = async () => {
+        setLoading(true);
+        try {
+          const token = await AsyncStorage.getItem('token');
+          if (!token) {
+            Alert.alert('Lỗi', 'Bạn cần đăng nhập để xem chi tiết sự kiện.');
+            navigation.navigate('login');
+            setLoading(false);
+            return;
+          }          // Assuming you have an endpoint for event details like 'event-detail'
+          // You might need to create this endpoint in Apis.js:
+          // 'event-detail': (eventId) => `/events/${eventId}/`,
+          const res = await authApis(token).get(endpoints.eventDetail(eventId)); // Using the correct endpoint name 'eventDetail'
+          const eventData = res.data;
+          
+          setName(eventData.name);
+          setDescription(eventData.description);
+          setLocation(eventData.location);
+          setGoogleMapsLink(eventData.google_maps_link || '');
+          setEventDate(new Date(eventData.date));
+          setCategoryId(eventData.category.id); // Assuming category is an object with id
+          setImage(eventData.image); // This might be a URL, ensure pickImage can handle or display it
+          
+          // Assuming eventData.tickets is an array of ticket objects
+          if (eventData.tickets && eventData.tickets.length > 0) {
+            setTickets(eventData.tickets.map(t => ({
+              id: t.id, // Keep track of ticket ID for updates
+              type: t.type,
+              price: t.price.toString(),
+              quantity: t.quantity.toString(),
+            })));
+          } else {
+            // If no tickets from API, initialize with one empty ticket form
+             setTickets([{ type: '', price: '', quantity: '' }]);
+          }
+
+          if (eventData.latitude && eventData.longitude) {
+            setMarker({ latitude: eventData.latitude, longitude: eventData.longitude });
+          }
+
+        } catch (error) {
+          console.error('Failed to fetch event details:', error);
+          Alert.alert('Lỗi', 'Không thể tải dữ liệu sự kiện để cập nhật.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchEventDetails();
+    }
+  }, [eventId, isUpdate, navigation]);
     // Image picker function
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -128,12 +183,51 @@ const CreateEvent = ({ navigation }) => {
     } else {
       Alert.alert('Thông báo', 'Bạn chỉ có thể tạo tối đa 3 loại vé cho một sự kiện.');
     }
-  };
-  
-  // Handle removing ticket type
-  const removeTicketType = (index) => {
+  };  // Handle removing ticket type
+  const removeTicketType = async (index) => {
     if (tickets.length > 1) {
       const newTickets = [...tickets];
+      const ticket = newTickets[index];
+      
+      // If the ticket has an ID, it exists in the database, so delete it
+      if (ticket.id) {
+        try {
+          const token = await AsyncStorage.getItem('token');
+          if (!token) {
+            Alert.alert('Lỗi', 'Bạn cần đăng nhập để thực hiện chức năng này');
+            navigation.navigate('login');
+            return;
+          }
+          
+          const authApi = authApis(token);
+          console.log(`Deleting ticket with ID: ${ticket.id}`);
+          
+          // Kiểm tra xem endpoint đúng không
+          console.log(`Using endpoint: ${endpoints.deleteTicket(eventId, ticket.id)}`);
+          
+          // Gọi API xóa vé
+          const response = await authApi.delete(endpoints.deleteTicket(eventId, ticket.id));
+          console.log(`Successfully deleted ticket with ID: ${ticket.id}`, response.status);
+          
+          // Keep track of deleted tickets for backup (using functional update để đảm bảo có state mới nhất)
+          setDeletedTickets(prevDeletedTickets => [...prevDeletedTickets, ticket.id]);
+        } catch (error) {
+          console.error("Error deleting ticket:", error);
+          if (error.response) {
+            console.error("Error response data:", error.response.data);
+            console.error("Error response status:", error.response.status);
+          }
+          Alert.alert(
+            'Lỗi',
+            'Không thể xóa loại vé. Vui lòng thử lại sau.',
+            [{ text: 'OK' }]
+          );
+          
+          return;
+        }
+      }
+      
+      // Remove from UI
       newTickets.splice(index, 1);
       setTickets(newTickets);
     } else {
@@ -250,40 +344,95 @@ const CreateEvent = ({ navigation }) => {
       
       console.log("Sending form data:", Object.fromEntries(formData._parts));
         // Create the event - thêm timeout dài hơn và bổ sung xử lý lỗi
-      console.log("Endpoint: ", endpoints.createEvent);
+      console.log("Endpoint: ", isUpdate ? endpoints.updateEvent(eventId) : endpoints.createEvent);
       
       // Thiết lập lại authApi với timeout dài hơn và xử lý multipart/form-data tốt hơn
-      const eventResponse = await authApis(token).post(endpoints.createEvent, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Accept': 'application/json',
-        },
-        timeout: 60000, // 60 seconds timeout for image upload
-        transformRequest: (data, headers) => {
-          // Giữ nguyên, không transform, vì đã là FormData
-          return data;
+      let eventResponse;      if (isUpdate) {
+        // Using the correct updateEvent endpoint
+        eventResponse = await authApi.put(endpoints.updateEvent(eventId), formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json',
+          },
+          timeout: 60000,
+          transformRequest: (data, headers) => data,
+        });
+      } else {
+        eventResponse = await authApi.post(endpoints.createEvent, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json',
+          },
+          timeout: 60000, 
+          transformRequest: (data, headers) => data,
+        });
+      }
+      
+      console.log(isUpdate ? "Event updated successfully:" : "Event created successfully:", eventResponse.data);
+      const currentEventId = eventResponse.data.id; // This will be the same eventId if updating
+      
+      // Create or Update tickets for the event
+      // For updates, this logic might need to be more sophisticated:
+      // 1. Identify new tickets to create.
+      // 2. Identify existing tickets to update.
+      // 3. Identify tickets to delete (if a ticket type was removed).
+      // For simplicity, this example re-creates/updates all tickets.
+      // A more robust solution would involve sending ticket IDs for existing tickets.      // Delete existing tickets if in update mode and tickets are managed this way
+      if (isUpdate && deletedTickets.length > 0) {
+        console.log(`Found ${deletedTickets.length} tickets to clean up`);
+        // Only attempt to delete tickets that might have failed in the immediate deletion
+        for (const ticketId of deletedTickets) {
+          try {
+            // Kiểm tra xem vé cụ thể có tồn tại không (thay vì chỉ kiểm tra danh sách vé)
+            try {
+              // Tìm cách kiểm tra nếu vé vẫn tồn tại
+              const ticketsResponse = await authApi.get(endpoints.ticketsOfEvent(currentEventId));
+              const ticketExists = ticketsResponse.data.some(t => t.id === ticketId);
+              
+              if (ticketExists) {
+                console.log(`Cleanup: Deleting ticket with ID: ${ticketId}`);
+                const deleteResponse = await authApi.delete(endpoints.deleteTicket(currentEventId, ticketId));
+                console.log(`Cleanup result for ticket ${ticketId}:`, deleteResponse.status);
+              } else {
+                console.log(`Ticket ${ticketId} no longer exists, skipping cleanup`);
+              }
+            } catch (checkError) {
+              console.error("Error checking if ticket exists:", checkError.message);
+              // Nếu không thể kiểm tra, vẫn thử xóa
+              console.log(`Attempting to delete ticket ${ticketId} anyway`);
+              await authApi.delete(endpoints.deleteTicket(currentEventId, ticketId));
+            }
+          } catch (deleteError) {
+            // Just log errors, don't stop the flow
+            console.error("Cleanup error for ticket:", deleteError);
+            if (deleteError.response) {
+              console.error("Cleanup error status:", deleteError.response.status);
+              console.error("Cleanup error data:", deleteError.response.data);
+            }
+          }
         }
-      });
-      
-      console.log("Event created successfully:", eventResponse.data);
-      const eventId = eventResponse.data.id;
-      
-      // Create tickets for the event
+      }
+
       for (const ticket of tickets) {
         try {
-          await authApi.post(endpoints.createTicket(eventId), {
+          const ticketData = {
             type: ticket.type,
             price: parseInt(ticket.price),
             quantity: parseInt(ticket.quantity),
-          });
+          };          if (isUpdate && ticket.id) {
+            // Use the updateTicket endpoint to update existing tickets
+            await authApi.put(endpoints.updateTicket(currentEventId, ticket.id), ticketData);
+          } else {
+            await authApi.post(endpoints.createTicket(currentEventId), ticketData);
+          }
         } catch (ticketError) {
-          console.error("Error creating ticket:", ticketError);
+          console.error("Error processing ticket:", ticketError.response ? ticketError.response.data : ticketError.message);
         }
       }
       
       Alert.alert(
         'Thành công',
-        'Sự kiện đã được tạo thành công!',
+        `Sự kiện đã được ${isUpdate ? 'cập nhật' : 'tạo'} thành công!`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
         } catch (error) {
@@ -332,11 +481,20 @@ const CreateEvent = ({ navigation }) => {
     }
   };
   
-  if (loading) {
+  if (loading && !isUpdate) { // Show loading only for initial create or if not fetching update data
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#7FC8C2" />
-        <Text style={styles.loadingText}>Đang tạo sự kiện...</Text>
+        <Text style={styles.loadingText}>Đang {isUpdate ? 'tải dữ liệu...' : 'tạo sự kiện...'}</Text>
+      </View>
+    );
+  }
+
+  if (loading && isUpdate) { // Specific loading for fetching event data
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#7FC8C2" />
+        <Text style={styles.loadingText}>Đang tải dữ liệu sự kiện...</Text>
       </View>
     );
   }
@@ -345,7 +503,7 @@ const CreateEvent = ({ navigation }) => {
     <ScrollView style={styles.container}>
       <Card style={styles.card}>
         <Card.Content>
-          <Title style={styles.title}>Tạo sự kiện mới</Title>
+          <Title style={styles.title}>{isUpdate ? 'Cập nhật sự kiện' : 'Tạo sự kiện mới'}</Title>
           
           {/* Event Basic Information */}
           <TextInput
@@ -574,8 +732,9 @@ const CreateEvent = ({ navigation }) => {
             mode="contained" 
             onPress={handleSubmit} 
             style={styles.submitButton}
+            disabled={loading} // Disable button while loading
           >
-            Tạo sự kiện
+            {loading ? (isUpdate ? 'Đang cập nhật...' : 'Đang tạo...') : (isUpdate ? 'Cập nhật' : 'Tạo sự kiện')}
           </Button>
         </Card.Content>
       </Card>

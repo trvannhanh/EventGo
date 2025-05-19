@@ -156,59 +156,82 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     def update_event_statuses(self, queryset):
         """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
         current_time = now()
-        queryset.filter(date__lt=current_time, status=Event.EventStatus.UPCOMING).update(
-            status=Event.EventStatus.COMPLETED)
-        queryset.filter(date__gt=current_time, status=Event.EventStatus.COMPLETED).update(
-            status=Event.EventStatus.UPCOMING)
+        # Logic cập nhật từ UPCOMING/ONGOING sang COMPLETED nếu đã qua ngày
+        queryset.filter(
+            Q(status=Event.EventStatus.UPCOMING) | Q(status=Event.EventStatus.ONGOING),
+            date__lt=current_time 
+        ).update(status=Event.EventStatus.COMPLETED)
+        
+        # Logic cập nhật từ COMPLETED sang UPCOMING nếu ngày sự kiện trong tương lai (có thể do chỉnh sửa)
+        queryset.filter(
+            status=Event.EventStatus.COMPLETED,
+            date__gte=current_time 
+        ).update(status=Event.EventStatus.UPCOMING)
+
+        # Logic cập nhật từ UPCOMING sang ONGOING nếu sự kiện đang diễn ra
+        # Giả sử một sự kiện diễn ra trong cả ngày, hoặc bạn có start_time và end_time để so sánh chính xác hơn
+        # Ví dụ đơn giản: nếu date là ngày hôm nay và status là upcoming -> ongoing
+        # Cần định nghĩa rõ hơn "ongoing" nghĩa là gì (ví dụ: trong khoảng start_time và end_time)
+        # Tạm thời giữ nguyên logic cũ cho ongoing nếu không có start/end time cụ thể
+        # queryset.filter(date__date=current_time.date(), status=Event.EventStatus.UPCOMING).update(status=Event.EventStatus.ONGOING)
         return queryset
 
     def get_queryset(self):
-        query = self.queryset
+        # Start with the base queryset defined for the ViewSet
+        query = self.queryset # This is Event.objects.filter(active=True)
 
-        q = self.request.query_params.get('q')
-        cate_id = self.request.query_params.get('cateId')
-        status = self.request.query_params.get('status')
-        organizer = self.request.query_params.get('organizer')
+        # Get query parameters
+        q_param = self.request.query_params.get('q')
+        cate_id_param = self.request.query_params.get('cateId')
+        status_param = self.request.query_params.get('status')
+        organizer_param = self.request.query_params.get('organizer')
 
-        filters = Q()
+        # --- Stage 1: Apply general filters (search, category, organizer) ---
+        general_filters = Q()
+        if q_param:
+            general_filters &= Q(name__icontains=q_param)
 
-        if q:
-            filters |= Q(name__icontains=q)
-
-        # Xử lý tham số tìm kiếm
-
-        if cate_id:
+        if cate_id_param:
             try:
-                filters &= Q(category_id=int(cate_id))
+                general_filters &= Q(category_id=int(cate_id_param))
             except ValueError:
-                raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})        
-            if status:
-                valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
-            if status not in valid_statuses:
-                raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
-            filters &= Q(status=status)
+                raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})
 
-        # Lọc theo nhà tổ chức
-        if organizer:
-            if organizer == 'me':
-                if not self.request.user.is_authenticated:
-                    raise ValidationError({"error": "Cần đăng nhập để lấy sự kiện của bạn."})
-                if self.request.user.role not in [User.Role.ORGANIZER, User.Role.ADMIN]:
-                    raise ValidationError({"error": "Chỉ nhà tổ chức hoặc admin mới có thể xem sự kiện của mình."})
-                filters &= Q(organizer=self.request.user)
-            else:
+        if organizer_param:
+            if organizer_param == 'me':
+                if hasattr(self.request, 'user') and self.request.user.is_authenticated:
+                    if self.request.user.role not in [User.Role.ORGANIZER, User.Role.ADMIN]:
+                        return Event.objects.none() 
+                    general_filters &= Q(organizer=self.request.user)
+                else:
+                    return Event.objects.none()
+            else: 
                 try:
-                    organizer_id = int(organizer)
-                    filters &= Q(organizer_id=organizer_id)
+                    general_filters &= Q(organizer_id=int(organizer_param))
                 except ValueError:
-                    raise ValidationError({"error": "Tham số organizer phải là 'me' hoặc ID hợp lệ."})
+                    raise ValidationError({"error": "Tham số organizer ID không hợp lệ."})
+        
+        if general_filters: 
+            query = query.filter(general_filters)
 
-        # Áp dụng bộ lọc
-        if filters:
-            query = query.filter(filters)
+        # --- Stage 2: Update statuses for the current generally filtered set ---
+        # This ensures statuses are based on current time BEFORE specific status filtering.
+        query = self.update_event_statuses(query)
 
-        # Cập nhật trạng thái
-        return self.update_event_statuses(query)
+        # --- Stage 3: Apply the specific status filter requested by the client ---
+        if status_param:
+            valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
+            if status_param not in valid_statuses:
+                raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
+            
+            # Filter by the specific status AFTER statuses have been updated
+            query = query.filter(status=status_param) 
+            print(f"Applied specific status filter: {status_param} AFTER status update logic.")
+        
+        # DEBUG: Log the filter conditions and result count
+        print(f"Event Query - Final - Requested Status: {status_param}, Organizer: {organizer_param}, Result count: {query.count()}")
+        
+        return query
 
 
     @action(methods=['get'], url_path='detail', detail=True)
@@ -224,34 +247,54 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     def update_event(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
         user = request.user
+
+        # Check 1: Event status must be 'upcoming'
+        if event.status != Event.EventStatus.UPCOMING:
+            return Response({"error": "Chỉ có thể cập nhật sự kiện sắp diễn ra."}, 
+                            status=status.HTTP_403_FORBIDDEN)
+
+        # Check 2: User must be the organizer or a superuser
         if not user.is_superuser and event.organizer != user:
-            return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, 
+                            status=status.HTTP_403_FORBIDDEN)
         
-        previous_data = EventSerializer(event).data
+        # Lưu lại các giá trị cũ trực tiếp từ đối tượng event TRƯỚC KHI cập nhật
+        old_name = event.name
+        old_date = event.date  # Đây là đối tượng date/datetime của Python
+        old_location = event.location
+        
         serializer = EventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        updated_event = serializer.save()
+        updated_event = serializer.save() # Đối tượng 'event' được cập nhật (updated_event và event là cùng một instance)
         
-        # Check if significant fields were updated
         significant_updates = []
         
-        if 'name' in request.data and previous_data['name'] != request.data['name']:
-            significant_updates.append(f"Tên sự kiện đã được thay đổi thành: {request.data['name']}")
+        # So sánh các giá trị mới từ updated_event với các giá trị cũ đã lưu
+        if updated_event.name != old_name:
+            significant_updates.append(f"Tên sự kiện đã được thay đổi thành: {updated_event.name}")
         
-        if 'date' in request.data and previous_data['date'] != request.data['date']:
-            significant_updates.append(f"Ngày diễn ra sự kiện đã thay đổi thành: {request.data['date']}")
+        if updated_event.date != old_date:
+            # Định dạng ngày tháng cho đẹp trong thông báo
+            new_date_str = updated_event.date.strftime('%d/%m/%Y') if hasattr(updated_event.date, 'strftime') else str(updated_event.date)
+            significant_updates.append(f"Ngày diễn ra sự kiện đã thay đổi thành: {new_date_str}")
         
-        if 'location' in request.data and previous_data['location'] != request.data['location']:
-            significant_updates.append(f"Địa điểm sự kiện đã thay đổi thành: {request.data['location']}")
+        if updated_event.location != old_location:
+            significant_updates.append(f"Địa điểm sự kiện đã thay đổi thành: {updated_event.location}")
             
         if significant_updates:
-            # Create update message
-            update_message = f"Sự kiện {updated_event.name} đã được cập nhật:\n" + "\n".join(significant_updates)
-            
-            # Send notification asynchronously
+            # Tạo thông điệp cập nhật, sử dụng updated_event.name là tên mới nhất
+            update_message = f"Sự kiện {old_name} đã được cập nhật:\\n" + "\\n".join(significant_updates)
+            print(update_message)
+            print("Thông điệp cập nhật:")
+            print(updated_event.id)
+            print("Loai")
+            print(type(updated_event.id))
+            print(type(update_message))
+              # Send notification asynchronously
             from events.tasks import send_event_update_notifications
+            # Use delay instead of apply_async for simpler task execution
             send_event_update_notifications.delay(updated_event.id, update_message)
-        
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['delete'], url_path='delete', detail=True, permission_classes=[IsAuthenticated])
@@ -289,7 +332,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         if event.date < current_time and event.status == Event.EventStatus.UPCOMING:  # 6/4
             event.status = Event.EventStatus.COMPLETED
             event.save(update_fields=['status'])        # Tạo thông báo cho tất cả người dùng về sự kiện mới
-        message = f"Sự kiện mới '{event.name}' đã được tạo và sẽ diễn ra vào {event.date.strftime('%d/%m/%Y')}"
+        message = f"Sự kiện mới '{event.name}' đã được tạo and sẽ diễn ra vào {event.date.strftime('%d/%m/%Y')}"
         
         # Lấy tất cả người dùng có vai trò là người tham dự (attendee)
         from django.contrib.auth import get_user_model
@@ -386,6 +429,27 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+    @action(methods=['post'], url_path='reviews/(?P<review_pk>[0-9]+)/reply', detail=True, permission_classes=[IsAuthenticated])
+    def reply_to_review(self, request, pk=None, review_pk=None):
+        event = get_object_or_404(Event, id=pk)
+        review = get_object_or_404(Review, id=review_pk, event=event)
+        user = request.user
+
+        if not user.is_superuser and event.organizer != user:
+            return Response({"error": "Bạn không có quyền phản hồi đánh giá này."}, status=status.HTTP_403_FORBIDDEN)
+
+        reply_content = request.data.get('reply')
+        if not reply_content:
+            return Response({"error": "Nội dung phản hồi không được để trống."}, status=status.HTTP_400_BAD_REQUEST)
+
+        review.reply = reply_content
+        review.replied_by = user
+        review.replied_at = now()
+        review.save()
+
+        serializer = ReviewSerializer(review)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(methods=['get'], url_path='recommended', detail=False, permission_classes=[IsAuthenticated])
     def get_recommended_events(self, request):
         user = request.user
@@ -458,6 +522,159 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         tickets = Ticket.objects.filter(event=event)
         serializer = TicketSerializer(tickets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(methods=['post'], url_path='tickets/create', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def create_ticket(self, request, pk=None):
+        """
+        Create a ticket for an event.
+        POST /events/{event_id}/tickets/create/
+        """
+        event = get_object_or_404(Event, id=pk)
+        
+        # Check if the user is the organizer or an admin
+        if not request.user.is_superuser and event.organizer != request.user:
+            return Response(
+                {"error": "You don't have permission to create tickets for this event."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Get ticket data from request
+        ticket_type = request.data.get('type')
+        price = request.data.get('price')
+        quantity = request.data.get('quantity')
+        
+        # Validate required fields
+        if not all([ticket_type, price, quantity]):
+            return Response(
+                {"error": "Missing required fields: type, price, or quantity"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            # Convert price and quantity to appropriate types
+            price = float(price)
+            quantity = int(quantity)
+            
+            # Validate price and quantity
+            if price < 0:
+                return Response(
+                    {"error": "Price cannot be negative"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            if quantity <= 0:
+                return Response(
+                    {"error": "Quantity must be positive"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Create the ticket
+            ticket = Ticket.objects.create(
+                event=event,
+                type=ticket_type,
+                price=price,
+                quantity=quantity
+            )
+            
+            # Return the created ticket
+            serializer = TicketSerializer(ticket)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Invalid price or quantity values"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(methods=['put'], url_path='tickets/(?P<ticket_id>[^/.]+)/update', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def update_ticket(self, request, pk=None, ticket_id=None):
+        """
+        Update a ticket for an event.
+        PUT /events/{event_id}/tickets/{ticket_id}/update/
+        """
+        event = get_object_or_404(Event, id=pk)
+        ticket = get_object_or_404(Ticket, id=ticket_id, event=event)
+        
+        # Check if the user is the organizer or an admin
+        if not request.user.is_superuser and event.organizer != request.user:
+            return Response(
+                {"error": "You don't have permission to update tickets for this event."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Get ticket data from request
+        ticket_type = request.data.get('type')
+        price = request.data.get('price')
+        quantity = request.data.get('quantity')
+        
+        # Validate required fields
+        if not all([ticket_type, price, quantity]):
+            return Response(
+                {"error": "Missing required fields: type, price, or quantity"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            # Convert price and quantity to appropriate types
+            price = float(price)
+            quantity = int(quantity)
+            
+            # Validate price and quantity
+            if price < 0:
+                return Response(
+                    {"error": "Price cannot be negative"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            if quantity <= 0:
+                return Response(
+                    {"error": "Quantity must be positive"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
+            # Update the ticket
+            ticket.type = ticket_type
+            ticket.price = price
+            ticket.quantity = quantity
+            ticket.save()
+            
+            # Return the updated ticket
+            serializer = TicketSerializer(ticket)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Invalid price or quantity values"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(methods=['delete'], url_path='tickets/(?P<ticket_id>[^/.]+)/delete', detail=True, permission_classes=[permissions.IsAuthenticated])
+    def delete_ticket(self, request, pk=None, ticket_id=None):
+        """
+        Delete a ticket for an event.
+        DELETE /events/{event_id}/tickets/{ticket_id}/delete/
+        """
+        event = get_object_or_404(Event, id=pk)
+        ticket = get_object_or_404(Ticket, id=ticket_id, event=event)
+        
+        # Check if the user is the organizer or an admin
+        if not request.user.is_superuser and event.organizer != request.user:
+            return Response(
+                {"error": "You don't have permission to delete tickets for this event."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Check if the ticket has been sold
+        if OrderDetail.objects.filter(ticket=ticket).exists():
+            return Response(
+                {"error": "Cannot delete ticket as it has already been sold."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Delete the ticket
+        ticket.delete()
+        
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(methods=['post'], url_path='create-order', detail=True, permission_classes=[permissions.IsAuthenticated])
     def create_order(self, request, pk=None):
@@ -949,26 +1166,8 @@ class PaymentViewSet(viewsets.ViewSet):
                 order.payment_status = Order.PaymentStatus.PAID
                 order.save()
 
-                # Lấy extra_data từ vnp_OrderInfo
-                order_info = data.get("vnp_OrderInfo", "")
-                extra_data = ""
-                if "|extraData:" in order_info:
-                    extra_data = order_info.split("|extraData:")[1]
-                if not extra_data:
-                    return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
-
-                try:
-                    extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
-                    ticket_id = extra_data_decoded['ticket_id']
-                    quantity = extra_data_decoded['quantity']
-                except (ValueError, KeyError):
-                    return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-                ticket = get_object_or_404(Ticket, id=ticket_id)
-                if ticket.quantity < quantity:
-                    order.payment_status = Order.PaymentStatus.FAILED
-                    order.save()
-                    return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
+                ticket = order.ticket
+                quantity = order.quantity
 
                 qr_image_urls = []
                 for i in range(quantity):
@@ -976,7 +1175,6 @@ class PaymentViewSet(viewsets.ViewSet):
                     order_detail = OrderDetail.objects.create(
                         order=order,
                         ticket=ticket,
-                        quantity=1,
                         qr_code=qr_code
                     )
 
@@ -1263,15 +1461,6 @@ class PaymentViewSet(viewsets.ViewSet):
                             'location': event.location,
                             'description': f"Ticket: {ticket.type}",
                             'start': {
-                                'dateTime': event.date.isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'end': {
-                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'reminders': {
-                                'useDefault': False,
                                 'overrides': [
                                     {'method': 'email', 'minutes': 24 * 60},
                                     {'method': 'popup', 'minutes': 30},

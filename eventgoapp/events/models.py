@@ -221,6 +221,9 @@ class Review(BaseModel):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='reviews')
     rating = models.PositiveIntegerField()
     comment = models.TextField(blank=True)
+    reply = models.TextField(blank=True, null=True)  # Organizer/Admin reply
+    replied_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='review_replies')
+    replied_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Review by {self.user.username} for {self.event.name}"

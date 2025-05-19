@@ -3,12 +3,14 @@ import uuid
 from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.utils.timezone import now
 from django.contrib.auth.hashers import make_password
 from events.models import (
     User, EventCategory, Event, Ticket, Order, OrderDetail, 
     Review, Discount, Notification, ChatMessage, EventTrend
 )
 from django.db import transaction
+from events.utils import generate_qr_image
 
 class Command(BaseCommand):
     help = 'Create sample data for EventGo application'
@@ -345,7 +347,6 @@ class Command(BaseCommand):
                 )
         
         self.stdout.write(f'Created tickets for {events.count()} events')
-    
     def create_orders(self):
         attendees = User.objects.filter(role=User.Role.ATTENDEE)
         completed_events = Event.objects.filter(status=Event.EventStatus.COMPLETED)
@@ -366,36 +367,39 @@ class Command(BaseCommand):
                 # Choose a random payment method
                 payment_method = random.choice([Order.PaymentMethod.MOMO, Order.PaymentMethod.VNPAY, Order.PaymentMethod.CREDIT_CARD])
                 
+                # Choose a random ticket
+                ticket = random.choice(list(tickets))
+                quantity = random.randint(1, 3)
+                total_amount = ticket.price * quantity
+                
                 # Create order
-                total_amount = 0
                 order = Order.objects.create(
                     user=attendee,
-                    total_amount=total_amount,  # Will update later
+                    ticket=ticket,
+                    total_amount=total_amount,
                     payment_status=Order.PaymentStatus.PAID,
-                    payment_method=payment_method
+                    payment_method=payment_method,
+                    quantity=quantity
                 )
                 
-                # Add tickets to order
-                for ticket in random.sample(list(tickets), min(len(tickets), 2)):
-                    quantity = random.randint(1, 3)
-                    # Generate a QR code (simulate with UUID)
-                    qr_code = str(uuid.uuid4())
-                    
-                    # Create order detail
-                    OrderDetail.objects.create(
-                        order=order,
-                        ticket=ticket,
-                        quantity=quantity,
-                        qr_code=qr_code,
-                        checked_in=True,
-                        checkin_time=event.date + timedelta(minutes=random.randint(0, 120))
-                    )
-                    
-                    total_amount += ticket.price * quantity
+                # Generate a QR code
+                qr_code = str(uuid.uuid4())
                 
-                # Update order total
-                order.total_amount = total_amount
-                order.save()
+                # Create order detail
+                order_detail = OrderDetail.objects.create(
+                    order=order,
+                    ticket=ticket,
+                    qr_code=qr_code,
+                    checked_in=True,
+                    checkin_time=event.date + timedelta(minutes=random.randint(0, 120))
+                )
+                
+                # Generate QR image (using utility function if available)
+                try:
+                    qr_image = generate_qr_image(qr_code)
+                    order_detail.qr_image.save(f'qr_{qr_code}.png', qr_image, save=True)
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f'Could not generate QR image: {e}'))
         
         # For upcoming events
         for event in upcoming_events:
@@ -412,38 +416,40 @@ class Command(BaseCommand):
                 # Choose a random payment method
                 payment_method = random.choice([Order.PaymentMethod.MOMO, Order.PaymentMethod.VNPAY, Order.PaymentMethod.CREDIT_CARD])
                 
+                # Choose a random ticket
+                ticket = random.choice(list(tickets))
+                quantity = random.randint(1, 2)
+                total_amount = ticket.price * quantity
+                
                 # Create order
-                total_amount = 0
                 order = Order.objects.create(
                     user=attendee,
-                    total_amount=total_amount,  # Will update later
+                    ticket=ticket,
+                    total_amount=total_amount,
                     payment_status=Order.PaymentStatus.PAID,
-                    payment_method=payment_method
+                    payment_method=payment_method,
+                    quantity=quantity
                 )
                 
-                # Add tickets to order
-                for ticket in random.sample(list(tickets), min(len(tickets), 2)):
-                    quantity = random.randint(1, 2)
-                    # Generate a QR code (simulate with UUID)
-                    qr_code = str(uuid.uuid4())
-                    
-                    # Create order detail
-                    OrderDetail.objects.create(
-                        order=order,
-                        ticket=ticket,
-                        quantity=quantity,
-                        qr_code=qr_code,
-                        checked_in=False
-                    )
-                    
-                    total_amount += ticket.price * quantity
+                # Generate a QR code
+                qr_code = str(uuid.uuid4())
                 
-                # Update order total
-                order.total_amount = total_amount
-                order.save()
+                # Create order detail
+                order_detail = OrderDetail.objects.create(
+                    order=order,
+                    ticket=ticket,
+                    qr_code=qr_code,
+                    checked_in=False
+                )
+                
+                # Generate QR image (using utility function if available)
+                try:
+                    qr_image = generate_qr_image(qr_code)
+                    order_detail.qr_image.save(f'qr_{qr_code}.png', qr_image, save=True)
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f'Could not generate QR image: {e}'))
         
         self.stdout.write('Created orders for events')
-    
     def create_reviews(self):
         attendees = User.objects.filter(role=User.Role.ATTENDEE)
         completed_events = Event.objects.filter(status=Event.EventStatus.COMPLETED)
@@ -468,7 +474,7 @@ class Command(BaseCommand):
         for event in completed_events:
             # Get attendees who have ordered tickets for this event
             orders = Order.objects.filter(
-                tickets__event=event, 
+                ticket__event=event, 
                 payment_status=Order.PaymentStatus.PAID
             ).values_list('user', flat=True).distinct()
             
@@ -533,7 +539,6 @@ class Command(BaseCommand):
                 )
         
         self.stdout.write('Created discounts for upcoming events')
-    
     def create_notifications(self):
         attendees = User.objects.filter(role=User.Role.ATTENDEE)
         upcoming_events = Event.objects.filter(status=Event.EventStatus.UPCOMING)
@@ -545,7 +550,7 @@ class Command(BaseCommand):
         for event in upcoming_events:
             # Get orders for this event
             orders = Order.objects.filter(
-                tickets__event=event, 
+                ticket__event=event, 
                 payment_status=Order.PaymentStatus.PAID
             ).values_list('user', flat=True).distinct()
             
