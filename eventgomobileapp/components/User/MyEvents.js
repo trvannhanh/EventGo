@@ -415,6 +415,25 @@ const MyEvents = () => {
                   Tạo Discount
                 </Button>
               )}
+
+              {canDiscount && (
+                <Button
+                  mode="contained"
+                  icon="ticket-percent"
+                  style={{
+                    backgroundColor: COLORS.warning ?? "#FFA500",
+                    marginVertical: 4,
+                  }}
+                  onPress={() =>
+                    navigation.navigate("home", {
+                      screen: "Chat",
+                      params: { eventId: item.id },
+                    })
+                  }
+                >
+                  Chat
+                </Button>
+              )}
             </View>
           </View>
         </Surface>

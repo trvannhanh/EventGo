@@ -8,13 +8,14 @@ import Login from "./components/User/Login";
 import Register from "./components/User/Register";
 import Profile from "./components/User/Profile";
 import MyTickets from "./components/User/MyTickets";
+import MyOrders from "./components/User/MyOrders";
 import MyEvents from "./components/User/MyEvents";
 import BookTicket from "./components/Home/BookTicket";
 import ReviewList from "./components/Home/ReviewList";
 import ReplyToReview from "./components/Home/ReplyToReview";
 import MyReviews from "./components/User/MyReviews";
 import CreateEvent from "./components/Home/CreateEvent";
-import CheckIn from "./components/Home/CheckIn";
+import CheckIn from "./components/Home/Checkin";
 import NotificationsScreen from "./components/User/Notifications";
 import AnalyticsScreen from "./components/Dashboard/AnalyticsScreen"; // Import the AnalyticsScreen
 import EventDetailAnalytics from "./components/Dashboard/EventDetailAnalytics"; // Import the EventDetailAnalytics
@@ -38,6 +39,7 @@ import * as Constants from 'expo-constants';
 import { authApis, endpoints } from "./configs/Apis";
 // Import the new notification handler
 import { initializeNotifications } from "./configs/notificationHandler";
+import Chat from "./components/Home/Chat";
 
 // Bỏ qua một số cảnh báo không cần thiết
 LogBox.ignoreLogs([
@@ -62,6 +64,7 @@ const StackNavigator = () => {
       <Stack.Screen name="ReplyToReview" component={ReplyToReview} />
       <Stack.Screen name="CreateEvent" component={CreateEvent} />
       <Stack.Screen name="CheckIn" component={CheckIn} />
+      <Stack.Screen name="Chat" component={Chat} />
     </Stack.Navigator>
   );
 };
@@ -180,7 +183,7 @@ const TabNavigator = () => {
             <Tab.Screen
               name="tickets"
               component={
-                user && user.role === "organizer" ? MyEvents : MyTickets
+                user && user.role === "organizer" ? MyEvents : MyOrders
               }
               options={{
                 tabBarIcon: ({ color, size }) => (
