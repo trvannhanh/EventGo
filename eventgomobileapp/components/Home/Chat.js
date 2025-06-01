@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { View, StyleSheet, FlatList, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, FlatList, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { db } from '../../configs/firebase';
 import { COLORS } from '../styles/MyStyles';
@@ -12,24 +12,23 @@ import { ref, onValue, push, set, off } from 'firebase/database';
 const Chat = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { orderId } = route.params;
+  const { eventId } = route.params; // Removed orderId
   const user = useContext(MyUserContext);
   const [messages, setMessages] = useState([]);
   const [organizerId, setOrganizerId] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [localUser, setLocalUser] = useState(user);
 
-  // Lấy thông tin người dùng nếu user từ context không có
+  // Fetch user data if not available in context
   useEffect(() => {
     const fetchUserData = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
         if (!token) {
-          throw new Error('Không tìm thấy token trong AsyncStorage');
+          throw new Error('No token found in AsyncStorage');
         }
         const authApi = authApis(token);
         const response = await authApi.get(endpoints.currentUser);
-        console.log('User data from API:', response.data);
         const userData = {
           id: response.data.id,
           firstName: response.data.first_name || response.data.username,
@@ -40,11 +39,9 @@ const Chat = () => {
           role: response.data.role,
         };
         setLocalUser(userData);
-        // Cập nhật MyUserContext
-       
       } catch (error) {
-        console.error('Lỗi khi lấy thông tin người dùng:', error);
-        Alert.alert('Lỗi', 'Không thể tải thông tin người dùng. Vui lòng đăng nhập lại.');
+        console.error('Error fetching user data:', error);
+        Alert.alert('Error', 'Could not load user information. Please log in again.');
       }
     };
 
@@ -55,48 +52,27 @@ const Chat = () => {
     }
   }, [user]);
 
-
-  // Lấy thông tin organizer từ API
+  // Fetch organizer information
   useEffect(() => {
     const fetchOrganizer = async () => {
       try {
-        const token = await AsyncStorage.getItem('token');
-        console.log('Token:', token);
-        if (!token) {
-          throw new Error('Không tìm thấy token trong AsyncStorage');
-        }
-
-        const url = `${endpoints['orders']}${orderId}/`;
-        const response = await Apis.get(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        const details = response.data.order?.details;
-        if (Array.isArray(details) && details.length > 0) {
-          const event = details[0]?.ticket?.event;
-          const organizerId = event?.organizer?.id;
-
-          if (organizerId) {
-            setOrganizerId(organizerId);
-          } else {
-            console.warn('Không tìm thấy organizerId trong event:', event);
-          }
+        const response = await Apis.get(endpoints.eventDetail(eventId));
+        const organizerId = response.data.organizer.id;
+        if (organizerId) {
+          setOrganizerId(organizerId);
         } else {
-          console.warn('Không có details trong đơn hàng:', response.data.order);
+          console.warn('No organizerId found in event:', response.data);
         }
       } catch (error) {
-        console.error('Lỗi khi lấy thông tin organizer:', error);
+        console.error('Error fetching organizer:', error);
       }
     };
     fetchOrganizer();
-  }, [orderId]);
+  }, [eventId]);
 
-  
-  // Lắng nghe tin nhắn
+  // Listen for messages in the event's chat room
   useEffect(() => {
-    if (!organizerId) return;
-
-    const chatRef = ref(db, `chat_rooms/order_${orderId}/messages`);
+    const chatRef = ref(db, `chat_rooms/event_${eventId}/messages`);
     const unsubscribe = onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -106,6 +82,7 @@ const Chat = () => {
           createdAt: new Date(data[key].timestamp),
           senderId: data[key].senderId,
           senderName: data[key].senderName,
+          isOrganizer: data[key].senderId === organizerId?.toString(),
         }));
         setMessages(messageList.reverse());
       } else {
@@ -113,48 +90,37 @@ const Chat = () => {
       }
     });
 
-    return unsubscribe; // Hủy listener khi unmount
-  }, [organizerId]);
+    return () => off(chatRef); // Cleanup listener on unmount
+  }, [eventId, organizerId]);
 
-  // Gửi tin nhắn
+  // Send a message
   const onSend = useCallback(async () => {
     if (!newMessage.trim()) return;
 
     if (!localUser || !localUser.id) {
-      console.error('Local user hoặc user.id không tồn tại');
-      Alert.alert('Lỗi', 'Thông tin người dùng không hợp lệ. Vui lòng đăng nhập lại.');
+      console.error('Local user or user.id is missing');
+      Alert.alert('Error', 'Invalid user information. Please log in again.');
       return;
     }
 
     try {
-      const chatRef = ref(db, `chat_rooms/order_${orderId}/messages`);
+      const chatRef = ref(db, `chat_rooms/event_${eventId}/messages`);
       const newMessageRef = push(chatRef);
       await set(newMessageRef, {
         senderId: localUser.id.toString(),
-        senderName: localUser.firstName || localUser.username || 'Người dùng',
+        senderName: localUser.firstName || localUser.username || 'User',
         text: newMessage.trim(),
         timestamp: Date.now(),
       });
 
-      if (!organizerId) {
-        console.error('organizerId không tồn tại');
-        return;
-      }
-
-      const participantsRef = ref(db, `chat_rooms/order_${orderId}/participants`);
-      await set(participantsRef, {
-        userId: localUser.id.toString(),
-        organizerId: organizerId.toString(),
-      });
-
       setNewMessage('');
     } catch (err) {
-      console.error('Lỗi khi gửi tin nhắn:', err);
-      Alert.alert('Lỗi', 'Không thể gửi tin nhắn. Vui lòng thử lại.');
+      console.error('Error sending message:', err);
+      Alert.alert('Error', 'Could not send message. Please try again.');
     }
-  }, [localUser, orderId, organizerId, newMessage]);
+  }, [localUser, eventId, newMessage]);
 
-  // Render tin nhắn
+  // Render a message
   const renderMessage = ({ item }) => {
     const isCurrentUser = item.senderId === (localUser?.id?.toString() || '');
     return (
@@ -169,10 +135,15 @@ const Chat = () => {
             styles.messageBubble,
             isCurrentUser
               ? { backgroundColor: COLORS.primary }
+              : item.isOrganizer
+              ? { backgroundColor: COLORS.secondary } // Highlight organizer messages
               : { backgroundColor: COLORS.lightPrimary },
           ]}
         >
-          <Text style={styles.senderName}>{item.senderName}</Text>
+          <Text style={styles.senderName}>
+            {item.senderName}
+            {item.isOrganizer ? ' (Organizer)' : ''}
+          </Text>
           <Text
             style={[
               styles.messageText,
@@ -206,24 +177,23 @@ const Chat = () => {
           style={styles.textInput}
           value={newMessage}
           onChangeText={setNewMessage}
-          placeholder="Nhập tin nhắn..."
+          placeholder="Type a message..."
           placeholderTextColor={COLORS.textSecondary}
         />
         <TouchableOpacity
           style={[
             styles.sendButton,
-            (!localUser || !localUser.id || !organizerId || !newMessage.trim()) && { opacity: 0.5 },
+            (!localUser || !localUser.id || !newMessage.trim()) && { opacity: 0.5 },
           ]}
           onPress={() => {
-            console.log('Nút gửi được nhấn', {
+            console.log('Send button pressed', {
               user: !!localUser,
               userId: localUser?.id,
-              organizerId: !!organizerId,
               newMessage: newMessage.trim(),
             });
             onSend();
           }}
-          disabled={!localUser || !localUser.id || !organizerId || !newMessage.trim()}
+          disabled={!localUser || !localUser.id || !newMessage.trim()}
         >
           <MaterialCommunityIcons name="send" size={24} color={COLORS.onPrimary} />
         </TouchableOpacity>

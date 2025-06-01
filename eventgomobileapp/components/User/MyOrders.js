@@ -26,6 +26,11 @@ const MyOrders = () => {
   }, []);
 
   const fetchOrders = useCallback(async (status) => {
+    if (!user) {
+      setLoadError('Vui lòng đăng nhập để xem đơn hàng');
+      setInitialLoading(false);
+      return;
+    }
     if (loading || refreshing || !isMounted.current) {
       console.log('Bỏ qua fetchOrders: loading=', loading, 'refreshing=', refreshing, 'isMounted=', isMounted.current);
       return;
@@ -57,15 +62,16 @@ const MyOrders = () => {
         setRefreshing(false);
       }
     } catch (error) {
-      console.error('Lỗi khi tải đơn hàng:', error.message);
+      console.error('Lỗi khi tải đơn hàng:', error.response?.status, error.message);
       if (isMounted.current) {
-        setLoadError('Không thể tải đơn hàng. Vui lòng thử lại.');
+        if (error.response?.status === 401) {
+          setLoadError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          // Có thể dispatch action logout ở đây
+        } else {
+          setLoadError('Không thể tải đơn hàng. Vui lòng thử lại.');
+        }
         setInitialLoading(false);
         setRefreshing(false);
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoading(false);
       }
     }
   }, []);
@@ -119,6 +125,7 @@ const MyOrders = () => {
   const renderOrderItem = useCallback(
     ({ item }) => {
       const imageUri = item.details[0]?.ticket?.event?.image || 'https://via.placeholder.com/300x200?text=No+Image';
+      const eventId = item.details[0]?.ticket?.event?.id;
 
       return (
         <Surface style={[styles.orderCard, { elevation: 2 }]}>
@@ -185,7 +192,7 @@ const MyOrders = () => {
                   onPress={() => 
                     navigation.navigate('home', {
                       screen: 'Chat',
-                      params: { orderId: item.id },
+                      params: { eventId: eventId },
                     })
                   }
                 >
@@ -258,6 +265,8 @@ const MyOrders = () => {
           renderItem={renderOrderItem}
           ListEmptyComponent={renderEmptyComponent}
           contentContainerStyle={{ flexGrow: 1 }}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
