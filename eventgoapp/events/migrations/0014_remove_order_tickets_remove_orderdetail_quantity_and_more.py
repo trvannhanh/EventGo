@@ -49,7 +49,7 @@ class Migration(migrations.Migration):
             model_name='order',
             name='payment_method',
             field=models.CharField(blank=True, choices=[('MoMo', 'MoMo'), ('VNPAY', 'VNPAY'), ('credit_card', 'Credit Card')], max_length=20, null=True),
-
+        ),
         migrations.AlterField(
             model_name='orderdetail',
             name='qr_image',

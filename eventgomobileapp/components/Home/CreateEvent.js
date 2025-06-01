@@ -10,6 +10,9 @@ import api, { endpoints, authApis } from '../../configs/Apis';
 import MyStyles, { COLORS } from '../styles/MyStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker } from 'react-native-maps';
+// Import showNotification function as fallback
+import { showNotification } from '../../configs/NotificationConfig';
+
 
 // const EVENT_TYPES = [
 //   { label: 'Âm nhạc', value: 'music' },
@@ -367,9 +370,9 @@ const CreateEvent = ({ navigation, route }) => {
           transformRequest: (data, headers) => data,
         });
       }
-      
-      console.log(isUpdate ? "Event updated successfully:" : "Event created successfully:", eventResponse.data);
-      const currentEventId = eventResponse.data.id; // This will be the same eventId if updating
+        console.log(isUpdate ? "Event updated successfully:" : "Event created successfully:", eventResponse.data);
+      // Xử lý ID sự kiện, sử dụng cho cả tạo mới và cập nhật
+      let currentEventId = eventResponse.data.id;
       
       // Create or Update tickets for the event
       // For updates, this logic might need to be more sophisticated:
@@ -428,15 +431,70 @@ const CreateEvent = ({ navigation, route }) => {
         } catch (ticketError) {
           console.error("Error processing ticket:", ticketError.response ? ticketError.response.data : ticketError.message);
         }
-      }
+      }      // Hiển thị thông báo cục bộ sau khi tạo/cập nhật sự kiện thành công
+      console.log('Sự kiện đã được tạo thành công. Hiển thị thông báo...');
       
+      // Sử dụng hệ thống thông báo nâng cao để hiển thị thông báo sự kiện
+      try {
+        // Truy cập hệ thống thông báo từ App.js
+        const { notificationSystem } = global;
+        
+        // Chuẩn bị dữ liệu sự kiện
+        const eventData = {
+          id: currentEventId,
+          name: name,
+          date: eventDate.toISOString(),
+          location: location,
+          createdAt: new Date().toISOString()
+        };          // Hiển thị thông báo cục bộ cho người dùng hiện tại
+        // Try multiple ways to access the notification system
+        const notifSystem = 
+          (notificationSystem && notificationSystem.current) || // From React ref
+          (global.notificationSystem && global.notificationSystem.current) || // From global ref
+          null; // Fallback
+        
+        if (notifSystem) {
+          // Found notification system
+          await notifSystem.showEventNotification(eventData, isUpdate);
+          console.log(`Notification system found and event notification shown (isUpdate=${isUpdate})`);
+        } else {
+          // Fallback to direct use of showNotification
+          console.log('No notification system instance found, using direct method');
+          const notificationTitle = isUpdate ? 'Sự kiện đã được cập nhật' : 'Sự kiện mới đã được tạo';
+          const notificationBody = isUpdate 
+            ? `Sự kiện "${name}" đã được cập nhật thành công.` 
+            : `Sự kiện "${name}" đã được tạo thành công.`;
+            
+          await showNotification(
+            notificationTitle, 
+            notificationBody,
+            {
+              type: isUpdate ? 'EVENT_UPDATED' : 'EVENT_CREATED',
+              eventId: currentEventId,
+              eventName: name,
+              eventDate: eventDate.toISOString(),
+              eventLocation: location,
+              createdAt: new Date().toISOString()
+            }
+          );
+        }
+        
+        // Thông báo đẩy sẽ được xử lý bởi backend và gửi đến tất cả người dùng khác
+        // thông qua notification_utils.py và tasks.py đã được cài đặt
+        
+        // Thời gian trì hoãn trước khi hiện Alert thành công
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } catch (notificationError) {
+        // Bỏ qua lỗi thông báo, vì sự kiện vẫn được tạo thành công
+        console.error("Không thể hiển thị thông báo:", notificationError);
+      }
       Alert.alert(
         'Thành công',
         `Sự kiện đã được ${isUpdate ? 'cập nhật' : 'tạo'} thành công!`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-        } catch (error) {
-      console.error('Error creating event:', error);
+    } catch (error) {
+      console.error('Error creating event:', error instanceof Error ? error.toString() : error);
       
       // Xử lý các loại lỗi khác nhau
       let errorMessage = 'Không thể tạo sự kiện. Vui lòng thử lại sau.';

@@ -163,9 +163,7 @@ const Login = () => {
                 await AsyncStorage.setItem('token', res.data.access_token);
 
                 try {
-                    let u = await authApis(res.data.access_token).get(endpoints['currentUser']);
-
-                    // Đảm bảo thêm token vào dữ liệu người dùng trước khi lưu
+                    let u = await authApis(res.data.access_token).get(endpoints['currentUser']);                    // Đảm bảo thêm token vào dữ liệu người dùng trước khi lưu
                     const userData = {
                         ...u.data,
                         access_token: res.data.access_token
@@ -173,6 +171,16 @@ const Login = () => {
 
                     // Lưu thông tin người dùng vào AsyncStorage
                     await AsyncStorage.setItem('user', JSON.stringify(userData));
+
+                    // Cập nhật token thông báo đẩy cho server sau khi đăng nhập
+                    try {
+                        if (global.notificationSystem && global.notificationSystem.current) {
+                            await global.notificationSystem.current.updateServerToken(res.data.access_token);
+                            console.log('Push notification token updated with server after login');
+                        }
+                    } catch (notifError) {
+                        console.error('Error updating push token after login:', notifError);
+                    }
 
                     dispatch({
                         "type": "LOGIN",

@@ -18,6 +18,7 @@ class User(AbstractUser):
     address = models.CharField(max_length=255, blank=True, null=True)
     avatar = CloudinaryField('avatar', blank=True, null=True)
     google_credentials = models.JSONField(null=True, blank=True)
+    push_token = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"{self.username}"

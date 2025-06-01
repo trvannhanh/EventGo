@@ -1,5 +1,8 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
+// Bỏ import messaging vì gây lỗi trên Android Expo Dev Client
+// import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { Platform } from 'react-native';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC4KemmGTSgAAJGeZi81vH4Qxws8NB4rK0",
@@ -12,15 +15,16 @@ const firebaseConfig = {
   databaseURL: "https://eventchat-faf4d-default-rtdb.firebaseio.com/"
 };
 
-// try {
-//   if (!firebase.apps.length) {
-//     firebase.initializeApp(firebaseConfig);
-//   }
-// } catch (error) {
-//   console.error('Lỗi khởi tạo Firebase:', error);
-// }
+// Khởi tạo Firebase App nếu chưa được khởi tạo
+let app;
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApp(); // Nếu đã khởi tạo thì lấy app hiện tại
+}
 
-const app = initializeApp(firebaseConfig);
+// Khởi tạo Firebase services
 const db = getDatabase(app);
 
-export { db };
+
+export { db, app };
