@@ -17,15 +17,21 @@ export default function Profile({ navigation }) {
         container: {
             flex: 1,
             backgroundColor: COLORS.background,
-        },        headerContainer: {
+        }, headerContainer: {
             height: 320,
             position: 'relative',
-        },
-        notificationButton: {
+        },        headerButtons: {
             position: 'absolute',
             top: 50,
             right: 20,
             zIndex: 999,
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            width: '100%',
+            paddingHorizontal: 20,
+        },
+        notificationButton: {
+            marginLeft: 12,
             backgroundColor: 'rgba(255, 255, 255, 0.3)',
             borderRadius: 25,
             width: 45,
@@ -72,7 +78,7 @@ export default function Profile({ navigation }) {
             zIndex: 1,
         },
         headerContentWrapper: {
-            position: 'relative', 
+            position: 'relative',
             zIndex: 2,
             height: '100%',
             justifyContent: 'flex-end',
@@ -169,7 +175,7 @@ export default function Profile({ navigation }) {
             textShadowColor: 'rgba(0, 0, 0, 0.2)',
             textShadowOffset: { width: 0.5, height: 0.5 },
             textShadowRadius: 1,
-        },        contentContainer: {
+        }, contentContainer: {
             paddingHorizontal: 16,
             paddingTop: 20,
             paddingBottom: 40,
@@ -210,7 +216,7 @@ export default function Profile({ navigation }) {
         },
         cardContent: {
             padding: 20,
-        },        
+        },
         infoItem: {
             marginBottom: 15,
             flexDirection: 'row',
@@ -270,7 +276,7 @@ export default function Profile({ navigation }) {
         logoutText: {
             color: COLORS.error,
             fontWeight: 'bold',
-        },        profileImagePlaceholder: {
+        }, profileImagePlaceholder: {
             width: 120,
             height: 120,
             borderRadius: 60,
@@ -397,7 +403,7 @@ export default function Profile({ navigation }) {
             fontSize: 12,
             textAlign: 'center',
             color: COLORS.textSecondary,
-        },        footerContainer: {
+        }, footerContainer: {
             alignItems: 'center',
             marginTop: 10,
             marginBottom: 20,
@@ -440,15 +446,16 @@ export default function Profile({ navigation }) {
             color: COLORS.textSecondary,
         },
     });
-      const user = useContext(MyUserContext);
+    const user = useContext(MyUserContext);
     const dispatch = useContext(MyDispatchContext);
     const [phone, setPhone] = useState('');
     const [avatar, setAvatar] = useState(null);
     const [updating, setUpdating] = useState(false);
-    const [avatarKey, setAvatarKey] = useState(Date.now());    const [userData, setUserData] = useState(null);
+    const [avatarKey, setAvatarKey] = useState(Date.now()); 
+    const [userData, setUserData] = useState(null);
     const [showStats, setShowStats] = useState(true);
     const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-    
+
     // Lấy số lượng thông báo chưa đọc mỗi khi màn hình được focus
     useFocusEffect(
         useCallback(() => {
@@ -456,7 +463,7 @@ export default function Profile({ navigation }) {
                 try {
                     const token = await AsyncStorage.getItem('token');
                     if (!token) return;
-                    
+
                     const authApi = authApis(token);
                     const response = await authApi.get(endpoints.myNotifications);
                     const unreadCount = response.data.filter(notification => !notification.is_read).length;
@@ -465,17 +472,17 @@ export default function Profile({ navigation }) {
                     console.error("Lỗi khi lấy thông báo:", error);
                 }
             };
-            
+
             if (user) {
                 fetchNotificationsCount();
             }
-            
+
             return () => {
                 // Cleanup nếu cần
             };
         }, [user])
     );
-    
+
     // Thêm hàm lấy thông tin người dùng từ API
     useEffect(() => {
         const fetchUserData = async () => {
@@ -501,28 +508,28 @@ export default function Profile({ navigation }) {
     // Helper function để tạo URL chính xác cho avatar
     const getAvatarUri = (avatarPath) => {
         if (!avatarPath) return null;
-        
+
         // Nếu là URI cục bộ từ thư viện ảnh (file:// hoặc content://)
         if (avatarPath.startsWith('file://') || avatarPath.startsWith('content://')) {
             return avatarPath;
         }
-        
+
         // Nếu đã là URL đầy đủ
         if (avatarPath.startsWith('http')) {
             return avatarPath;
         }
-        
+
         // Nếu là đường dẫn relative trong Cloudinary
         if (avatarPath.includes('cloudinary') || avatarPath.includes('upload')) {
             return `https://res.cloudinary.com/dqpkxxzaf/${avatarPath}`;
         }
-        
+
         // Nếu chỉ là tên file (trường hợp từ media trong Django)
         return `http://192.168.1.41:8000/media/${avatarPath}`;
-    };    const handleLogout = async () => {
+    }; const handleLogout = async () => {
         try {
             Alert.alert(
-                'Xác nhận đăng xuất', 
+                'Xác nhận đăng xuất',
                 'Bạn có chắc chắn muốn đăng xuất không?',
                 [
                     {
@@ -536,12 +543,12 @@ export default function Profile({ navigation }) {
                                 // Xóa token khỏi AsyncStorage
                                 await AsyncStorage.removeItem('token');
                                 await AsyncStorage.removeItem('refresh_token');
-                                
+
                                 // Cập nhật state global
                                 dispatch({ type: 'LOGOUT' });
-                                
+
                                 Alert.alert('Đăng xuất thành công', 'Hẹn gặp lại bạn!');
-                                
+
                                 // Điều hướng về màn hình Login
                                 // navigation.navigate('login');
                             } catch (error) {
@@ -567,7 +574,7 @@ export default function Profile({ navigation }) {
                 Alert.alert('Cần quyền truy cập', 'Bạn cần cấp quyền truy cập thư viện ảnh để sử dụng tính năng này.');
                 return;
             }
-            
+
             // Hiển thị tùy chọn
             Alert.alert(
                 'Cập nhật ảnh đại diện',
@@ -583,7 +590,7 @@ export default function Profile({ navigation }) {
                                 aspect: [1, 1],
                                 quality: 0.7,
                             });
-                            
+
                             if (!result.canceled) {
                                 setAvatar(result.assets[0].uri);
                                 setAvatarKey(Date.now()); // Cập nhật key để force re-render Avatar
@@ -594,14 +601,14 @@ export default function Profile({ navigation }) {
                         text: 'Chụp ảnh mới',
                         onPress: async () => {
                             const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
-                            
+
                             if (cameraPermission.granted) {
                                 let result = await ImagePicker.launchCameraAsync({
                                     allowsEditing: true,
                                     aspect: [1, 1],
                                     quality: 0.7,
                                 });
-                                
+
                                 if (!result.canceled) {
                                     setAvatar(result.assets[0].uri);
                                     setAvatarKey(Date.now());
@@ -621,7 +628,7 @@ export default function Profile({ navigation }) {
             console.error("Lỗi khi chọn ảnh:", error);
             Alert.alert('Lỗi', 'Không thể chọn ảnh. Vui lòng thử lại.');
         }
-    };    const handleUpdate = async () => {
+    }; const handleUpdate = async () => {
         setUpdating(true);
         try {
             const token = await AsyncStorage.getItem('token');
@@ -633,10 +640,10 @@ export default function Profile({ navigation }) {
                 );
                 return;
             }
-            
+
             let formData = new FormData();
             formData.append('phone', phone);
-            
+
             // Chỉ thêm avatar nếu đã thay đổi
             if (avatar && avatar !== user.avatar) {
                 const filename = avatar.split('/').pop();
@@ -644,19 +651,19 @@ export default function Profile({ navigation }) {
                 const type = match ? `image/${match[1]}` : `image`;
                 formData.append('avatar', { uri: avatar, name: filename, type });
             }
-            
+
             // Sử dụng authApis với token - không cần await vì authApis không phải async
             const authApi = authApis(token);
-            
+
             const res = await authApi.patch(endpoints.updateUser, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            
+
             // Cập nhật thông tin người dùng trong context global
             dispatch({ type: 'LOGIN', payload: res.data });
-            
+
             Alert.alert(
-                'Cập nhật thành công', 
+                'Cập nhật thành công',
                 'Thông tin tài khoản của bạn đã được cập nhật!',
                 [
                     {
@@ -670,7 +677,7 @@ export default function Profile({ navigation }) {
             );
         } catch (err) {
             console.error("Lỗi cập nhật:", err);
-            
+
             if (err.response && err.response.status === 401) {
                 Alert.alert(
                     "Phiên đăng nhập hết hạn",
@@ -679,7 +686,7 @@ export default function Profile({ navigation }) {
                 );
             } else {
                 Alert.alert(
-                    'Lỗi cập nhật', 
+                    'Lỗi cập nhật',
                     `Không thể cập nhật thông tin: ${err.response?.data?.detail || err.message}`
                 );
             }
@@ -690,9 +697,9 @@ export default function Profile({ navigation }) {
     if (!user && !userData) {
         return (
             <View style={styles.notLoggedInContainer}>
-                <Animatable.View 
-                    animation="fadeIn" 
-                    duration={800} 
+                <Animatable.View
+                    animation="fadeIn"
+                    duration={800}
                     style={styles.notLoggedInCard}
                 >
                     <Animatable.View animation="pulse" iterationCount="infinite" duration={2000}>
@@ -703,13 +710,13 @@ export default function Profile({ navigation }) {
                         Vui lòng đăng nhập để xem và quản lý thông tin tài khoản của bạn
                     </Text>
                     <Animatable.View animation="fadeInUp" delay={300}>
-                        <Button 
-                            mode="contained" 
-                            onPress={() => navigation.navigate('login')} 
+                        <Button
+                            mode="contained"
+                            onPress={() => navigation.navigate('login')}
                             style={styles.loginButton}
                             contentStyle={{ paddingVertical: 8 }}
                             labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
-                            icon={({size, color}) => (
+                            icon={({ size, color }) => (
                                 <MaterialCommunityIcons name="login" size={size} color={color} />
                             )}
                         >
@@ -721,13 +728,14 @@ export default function Profile({ navigation }) {
         );
     }    // Ưu tiên dữ liệu từ userData (API), nếu không có thì dùng từ context
     const displayData = userData || user || {};
-    
+
     // Background image với gradient ấn tượng
     const backgroundImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
     return (
-        <ScrollView style={styles.container}>            <View style={styles.headerContainer}>
-                <ImageBackground 
+        <ScrollView style={styles.container}>
+            <View style={styles.headerContainer}>
+                <ImageBackground
                     source={{ uri: backgroundImage }}
                     style={styles.headerBackground}
                     resizeMode="cover"
@@ -735,25 +743,27 @@ export default function Profile({ navigation }) {
                     <LinearGradient
                         colors={['rgba(94, 53, 177, 0.4)', 'rgba(94, 53, 177, 0.8)']}
                         style={styles.gradientOverlay}
-                    />
-                    
-                    {/* Nút thông báo */}
-                    <TouchableOpacity 
-                        style={styles.notificationButton}
-                        onPress={() => navigation.navigate('Notifications')}
-                    >
-                        <MaterialCommunityIcons name="bell" size={24} color="#fff" />
-                        {unreadNotificationsCount > 0 && (
-                            <View style={styles.notificationBadge}>
-                                <Text style={styles.notificationBadgeText}>
-                                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-                                </Text>
-                            </View>
-                        )}
-                    </TouchableOpacity>
-                    
+                    />                    <View style={styles.headerButtons}>
+                        {/* Nút thông báo */}
+                        <TouchableOpacity
+                            style={styles.notificationButton}
+                            onPress={() => navigation.navigate('Notifications')}
+                        >
+                            <MaterialCommunityIcons name="bell" size={24} color="#fff" />
+                            {unreadNotificationsCount > 0 && (
+                                <View style={styles.notificationBadge}>
+                                    <Text style={styles.notificationBadgeText}>
+                                        {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                                    </Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        
+                        
+                    </View>
+
                     <View style={styles.headerContentWrapper}>
-                        <Animatable.View 
+                        <Animatable.View
                             style={styles.headerContent}
                             animation="fadeIn"
                             duration={1000}
@@ -768,7 +778,7 @@ export default function Profile({ navigation }) {
                                         style={styles.avatar}
                                     />
                                 ) : (
-                                    <Animatable.View 
+                                    <Animatable.View
                                         animation="zoomIn"
                                         duration={500}
                                         style={styles.profileImagePlaceholder}
@@ -776,25 +786,25 @@ export default function Profile({ navigation }) {
                                         <MaterialCommunityIcons name="account" size={70} color={COLORS.primary} />
                                     </Animatable.View>
                                 )}
-                                <TouchableOpacity 
-                                    style={styles.photoButton} 
+                                <TouchableOpacity
+                                    style={styles.photoButton}
                                     onPress={pickImage}
                                     activeOpacity={0.7}
                                 >
                                     <MaterialCommunityIcons name="camera" size={20} color="white" />
                                 </TouchableOpacity>
                             </View>
-                            
-                            <Animatable.Text 
+
+                            <Animatable.Text
                                 animation="fadeInUp"
                                 duration={700}
                                 delay={300}
                                 style={styles.title}
                             >
-                                {displayData.first_name || ''} {displayData.last_name || ''}
+                                {`${displayData.first_name || ''} ${displayData.last_name || ''}`}
                             </Animatable.Text>
-                            
-                            <Animatable.Text 
+
+                            <Animatable.Text
                                 animation="fadeInUp"
                                 duration={700}
                                 delay={400}
@@ -802,21 +812,26 @@ export default function Profile({ navigation }) {
                             >
                                 @{displayData.username}
                             </Animatable.Text>
-                            
+
                             <Animatable.View
                                 animation="fadeInUp"
                                 duration={700}
                                 delay={500}
                                 style={styles.userRoleChip}
                             >
-                                <FontAwesome5 
-                                    name={displayData.role === 'organizer' ? 'user-tie' : 'user'} 
-                                    size={14} 
-                                    color="#fff" 
+                                <FontAwesome5
+                                    name={displayData.role === 'organizer' ? 'user-tie' : 'user'}
+                                    size={14}
+                                    color="#fff"
                                 />
                                 <Text style={styles.userRoleText}>
-                                    {displayData.role === 'attendee' ? 'Người tham dự' : dispatch.role === 'organizer' ? 'Nhà tổ chức sự kiện': 'Quản trị viên'}
+                                    {displayData.role === 'attendee'
+                                        ? 'Người tham dự'
+                                        : displayData.role === 'organizer'
+                                            ? 'Nhà tổ chức sự kiện'
+                                            : 'Quản trị viên'}
                                 </Text>
+
                             </Animatable.View>
                         </Animatable.View>
                     </View>
@@ -834,23 +849,24 @@ export default function Profile({ navigation }) {
                     <Text style={styles.statValue}>12</Text>
                     <Text style={styles.statLabel}>Sự kiện</Text>
                 </View>
-                
+
                 <View style={styles.statDivider} />
-                
+
                 <View style={styles.statItem}>
                     <Text style={styles.statValue}>4</Text>
                     <Text style={styles.statLabel}>Vé</Text>
                 </View>
-                
+
                 <View style={styles.statDivider} />
-                
+
                 <View style={styles.statItem}>
                     <Text style={styles.statValue}>7</Text>
                     <Text style={styles.statLabel}>Đánh giá</Text>
                 </View>
             </Animatable.View>
 
-            <View style={styles.contentContainer}>                <Animatable.View 
+            <View style={styles.contentContainer}>
+                <Animatable.View
                     animation="fadeInUp"
                     duration={600}
                     delay={700}
@@ -862,27 +878,27 @@ export default function Profile({ navigation }) {
                             <Text style={styles.sectionTitle}>Thông tin cá nhân</Text>
                         </View>
                     </View>
-                    
+
                     <View style={styles.cardContent}>
                         <View style={styles.infoItem}>
                             <Ionicons name="mail" size={22} style={styles.infoIcon} />
                             <Text style={styles.infoLabel}>Email:</Text>
                             <Text style={styles.infoValue}>{displayData.email || 'Chưa cập nhật'}</Text>
                         </View>
-                        
+
                         <View style={styles.infoItem}>
                             <Ionicons name="calendar" size={22} style={styles.infoIcon} />
                             <Text style={styles.infoLabel}>Tham gia:</Text>
                             <Text style={styles.infoValue}>
-                                {displayData.date_joined 
-                                    ? new Date(displayData.date_joined).toLocaleDateString('vi-VN') 
+                                {displayData.date_joined
+                                    ? new Date(displayData.date_joined).toLocaleDateString('vi-VN')
                                     : 'Không có dữ liệu'}
                             </Text>
                         </View>
                     </View>
                 </Animatable.View>
-            
-                <Animatable.View 
+
+                <Animatable.View
                     animation="fadeInUp"
                     duration={600}
                     delay={800}
@@ -894,7 +910,7 @@ export default function Profile({ navigation }) {
                             <Text style={styles.sectionTitle}>Thông tin liên hệ</Text>
                         </View>
                     </View>
-                    
+
                     <View style={styles.cardContent}>
                         <View style={styles.inputContainer}>
                             <TextInput
@@ -913,7 +929,7 @@ export default function Profile({ navigation }) {
                         </View>
                     </View>
                 </Animatable.View>
-                  <Animatable.View 
+                <Animatable.View
                     animation="fadeInUp"
                     duration={600}
                     delay={900}
@@ -925,15 +941,15 @@ export default function Profile({ navigation }) {
                             <Text style={styles.sectionTitle}>Tùy chọn tài khoản</Text>
                         </View>
                     </View>
-                    
+
                     <View style={styles.cardContent}>
                         <View style={styles.buttonContainer}>
-                            <Button 
-                                mode="contained" 
+                            <Button
+                                mode="contained"
                                 onPress={handleUpdate}
                                 loading={updating}
                                 disabled={updating}
-                                icon={({size, color}) => (
+                                icon={({ size, color }) => (
                                     <MaterialCommunityIcons name="content-save" size={size} color={color} />
                                 )}
                                 style={styles.updateButton}
@@ -942,11 +958,11 @@ export default function Profile({ navigation }) {
                             >
                                 Lưu thông tin
                             </Button>
-                            
-                            <Button 
-                                mode="outlined" 
+
+                            <Button
+                                mode="outlined"
                                 onPress={handleLogout}
-                                icon={({size, color}) => (
+                                icon={({ size, color }) => (
                                     <MaterialCommunityIcons name="logout" size={size} color={color} />
                                 )}
                                 style={styles.logoutButton}
@@ -956,40 +972,9 @@ export default function Profile({ navigation }) {
                                 Đăng xuất
                             </Button>
                         </View>
-                    </View>                </Animatable.View>
-                
-                {/* <Animatable.View 
-                    animation="fadeInUp"
-                    duration={600}
-                    delay={1000}
-                    style={styles.card}
-                >
-                    <View style={styles.cardHeader}>
-                        <View style={styles.sectionHeader}>
-                            <MaterialCommunityIcons name="bell-outline" size={24} style={styles.sectionIcon} />
-                            <Text style={styles.sectionTitle}>Thông báo</Text>
-                        </View>
                     </View>
-                    
-                    <View style={styles.cardContent}>
-                        <TouchableOpacity 
-                            style={styles.settingItem}
-                            onPress={() => navigation.navigate('Notifications')}
-                        >
-                            <View style={styles.settingIconContainer}>
-                                <MaterialCommunityIcons name="bell-ring-outline" size={24} color={COLORS.primary} />
-                            </View>
-                            <View style={styles.settingContent}>
-                                <Text style={styles.settingTitle}>Quản lý thông báo</Text>
-                                <Text style={styles.settingDescription}>Xem các thông báo về sự kiện và cập nhật</Text>
-                            </View>
-                            <MaterialIcons name="keyboard-arrow-right" size={24} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-                </Animatable.View> */}
-                
-                {/* Footer */}
-                <Animatable.View 
+                </Animatable.View>
+                <Animatable.View
                     animation="fadeIn"
                     duration={600}
                     delay={1000}

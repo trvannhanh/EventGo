@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-3*0)+zju75-6mb82)sr3ne#8qtv0*pl7w^s93hoc*3s0w87$a3
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['10.0.2.2', 'localhost', '127.0.0.1', "192.168.1.41", "10.17.50.147", "192.168.79.103"]
+ALLOWED_HOSTS = ['10.0.2.2', 'localhost', '127.0.0.1', "192.168.1.41", "10.17.50.147", "192.168.79.103", "192.168.99.148"]
 
 
 # Application definition
@@ -240,8 +240,8 @@ FACKEBOOK_SECRET = '4677af425a1550366a18fe756cf0c0a9'
 
 
 
-CELERY_BROKER_URL = 'redis://:Admin123@192.168.79.103:6379/0'
-CELERY_RESULT_BACKEND = 'redis://:Admin123@192.168.79.103:6379/0'
+CELERY_BROKER_URL = 'redis://:Admin123@192.168.1.41:6379/0'
+CELERY_RESULT_BACKEND = 'redis://:Admin123@192.168.1.41:6379/0'
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -249,7 +249,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://:Admin123@192.168.79.103:6379/1",  # database số 1
+        "LOCATION": "redis://:Admin123@192.168.1.41:6379/1",  # database số 1
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "PASSWORD": "Admin123",

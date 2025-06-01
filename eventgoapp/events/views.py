@@ -130,12 +130,25 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
             return Response({"message": "Đánh dấu thông báo đã đọc thành công"}, status=status.HTTP_200_OK)
         except Notification.DoesNotExist:
             return Response({"error": "Không tìm thấy thông báo"}, status=status.HTTP_404_NOT_FOUND)
-    
     @action(methods=['patch'], url_path='mark-all-notifications-read', detail=False, permission_classes=[IsAuthenticated])
     def mark_all_notifications_read(self, request):
         user = request.user
         Notification.objects.filter(user=user, is_read=False).update(is_read=True)
         return Response({"message": "Đánh dấu tất cả thông báo đã đọc thành công"}, status=status.HTTP_200_OK)
+        
+    @action(methods=['post'], url_path='push-token', detail=False, permission_classes=[IsAuthenticated])
+    def update_push_token(self, request):
+        """API endpoint để cập nhật Expo Push Token cho người dùng hiện tại."""
+        user = request.user
+        from events.serializers import PushTokenSerializer
+        serializer = PushTokenSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            user.push_token = serializer.validated_data.get('push_token')
+            user.save()
+            return Response({"message": "Push token đã được cập nhật thành công"}, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -292,11 +305,14 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             print(updated_event.id)
             print("Loai")
             print(type(updated_event.id))
-            print(type(update_message))
-              # Send notification asynchronously
+            print(type(update_message))              # Send notification asynchronously
             from events.tasks import send_event_update_notifications
             # Use delay instead of apply_async for simpler task execution
             send_event_update_notifications.delay(updated_event.id, update_message)
+            
+            # Gửi push notification
+            from events.notification_utils import create_and_send_event_notification
+            create_and_send_event_notification(updated_event.id, is_update=True)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -349,12 +365,15 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 message=message,
                 event=event
             )
-        
-        # Gọi celery task để gửi email thông báo
+          # Gọi celery task để gửi email thông báo
         from events.tasks import send_new_event_notifications
         send_new_event_notifications.delay(event.id)
+        
+        # Gửi push notification
+        from events.notification_utils import create_and_send_event_notification
+        create_and_send_event_notification(event.id, is_update=False)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)    
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     @action(methods=['post'], url_path='review', detail=True)
     def submit_review(self, request, pk=None):
@@ -834,7 +853,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             "discount_percent": discount.discount_percent,
             "target_rank": discount.target_rank
         }, status=status.HTTP_200_OK)
-
+    
     @action(methods=['get'], url_path='analytics', detail=True, permission_classes=[permissions.IsAuthenticated])
     def get_event_analytics(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
@@ -850,12 +869,11 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         total_revenue = Order.objects.filter(
             order_details__ticket__event=event,
             payment_status=Order.PaymentStatus.PAID
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
-
+        ).aggregate(total=Sum('total_amount'))['total'] or 0        
         tickets_sold = OrderDetail.objects.filter(
             ticket__event=event,
             order__payment_status=Order.PaymentStatus.PAID
-        ).aggregate(total_tickets=Sum('quantity'))['total_tickets'] or 0
+        ).count() or 0
 
         average_rating = Review.objects.filter(event=event).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
         average_rating = round(average_rating, 1)
@@ -901,14 +919,154 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         repeat_attendee_rate = (repeat_attendees / total_attendees * 100) if total_attendees > 0 else 0
         repeat_attendee_rate = round(repeat_attendee_rate, 2)
 
-        return Response({
+        # Lấy thông tin từ EventTrend
+        event_trend = EventTrend.objects.filter(event=event).first()
+        event_views = event_trend.views if event_trend else 0
+        event_interest_score = event_trend.interest_level if event_trend else 0
+        
+        # Tỷ lệ chuyển đổi (views -> tickets)
+        conversion_rate = (tickets_sold / event_views * 100) if event_views > 0 else 0
+        conversion_rate = round(conversion_rate, 2)
+        
+        # Thông tin chi tiết về loại vé đã bán
+        tickets_breakdown = []
+        tickets = Ticket.objects.filter(event=event)
+        for ticket in tickets:
+            sold_count = OrderDetail.objects.filter(
+                ticket=ticket,
+                order__payment_status=Order.PaymentStatus.PAID
+            ).count()
+            
+            tickets_breakdown.append({
+                'ticket_id': ticket.id,
+                'ticket_type': ticket.type,
+                'ticket_price': ticket.price,
+                'quantity_sold': sold_count,
+                'revenue': ticket.price * sold_count
+            })
+        
+        # Thông tin về lượt xem theo ngày (lấy 7 ngày gần nhất)
+        # Giả lập dữ liệu cho mẫu, trong thực tế cần lưu lượt xem theo ngày trong cơ sở dữ liệu
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        views_by_day = []
+        
+        # Giả lập dữ liệu xem theo ngày (trong thực tế có bảng lưu lượt xem theo ngày)
+        for i in range(7):
+            day = today - timedelta(days=i)
+            views_by_day.append({
+                'date': day.strftime('%Y-%m-%d'),
+                'count': int(event_views / 7) + ((-1)**i) * (i*3) # Giả lập tăng giảm để tạo đồ thị
+            })
+        views_by_day.reverse()  # Sắp xếp từ ngày xa nhất đến gần nhất
+        
+        # Phân tích đánh giá
+        reviews = Review.objects.filter(event=event)
+        review_count = reviews.count()
+        
+        rating_counts = {
+            '5': reviews.filter(rating=5).count(),
+            '4': reviews.filter(rating=4).count(),
+            '3': reviews.filter(rating=3).count(),
+            '2': reviews.filter(rating=2).count(),
+            '1': reviews.filter(rating=1).count(),
+        }
+        
+        rating_percents = {
+            'rating_5_percent': (rating_counts['5'] / review_count * 100) if review_count > 0 else 0,
+            'rating_4_percent': (rating_counts['4'] / review_count * 100) if review_count > 0 else 0,
+            'rating_3_percent': (rating_counts['3'] / review_count * 100) if review_count > 0 else 0,
+            'rating_2_percent': (rating_counts['2'] / review_count * 100) if review_count > 0 else 0,
+            'rating_1_percent': (rating_counts['1'] / review_count * 100) if review_count > 0 else 0,
+        }
+
+        result = {
+            "event_id": event.id,
+            "event_name": event.name,
+            "event_start_date": event.date,
+            "event_end_date": event.date + timedelta(hours=3),  # Giả định sự kiện kéo dài 3 giờ
             "total_revenue": total_revenue,
             "tickets_sold": tickets_sold,
             "average_rating": average_rating,
-            "cancellation_rate": cancellation_rate,  # Tỷ lệ hủy đơn hàng (%)
-            "avg_purchase_time_minutes": round(avg_purchase_time_seconds, 2),  # Thời gian trung bình (phút)
-            "repeat_attendee_rate": repeat_attendee_rate  # Tỷ lệ người tham gia quay lại (%)
-        }, status=status.HTTP_200_OK)
+            "cancellation_rate": cancellation_rate,
+            "avg_purchase_time_minutes": round(avg_purchase_time_seconds, 2),
+            "repeat_attendee_rate": repeat_attendee_rate,
+            "event_views": event_views,
+            "event_interest_score": event_interest_score,
+            "conversion_rate": conversion_rate,
+            "tickets_breakdown": tickets_breakdown,
+            "views_by_day": views_by_day,
+            "review_count": review_count,
+        }
+        
+        # Thêm các chỉ số phần trăm đánh giá
+        result.update(rating_percents)
+        
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(methods=['get'], url_path='dashboard-analytics', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def dashboard_analytics(self, request):
+        user = request.user
+
+        if user.role == User.Role.ORGANIZER:
+            organizer_events = Event.objects.filter(organizer=user, active=True)
+            analytics_data = []
+            for event_instance in organizer_events:
+                # Gọi lại logic của get_event_analytics cho từng event
+                # Đây là một cách đơn giản, có thể tối ưu hóa nếu cần
+                response = self.get_event_analytics(request, pk=event_instance.pk)
+                if response.status_code == status.HTTP_200_OK:
+                    analytics_data.append(response.data)
+            return Response(analytics_data, status=status.HTTP_200_OK)
+
+        elif user.role == User.Role.ADMIN:
+            organizers = User.objects.filter(role=User.Role.ORGANIZER, is_active=True)
+            admin_analytics_data = []
+            for organizer in organizers:
+                organizer_events = Event.objects.filter(organizer=organizer, active=True)
+                org_total_revenue = 0
+                org_total_tickets_sold = 0
+                org_event_ratings = []
+                org_cancellation_rates = []
+                org_total_views = 0
+                org_total_interest_score = 0
+                event_count = 0
+
+                for event_instance in organizer_events:
+                    response = self.get_event_analytics(request, pk=event_instance.pk)
+                    if response.status_code == status.HTTP_200_OK:
+                        event_data = response.data
+                        org_total_revenue += event_data.get("total_revenue", 0)
+                        org_total_tickets_sold += event_data.get("tickets_sold", 0)
+                        if event_data.get("average_rating", 0) > 0: # Chỉ tính rating nếu có
+                            org_event_ratings.append(event_data.get("average_rating", 0))
+                        org_cancellation_rates.append(event_data.get("cancellation_rate", 0))
+                        org_total_views += event_data.get("event_views", 0)
+                        org_total_interest_score += event_data.get("event_interest_score", 0)
+                        event_count += 1
+                
+                if event_count > 0:
+                    avg_rating = sum(org_event_ratings) / len(org_event_ratings) if org_event_ratings else 0
+                    avg_cancellation_rate = sum(org_cancellation_rates) / event_count if org_cancellation_rates else 0
+                    admin_analytics_data.append({
+                        "organizer_id": organizer.id,
+                        "organizer_username": organizer.username,
+                        "organizer_email": organizer.email,
+                        "total_events": event_count,
+                        "aggregated_total_revenue": org_total_revenue,
+                        "aggregated_total_tickets_sold": org_total_tickets_sold,
+                        "average_event_rating": round(avg_rating, 2),
+                        "average_cancellation_rate": round(avg_cancellation_rate, 2),
+                        "total_event_views": org_total_views,
+                        "total_event_interest_score": org_total_interest_score
+                    })
+            return Response(admin_analytics_data, status=status.HTTP_200_OK)
+
+        else:
+            return Response(
+                {"error": "Bạn không có quyền truy cập vào mục này."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
     # # Action mới: Xuất báo cáo
     # @action(methods=['get'], url_path='analytics/export', detail=True,

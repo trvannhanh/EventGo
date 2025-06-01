@@ -157,19 +157,19 @@ const Notifications = () => {
       </View>
     );
   }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Thông báo</Text>
-        {unreadCount > 0 && (
-          <View style={styles.headerActions}>
-            <Badge style={styles.badge}>{unreadCount}</Badge>
-            <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllAsRead}>
-              <Text style={styles.markAllText}>Đánh dấu tất cả đã đọc</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.headerActions}>
+          {unreadCount > 0 && (
+            <>
+              <Badge style={styles.badge}>{unreadCount}</Badge>
+              <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllAsRead}>
+                <Text style={styles.markAllText}>Đánh dấu tất cả đã đọc</Text>
+              </TouchableOpacity>
+            </>          )}
+        </View>
       </View>
       
       {notifications.length === 0 ? (

@@ -301,3 +301,12 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'user', 'event', 'message', 'is_read', 'created_at', 'event_name', 'event_image']
+
+
+class PushTokenSerializer(serializers.Serializer):
+    push_token = serializers.CharField(required=True)
+    
+    def update(self, instance, validated_data):
+        instance.push_token = validated_data.get('push_token', instance.push_token)
+        instance.save()
+        return instance

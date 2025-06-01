@@ -206,16 +206,18 @@ const MyReviews = () => {
               }}
               style={styles.eventNameContainer}
             >
-              <Text style={styles.eventName}>
-                {item.event_name || "Unknown Event"}
-              </Text>
-              <Chip
-                icon="calendar"
-                style={styles.dateChip}
-                textStyle={{ fontSize: 12, color: COLORS.primary }}
-              >
-                <Text>{formattedDate}</Text>
-              </Chip>
+              <View>
+                <Text style={styles.eventName}>
+                  {item.event_name || "Unknown Event"}
+                </Text>
+                <Chip
+                  icon="calendar"
+                  style={styles.dateChip}
+                  textStyle={{ fontSize: 12, color: COLORS.primary }}
+                >
+                  {formattedDate}
+                </Chip>
+              </View>
             </TouchableOpacity>
 
             <IconButton
@@ -242,8 +244,11 @@ const MyReviews = () => {
               }
             }}
           >
-            <Ionicons name="eye" size={16} color={COLORS.primary} />
-            <Text style={styles.actionButtonText}>View Event</Text>
+            <View>
+              <Ionicons name="eye" size={16} color={COLORS.primary} />
+              <Text style={styles.actionButtonText}>View Event</Text>
+            </View>
+            
           </TouchableOpacity>
         </Card.Content>
       </Surface>
@@ -259,7 +264,7 @@ const MyReviews = () => {
       </View>
     );
   }
-  // Not logged in state
+  
   if (!user) {
     return (
       <View style={styles.loginContainer}>
@@ -331,7 +336,8 @@ const MyReviews = () => {
             </Animatable.View>
           </LinearGradient>
         </ImageBackground>
-      </View>      <FlatList
+      </View>      
+      <FlatList
         data={reviews}
         keyExtractor={item => item.id?.toString()}
         renderItem={renderReviewItem}

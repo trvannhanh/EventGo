@@ -12,36 +12,65 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
+    "notification": {
+      "icon": "./assets/eventgo_icon.png",
+      "color": "#F06292",
+      "androidMode": "collapse",
+      "androidCollapsedTitle": "EventGo",
+      "iosDisplayInForeground": true,
+      "androidImportance": "max",
+      "androidShowInForeground": true
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/eventgo_icon.png",
         "backgroundColor": "#000000"
       },
+      "useNextNotificationsApi": true,
       "package": "com.trieuvy.eventgo",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAh1zei22knWD5ddlB_fKKHvjcSYQcmO8s"
         }
-      },
-      "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE", 
-        "WRITE_EXTERNAL_STORAGE"
-      ]
+      }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "permissions": [
+      "CAMERA",
+      "READ_EXTERNAL_STORAGE",
+      "WRITE_EXTERNAL_STORAGE",
+      "NOTIFICATIONS",
+      "RECEIVE_BOOT_COMPLETED",
+      "VIBRATE",
+      "SCHEDULE_EXACT_ALARM"
+    ],
     "extra": {
       "eas": {
         "projectId": "9df1f3b0-32a8-4c89-a609-d15f3ddda9fe"
-      }
+      },
+      "notificationProjectId": "9df1f3b0-32a8-4c89-a609-d15f3ddda9fe"
+    },
+    "web": {
+      "favicon": "./assets/eventgo_icon.png"
     },
     "plugins": [
-      "react-native-vision-camera"
+      "react-native-vision-camera",
+      "expo-file-system",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/eventgo_icon.png",
+          "color": "#000000",
+          "sounds": []
+        }
+      ]
     ]
   }
 }
