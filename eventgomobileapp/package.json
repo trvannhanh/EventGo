@@ -4,13 +4,15 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/datetimepicker": "^8.3.0",
+    "@react-native-firebase/app": "^22.2.0",
+    "@react-native-firebase/messaging": "^22.2.0",
     "@react-native-picker/picker": "^2.11.0",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/drawer": "^7.3.11",
@@ -20,6 +22,7 @@
     "axios": "^1.8.4",
     "date-fns": "^4.1.0",
     "expo": "53.0.9",
+    "expo-build-properties": "~0.14.6",
     "expo-constants": "^17.1.6",
     "expo-dev-client": "~5.1.8",
     "expo-device": "^7.1.4",
