@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "578223076146",
+    "project_id": "eventchat-faf4d",
+    "storage_bucket": "eventchat-faf4d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:578223076146:android:bd88142a666bbbdcd79d2b",
+        "android_client_info": {
+          "package_name": "com.trieuvy.eventgo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "578223076146-abc123def456ghi789jkl012mno345pq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4KemmGTSgAAJGeZi81vH4Qxws8NB4rK0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "578223076146-abc123def456ghi789jkl012mno345pq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

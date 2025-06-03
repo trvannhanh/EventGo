@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useRef, useReducer, useContext } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useReducer,
+  useContext,
+} from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -17,9 +23,9 @@ import MyReviews from "./components/User/MyReviews";
 import CreateEvent from "./components/Home/CreateEvent";
 import CheckIn from "./components/Home/Checkin";
 import NotificationsScreen from "./components/User/Notifications";
-import AnalyticsScreen from "./components/Dashboard/AnalyticsScreen"; // Import the AnalyticsScreen
-import EventDetailAnalytics from "./components/Dashboard/EventDetailAnalytics"; // Import the EventDetailAnalytics
-import ComparativeAnalytics from "./components/Dashboard/ComparativeAnalytics"; // Import the ComparativeAnalytics
+import AnalyticsScreen from "./components/Dashboard/AnalyticsScreen"; 
+import EventDetailAnalytics from "./components/Dashboard/EventDetailAnalytics";
+import ComparativeAnalytics from "./components/Dashboard/ComparativeAnalytics"; 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { MyUserContext, MyDispatchContext } from "./configs/MyContexts";
 import MyUserReducer from "./components/reducers/MyUserReducer";
@@ -30,11 +36,11 @@ import {
 import MyStyles, { AppTheme, COLORS } from "./components/styles/MyStyles";
 import { View, Text, LogBox } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
-import * as Constants from 'expo-constants';
-// Không import database trực tiếp để tránh lỗi Firebase
-// import { db } from './configs/firebase';
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import * as Constants from "expo-constants";
+// Import Firebase configuration to initialize Firebase
+import { app } from "./configs/firebase";
 
 import { authApis, endpoints } from "./configs/Apis";
 // Import the new notification handler
@@ -50,7 +56,21 @@ LogBox.ignoreLogs([
 ]);
 
 const Stack = createNativeStackNavigator();
-const StackNavigator = () => {
+const StackNavigator = ({ navigation, route }) => {
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      // Reset stack to Home screen when the tab is focused
+      if (navigation.getState().index > 0) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Home" }],
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
   return (
     <Stack.Navigator
       screenOptions={{
@@ -134,6 +154,14 @@ const TabNavigator = () => {
             <MaterialCommunityIcons name="calendar" color={color} size={size} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            // Navigate to home tab and reset its stack
+            navigation.navigate("home", {
+              screen: "Home",
+            });
+          },
+        })}
       />
       {user === null ? (
         <>
@@ -215,7 +243,7 @@ const TabNavigator = () => {
               }}
             />
           )}
-          {(user.role === "organizer" || user.role === "admin") && ( // Conditional rendering for Analytics tab
+          {(user.role === "organizer" || user.role === "admin") && (
             <Tab.Screen
               name="analytics"
               component={AnalyticsScreen}
@@ -242,105 +270,128 @@ const App = () => {
   const [isError, setIsError] = useState(false);
   const navigationRef = useRef();
   // Create a ref for the notification system
-const notificationSystem = useRef(null);
+  const notificationSystem = useRef(null);
 
-// Make notification system globally accessible to be used in other components
-global.notificationSystem = notificationSystem;
+  // Make notification system globally accessible to be used in other components
+  global.notificationSystem = notificationSystem;
 
-// Effect để thiết lập push notifications
-useEffect(() => {
-  let isMounted = true;
-  
-  // Đợi đến khi navigation reference được khởi tạo
-  const setupNotifications = async () => {
-    try {
-      // Initialize the notification system with the current user token
-      const authToken = user?.access_token || null;
-      
-      // Chỉ khởi tạo khi navigation đã sẵn sàng
-      if (navigationRef.current) {
-        console.log('Navigation ref is ready, initializing notification system');
-        // Create notification system with current navigation reference
-        const notificationHandler = await initializeNotifications(navigationRef.current, authToken);
-        
-        if (isMounted) {
-          notificationSystem.current = notificationHandler;
-          
-          // Make notification handler immediately available to other components
-          global.notificationSystem = {current: notificationHandler};
-          
-          console.log('Notification system initialized globally');
-        }
-        
-        // Update token on server if logged in but token wasn't sent before
-        if (user && user.access_token) {
-          const tokenSent = await AsyncStorage.getItem('pushTokenSentToServer');
-          if (tokenSent !== 'true') {
-            await notificationHandler.updateServerToken(user.access_token);
-          }
-        }
-        
-        // Show a welcome notification on first launch to verify system is working
-        const isFirstLaunch = await AsyncStorage.getItem('firstLaunchNotificationShown');
-        if (!isFirstLaunch && notificationHandler) {
-          // Add a slight delay to ensure navigation is fully initialized
-          setTimeout(async () => {
-            if (isMounted && notificationHandler) {
-              try {
-                // Use event notification format to show the welcome message
-                const welcomeData = {
-                  name: 'EventGo',
-                  id: 'welcome',
-                  date: new Date().toISOString(),
-                  location: 'Ứng dụng EventGo'
-                };
-                
-                // Show welcome notification with event-style formatting
-                await notificationHandler.showEventNotification(welcomeData, false);
-                await AsyncStorage.setItem('firstLaunchNotificationShown', 'true');
-              } catch (notifError) {
-                console.error('Error showing welcome notification:', notifError);
-              }
-            }
-          }, 3000);
-        }
-      } else {
-        console.warn('Navigation reference not ready when initializing notifications');
-        
-        // Retry after navigation reference is ready
-        setTimeout(async () => {
-          if (navigationRef.current && isMounted) {
-            const notificationHandler = await initializeNotifications(navigationRef.current, authToken);
+  // Effect để thiết lập push notifications
+  useEffect(() => {
+    let isMounted = true;
+
+    // Đợi đến khi navigation reference được khởi tạo
+    const setupNotifications = async () => {
+      try {
+        // Initialize the notification system with the current user token
+        const authToken = user?.access_token || null;
+
+        // Chỉ khởi tạo khi navigation đã sẵn sàng
+        if (navigationRef.current) {
+          console.log(
+            "Navigation ref is ready, initializing notification system"
+          );
+          // Create notification system with current navigation reference
+          const notificationHandler = await initializeNotifications(
+            navigationRef.current,
+            authToken
+          );
+
+          if (isMounted) {
             notificationSystem.current = notificationHandler;
-          }
-        }, 2000);
-      }
-    } catch (error) {
-      console.error('Error setting up notification system:', error);
-    }
-  };
 
-  // Đợi một chút để NavigationContainer khởi tạo hoàn toàn trước khi cài đặt thông báo
-  const timer = setTimeout(() => {
-    if (isMounted) {
-      setupNotifications();
-    }
-  }, 1000);
-    
-  // Cleanup
-  return () => {
-    clearTimeout(timer);
-    isMounted = false;
-    if (notificationSystem.current) {
-      notificationSystem.current.cleanup();
-    }
-  };
-}, [user]); // Re-run when user changes to update server with token
+            // Make notification handler immediately available to other components
+            global.notificationSystem = { current: notificationHandler };
+
+            console.log("Notification system initialized globally");
+          }
+
+          // Update token on server if logged in but token wasn't sent before
+          if (user && user.access_token) {
+            const tokenSent = await AsyncStorage.getItem(
+              "pushTokenSentToServer"
+            );
+            if (tokenSent !== "true") {
+              await notificationHandler.updateServerToken(user.access_token);
+            }
+          }
+
+          // Show a welcome notification on first launch to verify system is working
+          const isFirstLaunch = await AsyncStorage.getItem(
+            "firstLaunchNotificationShown"
+          );
+          if (!isFirstLaunch && notificationHandler) {
+            // Add a slight delay to ensure navigation is fully initialized
+            setTimeout(async () => {
+              if (isMounted && notificationHandler) {
+                try {
+                  // Use event notification format to show the welcome message
+                  const welcomeData = {
+                    name: "EventGo",
+                    id: "welcome",
+                    date: new Date().toISOString(),
+                    location: "Ứng dụng EventGo",
+                  };
+
+                  // Show welcome notification with event-style formatting
+                  await notificationHandler.showEventNotification(
+                    welcomeData,
+                    false
+                  );
+                  await AsyncStorage.setItem(
+                    "firstLaunchNotificationShown",
+                    "true"
+                  );
+                } catch (notifError) {
+                  console.error(
+                    "Error showing welcome notification:",
+                    notifError
+                  );
+                }
+              }
+            }, 3000);
+          }
+        } else {
+          console.warn(
+            "Navigation reference not ready when initializing notifications"
+          );
+
+          // Retry after navigation reference is ready
+          setTimeout(async () => {
+            if (navigationRef.current && isMounted) {
+              const notificationHandler = await initializeNotifications(
+                navigationRef.current,
+                authToken
+              );
+              notificationSystem.current = notificationHandler;
+            }
+          }, 2000);
+        }
+      } catch (error) {
+        console.error("Error setting up notification system:", error);
+      }
+    };
+
+    // Đợi một chút để NavigationContainer khởi tạo hoàn toàn trước khi cài đặt thông báo
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setupNotifications();
+      }
+    }, 1000);
+
+    // Cleanup
+    return () => {
+      clearTimeout(timer);
+      isMounted = false;
+      if (notificationSystem.current) {
+        notificationSystem.current.cleanup();
+      }
+    };
+  }, [user]); // Re-run when user changes to update server with token
 
   // Effect để khởi tạo user
   useEffect(() => {
     // Đây là effect cho việc khởi tạo user
-  
+
     // Check for cached user data and token
     const loadUserData = async () => {
       try {
@@ -355,7 +406,8 @@ useEffect(() => {
           // Ensure the token is included in the user data
           if (token && !parsedUserData.access_token) {
             parsedUserData.access_token = token;
-          }          dispatch({
+          }
+          dispatch({
             type: "LOGIN",
             payload: parsedUserData,
           });
@@ -404,7 +456,8 @@ useEffect(() => {
             alignItems: "center",
             backgroundColor: AppTheme.colors.background,
           }}
-        >          <ActivityIndicator size="large" color={AppTheme.colors.primary} />
+        >
+          <ActivityIndicator size="large" color={AppTheme.colors.primary} />
           <Text style={{ marginTop: 10, color: AppTheme.colors.text }}>
             Đang tải ứng dụng...
           </Text>
@@ -451,15 +504,14 @@ useEffect(() => {
           </Text>
         </View>
       </PaperProvider>
-    );  }  
-  
+    );
+  }
+
   return (
     <PaperProvider theme={AppTheme}>
       <MyUserContext.Provider value={user}>
         <MyDispatchContext.Provider value={dispatch}>
-          <NavigationContainer 
-            ref={navigationRef}
-            theme={AppTheme}>
+          <NavigationContainer ref={navigationRef} theme={AppTheme}>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Main" component={TabNavigator} />
               <Stack.Screen

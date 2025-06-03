@@ -550,9 +550,7 @@ const Home = ({ navigation }) => {
             </Button>
           </View>
         )}
-        
         <View style={styles.trendingContainer}>
-          {" "}
           <View style={styles.categoryHeaderContainer}>
             <Text style={styles.sectionHeader}>Sự kiện nổi bật</Text>
             <TouchableOpacity onPress={showAllEvents}>
@@ -602,7 +600,6 @@ const Home = ({ navigation }) => {
       <StatusBar style="auto" />
 
       <View style={styles.container}>
-        
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <View>
@@ -641,7 +638,6 @@ const Home = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-         
           <View style={styles.searchContainer}>
             <Searchbar
               placeholder="Tìm kiếm sự kiện..."
@@ -659,13 +655,13 @@ const Home = ({ navigation }) => {
                     name="view-grid"
                     size={24}
                     color={COLORS.primary}
-                  />
+                  />{" "}
                 </TouchableOpacity>
               )}
             />
           </View>
-        </View>{" "}
-        
+        </View>
+
         <View style={styles.categoryContainer}>
           <ScrollView
             horizontal
@@ -685,9 +681,9 @@ const Home = ({ navigation }) => {
             {eventStatusOptions.map((status) => renderEventStatusChip(status))}
           </ScrollView>
         </View>
-        
+
         {renderContent()}
-        
+
         {isOrganizer && (
           <FAB
             style={styles.fab}
@@ -695,8 +691,8 @@ const Home = ({ navigation }) => {
             color={COLORS.onPrimary}
             onPress={handleCreateEvent}
           />
-        )}{" "}
-        
+        )}
+
         <Portal>
           <Dialog
             visible={filterVisible}

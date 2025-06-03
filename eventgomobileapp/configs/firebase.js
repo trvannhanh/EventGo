@@ -1,5 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
+// Import React Native Firebase for native initialization
+import '@react-native-firebase/app';
 // Bỏ import messaging vì gây lỗi trên Android Expo Dev Client
 // import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { Platform } from 'react-native';
@@ -26,5 +28,7 @@ if (getApps().length === 0) {
 // Khởi tạo Firebase services
 const db = getDatabase(app);
 
+// Initialize React Native Firebase (native side) automatically when imported
+console.log('📱 Firebase initialized successfully');
 
 export { db, app };
