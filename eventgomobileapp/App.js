@@ -21,7 +21,7 @@ import ReviewList from "./components/Home/ReviewList";
 import ReplyToReview from "./components/Home/ReplyToReview";
 import MyReviews from "./components/User/MyReviews";
 import CreateEvent from "./components/Home/CreateEvent";
-import CheckIn from "./components/Home/Checkin";
+import CheckIn from "./components/Home/CheckIn";
 import NotificationsScreen from "./components/User/Notifications";
 import AnalyticsScreen from "./components/Dashboard/AnalyticsScreen"; 
 import EventDetailAnalytics from "./components/Dashboard/EventDetailAnalytics";

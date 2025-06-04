@@ -119,5 +119,57 @@ def send_new_event_notifications(self, event_id):
 def test_taskk(self):
     return "Task executed successfully!"
 
+@shared_task(bind=True, name='events.tasks.send_event_cancellation_notifications')
+def send_event_cancellation_notifications(self, event_id, cancel_message):
+    """
+    Task để gửi thông báo khi một sự kiện bị hủy.
+    
+    Args:
+        event_id: ID của sự kiện bị hủy
+        cancel_message: Thông điệp về việc hủy sự kiện
+    """
+    try:
+        with transaction.atomic():
+            event = Event.objects.get(id=event_id)
+            
+            # Lấy tất cả người dùng đã mua vé cho sự kiện này
+            attendees = OrderDetail.objects.filter(
+                ticket__event=event,
+                order__payment_status=Order.PaymentStatus.PAID
+            ).values_list('order__user', flat=True).distinct()
+            
+            users = User.objects.filter(id__in=attendees)
+            
+            notification_count = 0
+            for user in users:
+                # Gửi email thông báo hủy sự kiện
+                try:
+                    send_mail(
+                        subject=f"Thông báo hủy sự kiện: {event.name}",
+                        message=f"Xin chào {user.username},\n\n{cancel_message}\n\nChúng tôi rất tiếc phải thông báo rằng sự kiện này đã bị hủy. Vui lòng liên hệ ban tổ chức để được hỗ trợ về việc hoàn tiền.\n\nTrân trọng,\nĐội ngũ EventGo",
+                        from_email="nhanhgon24@gmail.com",
+                        recipient_list=[user.email],
+                        fail_silently=True,
+                    )
+                    print(f"Đã gửi email thông báo hủy sự kiện tới {user.email}")
+                except Exception as e:
+                    print(f"Lỗi gửi email đến {user.email}: {str(e)}")
+                  # Tạo thông báo trong ứng dụng
+                Notification.objects.create(
+                    user=user,
+                    event=event,
+                    message=f"Sự kiện '{event.name}' mà bạn đã đăng ký tham gia đã bị hủy. Vui lòng liên hệ ban tổ chức để được hỗ trợ về việc hoàn tiền."
+                )
+                notification_count += 1
+            
+            print(f"Đã tạo {notification_count} thông báo hủy sự kiện cho '{event.name}' (ID: {event_id})")
+            return notification_count
+    except Event.DoesNotExist:
+        print(f"Không tìm thấy sự kiện với ID {event_id}")
+        return 0
+    except Exception as e:
+        print(f"Lỗi trong send_event_cancellation_notifications: {str(e)}")
+        return 0
+
 # Print registered tasks for debugging
-print("Available tasks:", send_event_reminders.name, send_event_update_notifications.name, send_new_event_notifications.name)
+print("Available tasks:", send_event_reminders.name, send_event_update_notifications.name, send_new_event_notifications.name, send_event_cancellation_notifications.name)

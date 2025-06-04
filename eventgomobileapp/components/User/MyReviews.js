@@ -1,14 +1,36 @@
-import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { FlatList, View, Text, ActivityIndicator, TouchableOpacity, Alert, StyleSheet, RefreshControl, ImageBackground } from 'react-native';
-import { Card, Paragraph, IconButton, Button, Surface, Chip } from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
-import { AntDesign, MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import { endpoints, authApis } from '../../configs/Apis';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState, useContext, useCallback } from "react";
+import {
+  FlatList,
+  View,
+  Text,
+  ActivityIndicator,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  RefreshControl,
+  ImageBackground,
+} from "react-native";
+import {
+  Card,
+  Paragraph,
+  IconButton,
+  Button,
+  Surface,
+  Chip,
+} from "react-native-paper";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  AntDesign,
+  MaterialCommunityIcons,
+  Ionicons,
+  FontAwesome5,
+} from "@expo/vector-icons";
+import { endpoints, authApis } from "../../configs/Apis";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MyUserContext } from "../../configs/MyContexts";
-import { COLORS } from '../../components/styles/MyStyles';
-import { useNavigation } from '@react-navigation/native';
-import * as Animatable from 'react-native-animatable';
+import { COLORS } from "../../components/styles/MyStyles";
+import { useNavigation } from "@react-navigation/native";
+import * as Animatable from "react-native-animatable";
 
 const MyReviews = () => {
   const [reviews, setReviews] = useState([]);
@@ -24,10 +46,7 @@ const MyReviews = () => {
         setLoading(true);
       }
 
-
-
-      const token = await AsyncStorage.getItem('token');
-
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
         console.log("No authentication token found");
@@ -36,7 +55,10 @@ const MyReviews = () => {
         return;
       }
 
-      console.log("Using token to fetch reviews:", token ? "Token exists" : "No token");
+      console.log(
+        "Using token to fetch reviews:",
+        token ? "Token exists" : "No token"
+      );
 
       // Use authApis with token
       const authApi = authApis(token);
@@ -44,21 +66,16 @@ const MyReviews = () => {
       console.log("Reviews API response:", res.data);
       const reviewsData = res.data || [];
       setReviews(reviewsData);
-
     } catch (err) {
       console.error("Error loading reviews:", err);
       if (err.response && err.response.status === 401) {
         // Token expired, need to login again
-        Alert.alert(
-          "Session expired",
-          "Please login again to continue.",
-          [
-            {
-              text: "Login",
-              onPress: () => navigation.navigate('login')
-            }
-          ]
-        );
+        Alert.alert("Session expired", "Please login again to continue.", [
+          {
+            text: "Login",
+            onPress: () => navigation.navigate("login"),
+          },
+        ]);
       } else {
         Alert.alert(
           "Error",
@@ -93,58 +110,66 @@ const MyReviews = () => {
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
         },
         {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem('token');
+              const token = await AsyncStorage.getItem("token");
               if (!token) {
-                Alert.alert("Login Required", "Please login to use this feature");
-                navigation.navigate('login');
+                Alert.alert(
+                  "Login Required",
+                  "Please login to use this feature"
+                );
+                navigation.navigate("login");
                 return;
               }
 
               const authApi = authApis(token);
-              
+
               // Set a longer timeout to handle network issues
-              const response = await authApi.delete(endpoints.deleteReview(reviewId), {
-                timeout: 15000 // 15 seconds timeout
-              });
-              
+              const response = await authApi.delete(
+                endpoints.deleteReview(reviewId),
+                {
+                  timeout: 15000, // 15 seconds timeout
+                }
+              );
+
               // Log the response status for debugging
               console.log("Delete review response status:", response.status);
-              
-              // Update the list after successful deletion
-              setReviews(reviews.filter(review => review.id !== reviewId));
+              // Refresh the reviews list to get updated data after deletion
+              await fetchMyReviews();
               Alert.alert("Success", "Review deleted successfully");
             } catch (err) {
               console.error("Error deleting review:", err);
-              
               // Check for network error specifically
-              if (!err.response && err.message && err.message.includes('Network Error')) {
-                
-                setReviews(reviews.filter(review => review.id !== reviewId));
-                
+              if (
+                !err.response &&
+                err.message &&
+                err.message.includes("Network Error")
+              ) {
+                // Refresh the reviews list even on network error as deletion might have succeeded
+                await fetchMyReviews();
+
                 Alert.alert(
                   "Review Deleted",
                   "Your review was likely deleted successfully, but we encountered a network issue. We've updated your review list.",
                   [
                     {
                       text: "Refresh List",
-                      onPress: () => fetchMyReviews()
+                      onPress: () => fetchMyReviews(),
                     },
                     {
                       text: "OK",
-                      style: "default"
-                    }
+                      style: "default",
+                    },
                   ]
                 );
                 return;
               }
-              
+
               if (err.response && err.response.status === 401) {
                 // Token expired, need to login again
                 Alert.alert(
@@ -153,8 +178,8 @@ const MyReviews = () => {
                   [
                     {
                       text: "Login",
-                      onPress: () => navigation.navigate('login')
-                    }
+                      onPress: () => navigation.navigate("login"),
+                    },
                   ]
                 );
               } else {
@@ -164,8 +189,8 @@ const MyReviews = () => {
                 );
               }
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
@@ -173,7 +198,7 @@ const MyReviews = () => {
   // Render rating stars based on rating value
   const renderRatingStars = (rating) => {
     return (
-      <View style={{ flexDirection: 'row' }}>
+      <View style={{ flexDirection: "row" }}>
         {[1, 2, 3, 4, 5].map((star) => (
           <AntDesign
             key={star}
@@ -190,7 +215,7 @@ const MyReviews = () => {
   // Render item for each review
   const renderReviewItem = ({ item }) => {
     const reviewDate = new Date(item.created_date || item.created_at);
-    const formattedDate = reviewDate.toLocaleDateString('vi-VN');
+    const formattedDate = reviewDate.toLocaleDateString("vi-VN");
 
     return (
       <Surface style={styles.reviewCard}>
@@ -199,9 +224,14 @@ const MyReviews = () => {
             <TouchableOpacity
               onPress={() => {
                 if (item.event_id) {
-                  navigation.navigate('EventDetail', { eventId: item.event_id });
+                  navigation.navigate("EventDetail", {
+                    eventId: item.event_id,
+                  });
                 } else {
-                  Alert.alert("Notice", "Cannot access this event information. The event may have been deleted.");
+                  Alert.alert(
+                    "Notice",
+                    "Cannot access this event information. The event may have been deleted."
+                  );
                 }
               }}
               style={styles.eventNameContainer}
@@ -240,7 +270,7 @@ const MyReviews = () => {
             style={styles.actionButton}
             onPress={() => {
               if (item.event_id) {
-                navigation.navigate('EventDetail', { eventId: item.event_id });
+                navigation.navigate("EventDetail", { eventId: item.event_id });
               }
             }}
           >
@@ -248,7 +278,6 @@ const MyReviews = () => {
               <Ionicons name="eye" size={16} color={COLORS.primary} />
               <Text style={styles.actionButtonText}>View Event</Text>
             </View>
-            
           </TouchableOpacity>
         </Card.Content>
       </Surface>
@@ -264,7 +293,7 @@ const MyReviews = () => {
       </View>
     );
   }
-  
+
   if (!user) {
     return (
       <View style={styles.loginContainer}>
@@ -273,32 +302,47 @@ const MyReviews = () => {
           duration={800}
           style={styles.loginCard}
         >
-          <Animatable.View animation="pulse" iterationCount="infinite" duration={2000}>
-            <MaterialCommunityIcons name="comment-alert-outline" size={90} color={COLORS.primary} />
+          <Animatable.View
+            animation="pulse"
+            iterationCount="infinite"
+            duration={2000}
+          >
+            <MaterialCommunityIcons
+              name="comment-alert-outline"
+              size={90}
+              color={COLORS.primary}
+            />
           </Animatable.View>
           <Text style={styles.loginTitle}>Bạn chưa đăng nhập</Text>
           <Text style={styles.loginMessage}>
-            Vui lòng đăng nhập để xem đánh giá của bạn về các sự kiện đã tham gia
+            Vui lòng đăng nhập để xem đánh giá của bạn về các sự kiện đã tham
+            gia
           </Text>
-          <Animatable.View animation="fadeInUp" delay={300}>              
-          <Button
-            mode="contained"
-            onPress={() => navigation.navigate('login')}
-            style={styles.loginButton}
-            contentStyle={{ paddingVertical: 8 }}
-            labelStyle={{ fontSize: 16, fontWeight: 'bold' }}
-            icon={({ size, color }) => (
-              <MaterialCommunityIcons name="login" size={size} color={color} />
-            )}
-          >Đăng nhập ngay
-          </Button>
+          <Animatable.View animation="fadeInUp" delay={300}>
+            <Button
+              mode="contained"
+              onPress={() => navigation.navigate("login")}
+              style={styles.loginButton}
+              contentStyle={{ paddingVertical: 8 }}
+              labelStyle={{ fontSize: 16, fontWeight: "bold" }}
+              icon={({ size, color }) => (
+                <MaterialCommunityIcons
+                  name="login"
+                  size={size}
+                  color={color}
+                />
+              )}
+            >
+              Đăng nhập ngay
+            </Button>
           </Animatable.View>
         </Animatable.View>
       </View>
     );
   }
   // Background image for header
-  const backgroundImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
+  const backgroundImage =
+    "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
   return (
     <View style={styles.container}>
@@ -309,7 +353,7 @@ const MyReviews = () => {
           resizeMode="cover"
         >
           <LinearGradient
-            colors={['rgba(94, 53, 177, 0.4)', 'rgba(94, 53, 177, 0.8)']}
+            colors={["rgba(94, 53, 177, 0.4)", "rgba(94, 53, 177, 0.8)"]}
             style={styles.headerGradient}
           >
             <Animatable.View
@@ -336,12 +380,13 @@ const MyReviews = () => {
             </Animatable.View>
           </LinearGradient>
         </ImageBackground>
-      </View>      
+      </View>
       <FlatList
         data={reviews}
-        keyExtractor={item => item.id?.toString()}
+        keyExtractor={(item) => item.id?.toString()}
         renderItem={renderReviewItem}
-        contentContainerStyle={styles.listContainer} refreshControl={
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
@@ -357,23 +402,38 @@ const MyReviews = () => {
             duration={800}
             style={styles.emptyContainer}
           >
-            <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
-              <MaterialCommunityIcons name="comment-off-outline" size={90} color={COLORS.primaryLight || '#6200ee80'} />
+            <Animatable.View
+              animation="pulse"
+              iterationCount="infinite"
+              duration={3000}
+            >
+              <MaterialCommunityIcons
+                name="comment-off-outline"
+                size={90}
+                color={COLORS.primaryLight || "#6200ee80"}
+              />
             </Animatable.View>
             <Text style={styles.emptyText}>
-              Bạn chưa đánh giá sự kiện nào. Tham gia một sự kiện và chia sẻ trải nghiệm của bạn!
+              Bạn chưa đánh giá sự kiện nào. Tham gia một sự kiện và chia sẻ
+              trải nghiệm của bạn!
             </Text>
-            <Animatable.View animation="fadeInUp" delay={400}>              <Button
-              mode="contained"
-              onPress={() => navigation.navigate('home')}
-              style={{ backgroundColor: COLORS.primary, marginTop: 20 }}
-              contentStyle={{ paddingVertical: 8, paddingHorizontal: 15 }}
-              icon={({ size, color }) => (
-                <MaterialCommunityIcons name="calendar-search" size={size} color={color} />
-              )}
-            >
-              Khám phá sự kiện
-            </Button>
+            <Animatable.View animation="fadeInUp" delay={400}>
+              {" "}
+              <Button
+                mode="contained"
+                onPress={() => navigation.navigate("home")}
+                style={{ backgroundColor: COLORS.primary, marginTop: 20 }}
+                contentStyle={{ paddingVertical: 8, paddingHorizontal: 15 }}
+                icon={({ size, color }) => (
+                  <MaterialCommunityIcons
+                    name="calendar-search"
+                    size={size}
+                    color={color}
+                  />
+                )}
+              >
+                Khám phá sự kiện
+              </Button>
             </Animatable.View>
           </Animatable.View>
         }
@@ -385,23 +445,23 @@ const MyReviews = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background || '#f5f5f5',
+    backgroundColor: COLORS.background || "#f5f5f5",
   },
   header: {
-    width: '100%',
-    overflow: 'hidden',
+    width: "100%",
+    overflow: "hidden",
   },
   headerBackground: {
     height: 170,
-    width: '100%',
+    width: "100%",
   },
   headerGradient: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     height: 170,
-    justifyContent: 'flex-end',
+    justifyContent: "flex-end",
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
@@ -410,18 +470,18 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 30,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: "bold",
+    color: "#fff",
     marginBottom: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.95,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 0.5, height: 0.5 },
     textShadowRadius: 2,
   },
@@ -432,11 +492,11 @@ const styles = StyleSheet.create({
   },
   reviewCard: {
     marginBottom: 18,
-    backgroundColor: COLORS.surface || '#fff',
+    backgroundColor: COLORS.surface || "#fff",
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 3,
-    shadowColor: COLORS.shadow || '#000',
+    shadowColor: COLORS.shadow || "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -445,132 +505,132 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 12,
   },
   eventNameContainer: {
     flex: 1,
   },
   eventName: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     fontSize: 18,
-    color: COLORS.primary || '#6200ee',
+    color: COLORS.primary || "#6200ee",
     marginBottom: 5,
   },
   dateChip: {
-    backgroundColor: COLORS.lightPrimary || '#e6deff',
-    alignSelf: 'flex-start',
+    backgroundColor: COLORS.lightPrimary || "#e6deff",
+    alignSelf: "flex-start",
     marginTop: 8,
     height: 26,
   },
   ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 10,
-    backgroundColor: 'rgba(245, 245, 255, 0.6)',
+    backgroundColor: "rgba(245, 245, 255, 0.6)",
     padding: 8,
     borderRadius: 8,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   ratingText: {
     marginLeft: 8,
-    fontWeight: 'bold',
-    color: COLORS.primary || '#6200ee',
+    fontWeight: "bold",
+    color: COLORS.primary || "#6200ee",
   },
   reviewContent: {
-    color: COLORS.text || '#212121',
+    color: COLORS.text || "#212121",
     lineHeight: 22,
     fontSize: 15,
-    backgroundColor: 'rgba(245, 245, 255, 0.4)',
+    backgroundColor: "rgba(245, 245, 255, 0.4)",
     padding: 12,
     borderRadius: 10,
     marginTop: 8,
     borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary || '#6200ee',
+    borderLeftColor: COLORS.primary || "#6200ee",
   },
   deleteButton: {
-    backgroundColor: COLORS.errorLight || '#ffebee',
+    backgroundColor: COLORS.errorLight || "#ffebee",
     borderRadius: 20,
     marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 25,
     marginTop: 40,
   },
   emptyText: {
     fontSize: 17,
-    color: COLORS.textSecondary || '#757575',
-    textAlign: 'center',
+    color: COLORS.textSecondary || "#757575",
+    textAlign: "center",
     marginTop: 16,
     lineHeight: 24,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingTop: 50,
   },
   loadingText: {
     marginTop: 16,
-    color: COLORS.textSecondary || '#757575',
+    color: COLORS.textSecondary || "#757575",
     fontSize: 16,
   },
   loginContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
-    backgroundColor: COLORS.background || '#f5f5f5',
+    backgroundColor: COLORS.background || "#f5f5f5",
   },
   loginCard: {
     padding: 25,
     borderRadius: 20,
-    width: '90%',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface || '#fff',
+    width: "90%",
+    alignItems: "center",
+    backgroundColor: COLORS.surface || "#fff",
   },
   loginMessage: {
     fontSize: 18,
     marginBottom: 20,
-    textAlign: 'center',
-    color: COLORS.text || '#212121',
+    textAlign: "center",
+    color: COLORS.text || "#212121",
     lineHeight: 24,
   },
   loginButton: {
-    backgroundColor: COLORS.primary || '#6200ee',
+    backgroundColor: COLORS.primary || "#6200ee",
     paddingHorizontal: 30,
     paddingVertical: 8,
     borderRadius: 12,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 8,
-    backgroundColor: COLORS.lightPrimary || '#e6deff',
+    backgroundColor: COLORS.lightPrimary || "#e6deff",
     marginTop: 12,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
   },
   actionButtonText: {
-    color: COLORS.primary || '#6200ee',
-    fontWeight: 'bold',
+    color: COLORS.primary || "#6200ee",
+    fontWeight: "bold",
     marginLeft: 5,
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   errorText: {
-    color: COLORS.error || '#b00020',
-    textAlign: 'center',
+    color: COLORS.error || "#b00020",
+    textAlign: "center",
     marginTop: 16,
     fontSize: 16,
   },
