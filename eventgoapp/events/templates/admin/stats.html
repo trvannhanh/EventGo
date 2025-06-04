@@ -1,0 +1,97 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<h1>Thống Kê Báo Cáo</h1>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px;" id="reports-page">
+    <!-- Biểu đồ số lượng vé bán ra -->
+    <div class="chart-container" style="flex: 1; min-width: 400px;">
+        <h2>Số lượng vé bán ra theo sự kiện</h2>
+        <canvas id="ticketsSoldChart"></canvas>
+    </div>
+
+    <!-- Biểu đồ doanh thu -->
+    <div class="chart-container" style="flex: 1; min-width: 400px;">
+        <h2>Doanh thu theo tháng</h2>
+        <canvas id="revenueChart"></canvas>
+    </div>
+
+    <!-- Biểu đồ mức độ quan tâm -->
+    <div class="chart-container" style="flex: 1; min-width: 400px;">
+        <h2>Mức độ quan tâm (Views) theo sự kiện</h2>
+        <canvas id="engagementChart"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    // Biểu đồ số lượng vé bán ra
+    new Chart(document.getElementById('ticketsSoldChart'), {
+        type: 'bar',
+        data: {
+            labels: {{ tickets_sold_labels|safe }},
+            datasets: [{
+                label: 'Số lượng vé bán ra',
+                data: {{ tickets_sold_data|safe }},
+                backgroundColor: '#3498db',
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Số lượng vé'
+                    }
+                }
+            }
+        }
+    });
+
+    // Biểu đồ doanh thu
+    new Chart(document.getElementById('revenueChart'), {
+        type: 'line',
+        data: {
+            labels: {{ revenue_labels|safe }},
+            datasets: [{
+                label: 'Doanh thu',
+                data: {{ revenue_data|safe }},
+                borderColor: '#2ecc71',
+                fill: false,
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Doanh thu (VND)'
+                    }
+                }
+            }
+        }
+    });
+
+    // Biểu đồ mức độ quan tâm
+    new Chart(document.getElementById('engagementChart'), {
+        type: 'pie',
+        data: {
+            labels: {{ engagement_labels|safe }},
+            datasets: [{
+                label: 'Mức độ quan tâm (Views)',
+                data: {{ engagement_data|safe }},
+                backgroundColor: ['#e74c3c', '#f1c40f', '#3498db', '#2ecc71', '#9b59b6'],
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

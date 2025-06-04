@@ -92,7 +92,7 @@ class EventCategorySerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class EventSerializer(BaseSerializer):
-    organizer = UserSerializer(read_only=True)
+    organizer = UserSerializer(read_only=True, )
     category = EventCategorySerializer(read_only=True)
     average_rating = serializers.SerializerMethodField(read_only=True)
     review_count = serializers.SerializerMethodField(read_only=True)

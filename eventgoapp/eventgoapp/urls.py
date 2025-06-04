@@ -20,6 +20,8 @@ from django.urls import path, include, re_path
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
+from events.admin import admin_site
+
 schema_view = get_schema_view(
    openapi.Info(
       title="EventGo API",
@@ -33,7 +35,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('', include('events.urls')),
-    path('admin/', admin.site.urls),
+    path('admin/', admin_site.urls),
     re_path(r'^ckeditor/', include('ckeditor_uploader.urls')),
     path('accounts/', include('allauth.urls')),
     path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),

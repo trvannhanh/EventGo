@@ -1,11 +1,13 @@
 from datetime import timedelta
 
 from cloudinary.models import CloudinaryField
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from ckeditor.fields import RichTextField
 from django.utils.timezone import now
 from django.core.mail import send_mail
+
 
 class User(AbstractUser):
     class Role(models.TextChoices):
@@ -55,7 +57,7 @@ class Event(BaseModel):
         COMPLETED = 'completed', 'Completed'
         CANCELED = 'canceled', 'Canceled'
 
-    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True, blank=True)
+    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True, blank=True, limit_choices_to={'role':'organizer'})
     category = models.ForeignKey(EventCategory, on_delete=models.SET_NULL, null=True, related_name='events')
     name = models.CharField(max_length=100, unique=True, null=True)
     description = RichTextField(blank=True, null=True)
@@ -83,7 +85,7 @@ class Event(BaseModel):
         super().save(*args, **kwargs)
 
     def send_notifications(self):
-        
+
         attendees = OrderDetail.objects.filter(ticket__event=self, order__payment_status=Order.PaymentStatus.PAID).values_list('order__user', flat=True)
         users = User.objects.filter(id__in=attendees)
 
@@ -95,8 +97,8 @@ class Event(BaseModel):
                 from_email="nhanhgon24@gmail.com",
                 recipient_list=[user.email],
                 fail_silently=False,
-                
-            ): 
+
+            ):
                 print(f"Email sent to {user.username} ({user.email})")
 
             # Create a push notification
@@ -106,8 +108,8 @@ class Event(BaseModel):
                 message=f"Reminder: The event '{self.name}' is happening soon!"
             ):
                 print(f"Created notifications for {len(users)} users.")
-    
-            
+
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['name', 'date'], name='unique_event_name_date')
@@ -122,22 +124,32 @@ class Ticket(BaseModel):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField()
 
+    def clean(self):
+        if self.price <= 0:
+            raise ValidationError({'price': 'Price must be greater than 0.'})
+
+        if self.event.pk and self.event.ticket_limit is not None:
+            total_tickets = sum(
+                ticket.quantity for ticket in Ticket.objects.filter(event=self.event).exclude(id=self.id)
+            ) + self.quantity
+            if total_tickets > self.event.ticket_limit:
+                raise ValidationError(
+                    f"Tổng số vé ({total_tickets}) vượt quá giới hạn vé của sự kiện ({self.event.ticket_limit})."
+                )
+
+    def save(self, *args, **kwargs):
+        """Gọi clean trước khi lưu để kiểm tra."""
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.type} - {self.event.name}"
 
     class Meta:
-        verbose_name = "Ticket"
-        verbose_name_plural = "Tickets"
+        verbose_name = "Ticket Type"
+        verbose_name_plural = "Ticket Types"
         ordering = ['price']
 
-# def send_test_email():
-#         send_mail(
-#             subject='Test Email from SendGrid',
-#             message='This is a test email sent using SendGrid.',
-#             from_email='noreply@yourdomain.com',  # Replace with your sender email
-#             recipient_list=['recipient@example.com'],  # Replace with the recipient's email
-#             fail_silently=False,
-#         )
 class Order(BaseModel):
     class PaymentStatus(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -247,21 +259,6 @@ class Notification(BaseModel):
     class Meta:
         verbose_name = "Notification"
         verbose_name_plural = "Notifications"
-        ordering = ['-created_at']
-
-
-
-class ChatMessage(BaseModel):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='chat_messages')
-    sender = models.ForeignKey(User, on_delete=models.CASCADE)
-    message = models.TextField()
-
-    def __str__(self):
-        return f"Message from {self.sender.username}"
-
-    class Meta:
-        verbose_name = "Chat Message"
-        verbose_name_plural = "Chat Messages"
         ordering = ['-created_at']
 
 

@@ -1,0 +1,9 @@
+{% extends "admin/index.html" %}
+
+     {% block content %}
+         {{ block.super }}
+         <div class="module">
+             <h2><a href="{% url 'admin:stats' %}">Xem Thống Kê Báo Cáo</a></h2>
+             <p>Truy cập trang thống kê để xem số lượng vé bán ra, doanh thu, và mức độ quan tâm.</p>
+         </div>
+     {% endblock %}
