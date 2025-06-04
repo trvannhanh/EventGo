@@ -154,8 +154,8 @@ const Login = () => {
                 setLoading(true);
                 let res = await Apis.post(endpoints['login'], {
                     ...user,
-                    client_id: 'm1lijofuYnBkhCeuIHp2Pi44NNGHSDB9WBIEcpHb',
-                    client_secret: 'Bs9D3mrYsQwxqmPv4kQ8HcV5QU0TfhdQqL7p7OYBJtPoUDxlhPbQh3K9a2HPk7y4RsjcE8pW9hPo8dMHraSQaTqQvUFPZFbnp2tgmSjWWsqOJn4aOjyJ5DRQGnHaIoWt',
+                    client_id: '0jK2dr3qglebBntUo6jBLU4dZV4FV6lQdn2KMau6',
+                    client_secret: '7JaHdGuUXhOM05peET9azbrVFPeUpsdjEfgspCMIadnAyof8FpardRjMDRItbxZnk7InapP18RQnPbhNS5i7gYWg7kE6thIR1pRTNmo0lSyggZemEFw475axbSUvwzei',
                     grant_type: 'password'
                 }, {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' }

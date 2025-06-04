@@ -1,3 +1,72 @@
-body{
-    background-color: lightblue;
+/* Cải thiện giao diện tổng thể của admin */
+body {
+    background-color: #f4f6f9; /* Nền nhẹ nhàng */
+    font-family: 'Arial', sans-serif;
+}
+
+/* Tiêu đề trang admin */
+h1 {
+    color: #2c3e50;
+    font-weight: bold;
+}
+
+/* Tùy chỉnh bảng danh sách */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+thead th {
+    background-color: #34495e;
+    color: white;
+    padding: 10px;
+    text-align: left;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #ecf0f1;
+}
+
+tbody tr:hover {
+    background-color: #dfe6e9;
+}
+
+td, th {
+    padding: 8px;
+    border: 1px solid #ddd;
+}
+
+/* Tùy chỉnh inline */
+.inline-related {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 10px;
+    background-color: #fff;
+    margin-bottom: 15px;
+}
+
+.inline-related h3 {
+    background-color: #3498db;
+    color: white;
+    padding: 8px;
+    border-radius: 3px;
+}
+
+/* Tùy chỉnh trạng thái checked_in trong OrderDetailAdmin */
+.checked-in-true {
+    background-color: #2ecc71; /* Màu xanh lá khi checked_in=True */
+    color: white;
+    font-weight: bold;
+}
+
+.checked-in-false {
+    background-color: #e74c3c; /* Màu đỏ khi checked_in=False */
+    color: white;
+    font-weight: bold;
+}
+
+/* Tùy chỉnh đơn hàng sắp hết hạn trong OrderAdmin */
+.expiring-soon {
+    background-color: #f1c40f; /* Màu vàng cảnh báo */
+    font-weight: bold;
 }
