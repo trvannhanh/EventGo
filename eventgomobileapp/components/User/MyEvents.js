@@ -14,6 +14,7 @@ import {
   Image,
   TouchableOpacity,
   Linking,
+  Alert,
 } from "react-native";
 import {
   Button,
@@ -27,7 +28,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { MyUserContext } from "../../configs/MyContexts";
-import Apis, { endpoints } from "../../configs/Apis";
+import Apis, { endpoints, authApis } from "../../configs/Apis";
 import { COLORS } from "../../components/styles/MyStyles";
 
 const MyEvents = () => {
@@ -375,7 +376,6 @@ const MyEvents = () => {
                   Cập nhật sự kiện
                 </Button>
               )}
-
               {canCheckIn && (
                 <Button
                   mode="contained"
@@ -396,7 +396,6 @@ const MyEvents = () => {
                       : "Check-in"}
                 </Button>
               )}
-
               {canDiscount && (
                 <Button
                   mode="contained"
@@ -415,7 +414,6 @@ const MyEvents = () => {
                   Tạo Discount
                 </Button>
               )}
-
               {canDiscount && (
                 <Button
                   mode="contained"
@@ -433,13 +431,28 @@ const MyEvents = () => {
                 >
                   Chat
                 </Button>
+              )}{" "}
+              {/* Cancel button for upcoming and ongoing events */}
+              {["upcoming", "ongoing"].includes(item.status) && (
+                <Button
+                  mode="outlined"
+                  icon="cancel"
+                  style={{
+                    borderColor: COLORS.error,
+                    marginVertical: 4,
+                  }}
+                  textColor={COLORS.error}
+                  onPress={() => cancelEvent(item.id, item.name)}
+                >
+                  Hủy sự kiện
+                </Button>
               )}
             </View>
           </View>
         </Surface>
       );
     },
-    [navigation, formatDate, getStatusChip, activeTab]
+    [navigation, formatDate, getStatusChip, activeTab, cancelEvent]
   );
 
   const renderEmptyComponent = useCallback(
@@ -507,6 +520,63 @@ const MyEvents = () => {
       </View>
     );
   }, [hasMoreEvents]);
+
+  // Add cancel event function
+  const cancelEvent = useCallback(
+    async (eventId, eventName) => {
+      Alert.alert(
+        "Xác nhận hủy sự kiện",
+        `Bạn có chắc chắn muốn hủy sự kiện "${eventName}"? Tất cả người tham gia sẽ được thông báo và không thể hoàn tác.`,
+        [
+          {
+            text: "Hủy bỏ",
+            style: "cancel",
+          },
+          {
+            text: "Xác nhận hủy",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const token = await AsyncStorage.getItem("token");
+                const response = await authApis(token).patch(
+                  endpoints.cancelEvent(eventId)
+                );
+
+                if (response.status === 200) {
+                  Alert.alert(
+                    "Thành công",
+                    "Sự kiện đã được hủy thành công. Tất cả người tham gia đã được thông báo.",
+                    [
+                      {
+                        text: "OK",
+                        onPress: () => {
+                          // Refresh the events list
+                          fetchEvents(activeTab, 1);
+                        },
+                      },
+                    ]
+                  );
+                }
+              } catch (error) {
+                console.error("Error canceling event:", error);
+                let errorMessage = "Có lỗi xảy ra khi hủy sự kiện.";
+
+                if (error.response?.status === 403) {
+                  errorMessage = "Bạn không có quyền hủy sự kiện này.";
+                } else if (error.response?.status === 400) {
+                  errorMessage =
+                    error.response.data?.detail || "Không thể hủy sự kiện này.";
+                }
+
+                Alert.alert("Lỗi", errorMessage);
+              }
+            },
+          },
+        ]
+      );
+    },
+    [activeTab, fetchEvents]
+  );
 
   return (
     <View style={styles.container}>

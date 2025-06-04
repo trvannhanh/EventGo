@@ -126,6 +126,9 @@ const MyOrders = () => {
     ({ item }) => {
       const imageUri = item.details[0]?.ticket?.event?.image || 'https://via.placeholder.com/300x200?text=No+Image';
       const eventId = item.details[0]?.ticket?.event?.id;
+      // console.log('Rendering order item:', item.details[0], 'Event ID:', eventId);
+      // console.log('Rendering ticket item:', item.details[0]?.ticket?.id, 'Event ID:', eventId);
+      // console.log(item.details[0]?.ticket?.event?.name, 'Event ID:', eventId);
 
       return (
         <Surface style={[styles.orderCard, { elevation: 2 }]}>

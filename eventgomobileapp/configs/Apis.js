@@ -13,8 +13,9 @@ export const endpoints = {
   // Event endpoints
   events: API_BASE + "events/",
   eventDetail: (id) => API_BASE + `events/${id}/detail/`,
-  eventAnalytics: (eventId) => API_BASE + `events/${eventId}/analytics/`, // Added for individual event analytics
-  dashboardAnalytics: API_BASE + "events/dashboard-analytics/", // Added for dashboard analytics
+  eventAnalytics: (eventId) => API_BASE + `events/${eventId}/analytics/`,
+  dashboardAnalytics: API_BASE + "events/dashboard-analytics/",
+  analyticsFilterOptions: API_BASE + "reviews/analytics-filter-options/",
   ticketsOfEvent: (id) => API_BASE + `events/${id}/tickets/`,
   createOrder: (id) => API_BASE + `events/${id}/create-order/`,
   recommendedEvents: API_BASE + "events/recommended/",
@@ -30,6 +31,7 @@ export const endpoints = {
   discounts: (id) => API_BASE + `events/${id}/discounts/`,
   discountsCheck: (id) => API_BASE + `events/${id}/check-discount/`,
   updateEvent: (eventId) => API_BASE + `events/${eventId}/update/`,
+  cancelEvent: (eventId) => API_BASE + `events/${eventId}/cancel/`,
   payOrder: (id) => API_BASE + `orders/${id}/pay/`,
   checkInTicket: (eventId) => `/events/${eventId}/checkin/`,
   orders: API_BASE + "orders/",
@@ -46,10 +48,9 @@ export const endpoints = {
   // Updated to match backend implementation (should be a ticket/order detail endpoint)
   checkIn: (orderDetailId) =>
     API_BASE + `orders/details/${orderDetailId}/checkin/`,
-
   // Review endpoints
   submitReview: (eventId) => API_BASE + `events/${eventId}/review/`,
-  eventReviews: (eventId) => API_BASE + `events/${eventId}/feedback/`,
+  eventReviews: (eventId) => API_BASE + `reviews/by-event/${eventId}/`,
   myReviews: API_BASE + "reviews/my-reviews/",
   deleteReview: (reviewId) => API_BASE + `reviews/${reviewId}/`,
   replyToReview: (eventId, reviewId) =>
