@@ -1,8 +1,8 @@
 from cloudinary.utils import cloudinary_url
+from django.db.models import Avg
 from rest_framework import serializers
 import re
-
-from events.models import User, Event, Ticket, Order, OrderDetail, EventCategory, Review, Notification, Discount
+from events.models import User, Event, TicketType, Order, OrderDetail, EventCategory, Review, Notification, Discount
 
 
 class BaseSerializer(serializers.ModelSerializer):
@@ -89,7 +89,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class EventCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = EventCategory
-        fields = '__all__'
+        fields = ['id', 'name']
 
 class EventSerializer(BaseSerializer):
     organizer = UserSerializer(read_only=True, )
@@ -117,18 +117,16 @@ class EventSerializer(BaseSerializer):
         required=True,
         write_only=True
     )
-    
+
     def get_average_rating(self, obj):
-        reviews = obj.reviews.all()
-        if not reviews:
-            return 0
-        return sum(review.rating for review in reviews) / reviews.count()
+        avg = obj.reviews.aggregate(Avg('rating'))['rating__avg']
+        return avg if avg else 0
     
     def get_review_count(self, obj):
         return obj.reviews.count()
     
     def get_tickets(self, obj):
-        tickets = Ticket.objects.filter(event=obj)
+        tickets = TicketType.objects.filter(event=obj)
         return TicketSerializer(tickets, many=True).data
     
     def get_event_date(self, obj):
@@ -143,42 +141,30 @@ class EventSerializer(BaseSerializer):
     
     def get_venue(self, obj):
         return obj.location
-      # Thêm phương thức validate để ghi log dữ liệu trước khi lưu
+
     def validate(self, data):
         print("Dữ liệu nhận được trong serializer:", data)
         return data
-    
-    # Override to_representation để đảm bảo các trường frontend cần được đưa vào response
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # Đảm bảo các trường cho frontend được set đúng
         data['venue'] = instance.location
-        
-        # Thêm thông tin chi tiết về người tổ chức
         if instance.organizer:
-            data['organizer'] = {
-                'id': instance.organizer.id,
-                'username': instance.organizer.username,
-                'email': instance.organizer.email,
-                'avatar': instance.organizer.avatar.url if instance.organizer.avatar else None,
-                'event_count': Event.objects.filter(organizer=instance.organizer).count()
-            }
-        
+            data['organizer'] = UserSerializer(instance.organizer, context=self.context).data
         return data
-        
-    # Override create để đảm bảo organizer được gán đúng
+
     def create(self, validated_data):
         print("Dữ liệu đã xác thực trước khi tạo:", validated_data)
-        # Đảm bảo rằng nếu organizer không được cung cấp từ client, sẽ lấy từ request        if 'organizer' not in validated_data and self.context.get('request'):
         validated_data['organizer'] = self.context.get('request').user
         return super().create(validated_data)
-        
+
     class Meta:
         model = Event
-        fields = '__all__'
+        fields = ['id', 'name', 'description', 'date', 'location', 'status', 'image', 'organizer', 'category',
+                  'average_rating', 'review_count', 'tickets', 'event_date', 'event_time', 'venue', 'organizer_id',
+                  'category_id']
 
 class TicketSerializer(serializers.ModelSerializer):
-    """Serializer cho vé sự kiện"""
     event_id = serializers.PrimaryKeyRelatedField(
         source='event',
         queryset=Event.objects.all(),
@@ -188,7 +174,6 @@ class TicketSerializer(serializers.ModelSerializer):
     event = serializers.SerializerMethodField(read_only=True)
     
     def get_event(self, obj):
-        # Chỉ trả về ID của event để tránh vòng lặp vô hạn
         if obj.event:
             return {
                 'id': obj.event.id,
@@ -197,7 +182,7 @@ class TicketSerializer(serializers.ModelSerializer):
         return None
 
     class Meta:
-        model = Ticket
+        model = TicketType
         fields = ['id', 'event', 'event_id', 'type', 'price', 'quantity']
 
 class OrderDetailSerializer(serializers.ModelSerializer):
@@ -208,9 +193,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         fields = ['id', 'ticket', 'qr_code', 'qr_image', 'checked_in', 'checkin_time']
 
 class OrderSerializer(serializers.ModelSerializer):
-    """Serializer đơn hàng"""
-
-    user = serializers.StringRelatedField(read_only=True)  # Hiển thị username thay vì ID
+    user = serializers.StringRelatedField(read_only=True)
     details = OrderDetailSerializer(source='order_details', many=True, read_only=True)
 
     class Meta:
@@ -242,31 +225,26 @@ class ReviewSerializer(serializers.ModelSerializer):
         if value < 1 or value > 5:
             raise serializers.ValidationError("Đánh giá phải từ 1 đến 5 sao.")
         return value
-    
+
     def validate(self, data):
         request = self.context.get('request')
-        # Nếu không phải update (tạo mới)
         if not self.instance:
             user_id = data.get('user_id', request.user.id if request else None)
             event_id = data.get('event_id')
-            
-            # Kiểm tra xem người dùng đã đánh giá sự kiện này chưa
-            if Review.objects.filter(user_id=user_id, event_id=event_id).exists():
+            review_exists = Review.objects.select_related('user', 'event').filter(user_id=user_id,
+                                                                                  event_id=event_id).exists()
+            if review_exists:
                 raise serializers.ValidationError("Bạn đã đánh giá sự kiện này rồi.")
-            
-            # Kiểm tra xem người dùng đã tham gia sự kiện này chưa
-            if not OrderDetail.objects.filter(
-                order__user_id=user_id, 
+            order_details = OrderDetail.objects.select_related('order', 'ticket__event').filter(
+                order__user_id=user_id,
                 ticket__event_id=event_id,
                 order__payment_status=Order.PaymentStatus.PAID,
-            ).exists():
+            ).exists()
+            if not order_details:
                 raise serializers.ValidationError("Bạn cần tham gia sự kiện trước khi đánh giá.")
-            
-            # Kiểm tra xem sự kiện đã kết thúc chưa
             event = Event.objects.get(id=event_id)
             if event.status != Event.EventStatus.COMPLETED:
                 raise serializers.ValidationError("Chỉ có thể đánh giá sự kiện đã kết thúc.")
-                
         return data
     
     def create(self, validated_data):
@@ -282,6 +260,12 @@ class ReviewSerializer(serializers.ModelSerializer):
 
 class DiscountSerializer(serializers.ModelSerializer):
     event = serializers.PrimaryKeyRelatedField(queryset=Event.objects.all())
+
+    def validate_discount_percent(self, value):
+        if not 0 <= value <= 100:
+            raise serializers.ValidationError("Phần trăm giảm giá phải từ 0 đến 100.")
+        return value
+
     class Meta:
         model = Discount
         fields = ['id', 'event', 'code', 'discount_percent', 'expiration_date', 'target_rank']
@@ -310,3 +294,12 @@ class PushTokenSerializer(serializers.Serializer):
         instance.push_token = validated_data.get('push_token', instance.push_token)
         instance.save()
         return instance
+
+class DeleteEventSerializer(serializers.Serializer):
+    password = serializers.CharField(required=True, write_only=True)
+
+    def validate_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Mật khẩu không đúng.")
+        return value
