@@ -7,34 +7,23 @@ from django.core.mail import send_mail
 
 @shared_task(bind=True, name='events.tasks.send_event_reminders')
 def send_event_reminders(self):
-    """
-    Task to send reminders for upcoming events.
-    """
     with transaction.atomic():
         upcoming_events = Event.objects.filter(status=Event.EventStatus.UPCOMING)
         print(f"Found {upcoming_events.count()} upcoming events.")
 
         for event in upcoming_events:
             event.send_notifications()
-        print("Successfully sent notifications for upcoming events!")
+        print("Gửi thông báo sự kiện sắp diễn ra thành công!")
 
 
 @shared_task(bind=True, name='events.tasks.send_event_update_notifications')
 def send_event_update_notifications(self, event_id, update_message):
     print(f"--- TASK send_event_update_notifications ENTERED ---")
     print(f"--- SELF: {self}, EVENT_ID: {event_id}, MESSAGE (first 100 chars): '{str(update_message)[:100]}...' ---")
-    """
-    Task to send notifications when an event is updated.
-    
-    Args:
-        event_id: The ID of the updated event
-        update_message: Description of the update
-    """
     try:
         with transaction.atomic():
             event = Event.objects.get(id=event_id)
-            
-            # Get all users who purchased tickets for this event
+
             attendees = OrderDetail.objects.filter(
                 ticket__event=event, 
                 order__payment_status=Order.PaymentStatus.PAID
@@ -44,7 +33,6 @@ def send_event_update_notifications(self, event_id, update_message):
             
             notification_count = 0
             for user in users:
-                # Send email notification
                 try:
                     send_mail(
                         subject=f"Cập nhật cho sự kiện: {event.name}",
@@ -54,9 +42,8 @@ def send_event_update_notifications(self, event_id, update_message):
                         fail_silently=True,
                     )
                 except Exception as e:
-                    print(f"Error sending email to {user.email}: {str(e)}")
-                
-                # Create in-app notification
+                    print(f"Lỗi gửi mail {user.email}: {str(e)}")
+
                 Notification.objects.create(
                     user=user,
                     event=event,
@@ -64,34 +51,26 @@ def send_event_update_notifications(self, event_id, update_message):
                 )
                 notification_count += 1
             
-            print(f"Created {notification_count} notifications for event '{event.name}' (ID: {event_id})")
+            print(f"Đã tạo {notification_count} thông báo cho event '{event.name}' (ID: {event_id})")
             return notification_count
     except Event.DoesNotExist:
-        print(f"Event with ID {event_id} not found.")
+        print(f"Event {event_id} không tìm thấy.")
         return 0
     except Exception as e:
-        print(f"Error in send_event_update_notifications: {str(e)}")
+        print(f"Lỗi khi send_event_update_notifications: {str(e)}")
         return 0
 
 
 @shared_task(bind= True, name='events.tasks.send_new_event_notifications')
 def send_new_event_notifications(self, event_id):
-    """
-    Task để gửi thông báo khi một sự kiện mới được tạo.
-    
-    Args:
-        event_id: ID của sự kiện mới
-    """
     try:
         with transaction.atomic():
             event = Event.objects.get(id=event_id)
-            
-            # Lấy tất cả người dùng có vai trò là người tham dự (attendee)
+
             attendees = User.objects.filter(role='attendee', is_active=True)
             
             notification_count = 0
             for user in attendees:
-                # Gửi email thông báo
                 try:
                     send_mail(
                         subject=f"Sự kiện mới: {event.name}",
@@ -119,20 +98,12 @@ def send_new_event_notifications(self, event_id):
 def test_taskk(self):
     return "Task executed successfully!"
 
+
 @shared_task(bind=True, name='events.tasks.send_event_cancellation_notifications')
 def send_event_cancellation_notifications(self, event_id, cancel_message):
-    """
-    Task để gửi thông báo khi một sự kiện bị hủy.
-    
-    Args:
-        event_id: ID của sự kiện bị hủy
-        cancel_message: Thông điệp về việc hủy sự kiện
-    """
     try:
         with transaction.atomic():
             event = Event.objects.get(id=event_id)
-            
-            # Lấy tất cả người dùng đã mua vé cho sự kiện này
             attendees = OrderDetail.objects.filter(
                 ticket__event=event,
                 order__payment_status=Order.PaymentStatus.PAID
@@ -142,7 +113,6 @@ def send_event_cancellation_notifications(self, event_id, cancel_message):
             
             notification_count = 0
             for user in users:
-                # Gửi email thông báo hủy sự kiện
                 try:
                     send_mail(
                         subject=f"Thông báo hủy sự kiện: {event.name}",
@@ -154,7 +124,6 @@ def send_event_cancellation_notifications(self, event_id, cancel_message):
                     print(f"Đã gửi email thông báo hủy sự kiện tới {user.email}")
                 except Exception as e:
                     print(f"Lỗi gửi email đến {user.email}: {str(e)}")
-                  # Tạo thông báo trong ứng dụng
                 Notification.objects.create(
                     user=user,
                     event=event,
@@ -171,5 +140,4 @@ def send_event_cancellation_notifications(self, event_id, cancel_message):
         print(f"Lỗi trong send_event_cancellation_notifications: {str(e)}")
         return 0
 
-# Print registered tasks for debugging
 print("Available tasks:", send_event_reminders.name, send_event_update_notifications.name, send_new_event_notifications.name, send_event_cancellation_notifications.name)
