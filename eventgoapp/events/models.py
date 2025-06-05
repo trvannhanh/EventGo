@@ -1,5 +1,4 @@
 from datetime import timedelta
-
 from cloudinary.models import CloudinaryField
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -7,7 +6,6 @@ from django.contrib.auth.models import AbstractUser
 from ckeditor.fields import RichTextField
 from django.utils.timezone import now
 from django.core.mail import send_mail
-
 
 class User(AbstractUser):
     class Role(models.TextChoices):
@@ -57,12 +55,12 @@ class Event(BaseModel):
         COMPLETED = 'completed', 'Completed'
         CANCELED = 'canceled', 'Canceled'
 
-    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events', null=True, blank=True, limit_choices_to={'role':'organizer'})
-    category = models.ForeignKey(EventCategory, on_delete=models.SET_NULL, null=True, related_name='events')
-    name = models.CharField(max_length=100, unique=True, null=True)
+    organizer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='organized_events',  limit_choices_to={'role':'organizer'})
+    category = models.ForeignKey(EventCategory, on_delete=models.SET_NULL,null=True, related_name='events')
+    name = models.CharField(max_length=100, unique=True)
     description = RichTextField(blank=True, null=True)
     date = models.DateTimeField(default=now)
-    location = models.CharField(max_length=255, blank=True, null=True)
+    location = models.CharField(max_length=255)
     google_maps_link = models.URLField(blank=True, null=True, max_length=1000)
     ticket_limit = models.PositiveIntegerField(null=True, blank=True, default=0)
     status = models.CharField(max_length=20, choices=EventStatus.choices, default=EventStatus.UPCOMING)
@@ -72,7 +70,6 @@ class Event(BaseModel):
         return self.name
 
     def update_status(self):
-        """Cập nhật trạng thái sự kiện dựa trên thời gian hiện tại."""
         current_time = now()
         if self.date < current_time and self.status == self.EventStatus.UPCOMING:
             self.status = self.EventStatus.COMPLETED
@@ -80,7 +77,6 @@ class Event(BaseModel):
             self.status = self.EventStatus.UPCOMING
 
     def save(self, *args, **kwargs):
-        """Ghi đè save để tự động cập nhật trạng thái trước khi lưu."""
         self.update_status()
         super().save(*args, **kwargs)
 
@@ -90,7 +86,6 @@ class Event(BaseModel):
         users = User.objects.filter(id__in=attendees)
 
         for user in users:
-            # Send email notification
             if send_mail(
                 subject=f"Thông báo: Upcoming Event - {self.name}",
                 message=f"Gửi {user.username},\n\nMail này thông báo về sự kiện sắp diễn ra '{self.name}' diễn ra vào {self.date}.",
@@ -99,16 +94,14 @@ class Event(BaseModel):
                 fail_silently=False,
 
             ):
-                print(f"Email sent to {user.username} ({user.email})")
+                print(f"Email gửi đến {user.username} ({user.email})")
 
-            # Create a push notification
             if Notification.objects.create(
                 user=user,
                 event=self,
-                message=f"Reminder: The event '{self.name}' is happening soon!"
+                message=f"Nhắc nhở: Sự kiện '{self.name}' sắp diễn ra!"
             ):
-                print(f"Created notifications for {len(users)} users.")
-
+                print(f"Đã tạo thông báo cho {len(users)} người dùng.")
 
     class Meta:
         constraints = [
@@ -118,7 +111,7 @@ class Event(BaseModel):
         verbose_name_plural = "Events"
         ordering = ['date']
 
-class Ticket(BaseModel):
+class TicketType(BaseModel):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='tickets')
     type = models.CharField(max_length=100)
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -126,11 +119,11 @@ class Ticket(BaseModel):
 
     def clean(self):
         if self.price <= 0:
-            raise ValidationError({'price': 'Price must be greater than 0.'})
+            raise ValidationError({'price': 'Price phải lớn hơn 0'})
 
         if self.event.pk and self.event.ticket_limit is not None:
             total_tickets = sum(
-                ticket.quantity for ticket in Ticket.objects.filter(event=self.event).exclude(id=self.id)
+                ticket.quantity for ticket in TicketType.objects.filter(event=self.event).exclude(id=self.id)
             ) + self.quantity
             if total_tickets > self.event.ticket_limit:
                 raise ValidationError(
@@ -138,7 +131,6 @@ class Ticket(BaseModel):
                 )
 
     def save(self, *args, **kwargs):
-        """Gọi clean trước khi lưu để kiểm tra."""
         self.clean()
         super().save(*args, **kwargs)
 
@@ -161,21 +153,20 @@ class Order(BaseModel):
         VNPAY = 'VNPAY', 'VNPAY'
         CREDIT_CARD = 'credit_card', 'Credit Card'
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
-    ticket = models.ForeignKey('Ticket', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders', limit_choices_to={'role':'attendee'})
+    ticket = models.ForeignKey('TicketType', on_delete=models.CASCADE, related_name='orders', null=True, blank=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_status = models.CharField(max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, null=True, blank=True)
-    quantity = models.PositiveIntegerField(default=1)  # Tổng số vé đặt trong đơn hàng
-    expiration_time = models.DateTimeField(null=True, blank=True)  # Thời gian hết hạn thanh toán
+    quantity = models.PositiveIntegerField(default=1)
+    expiration_time = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Order #{self.id} by {self.user.username}"
 
     def save(self, *args, **kwargs):
-        """Tự động đặt expiration_time khi tạo Order mới với trạng thái PENDING."""
         if not self.id and self.payment_status == self.PaymentStatus.PENDING:
-            self.expiration_time = now() + timedelta(minutes=15)  # Hết hạn sau 15 phút
+            self.expiration_time = now() + timedelta(minutes=15)
         super().save(*args, **kwargs)
 
     class Meta:
@@ -186,15 +177,14 @@ class Order(BaseModel):
 
 class OrderDetail(BaseModel):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_details')
-    ticket = models.ForeignKey(Ticket, on_delete=models.CASCADE)
     qr_code = models.CharField(max_length=255, unique=True)
     qr_image = CloudinaryField('image', folder='tickets', blank=True, null=True)
     checked_in = models.BooleanField(default=False)
     checkin_time = models.DateTimeField(null=True)
-    google_calendar_event_id = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
         return f"Order #{self.order.id} - {self.ticket.type}"
+
 
     class Meta:
         verbose_name = "Order Detail"
@@ -206,7 +196,7 @@ class Discount(BaseModel):
         BRONZE = 'bronze', 'Đồng'
         SILVER = 'silver', 'Bạc'
         GOLD = 'gold', 'Vàng'
-        NONE = 'none', 'Không có hạng'  # Áp dụng cho tất cả nếu không chỉ định
+        NONE = 'none', 'Không có hạng'
 
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='discounts')
     code = models.CharField(max_length=50, unique=True)
@@ -234,7 +224,7 @@ class Review(BaseModel):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='reviews')
     rating = models.PositiveIntegerField()
     comment = models.TextField(blank=True)
-    reply = models.TextField(blank=True, null=True)  # Organizer/Admin reply
+    reply = models.TextField(blank=True, null=True)
     replied_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='review_replies')
     replied_at = models.DateTimeField(null=True, blank=True)
 
@@ -263,22 +253,20 @@ class Notification(BaseModel):
 
 
 class EventTrend(BaseModel):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='trends')
+    event = models.OneToOneField(Event, on_delete=models.CASCADE, related_name='trends')
     views = models.PositiveIntegerField(default=0)
     interest_level = models.PositiveIntegerField(default=0)
 
     def increment_views(self):
-        """Tăng lượt xem khi sự kiện được truy cập."""
         self.views += 1
         self.save(update_fields=['views'])
 
     def increment_interest(self, points=1):
-        """Tăng interest_level dựa trên hành vi người dùng."""
         self.interest_level += points
         self.save(update_fields=['interest_level'])
 
     def __str__(self):
-        return f"Trend for {self.event.name}: {self.views} views"
+        return f"Xu hướng cho {self.event.name}: {self.views} lượt xem"
 
     class Meta:
         verbose_name = "Event Trend"

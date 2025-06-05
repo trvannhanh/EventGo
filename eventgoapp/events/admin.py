@@ -18,14 +18,14 @@ class EventForm(forms.ModelForm):
         fields = '__all__'
 
 class TicketInline(admin.StackedInline):
-    model = Ticket
+    model = TicketType
     extra = 1
     fields = ['type', 'price', 'quantity']
 
 class OrderDetailInline(admin.StackedInline):
     model = OrderDetail
     extra = 1
-    fields = ['ticket', 'qr_code', 'qr_image', 'checked_in', 'qr_image_preview']
+    fields = ['qr_code', 'qr_image', 'checked_in', 'qr_image_preview']
     readonly_fields = ['qr_image_preview']
 
     def qr_image_preview(self, obj):
@@ -139,7 +139,7 @@ class OrderAdmin(admin.ModelAdmin):
         js = ('/static/js/script.js', )
 
 class OrderDetailAdmin(admin.ModelAdmin):
-    list_display = ["order", "ticket", "qr_code", "qr_image_preview", "checked_in"]
+    list_display = ["order", "qr_code", "qr_image_preview", "checked_in"]
     search_fields = ["order__id", "ticket__type"]
     list_filter = ["checked_in"]
 
@@ -206,7 +206,7 @@ admin_site = MyAdminSite(name='event_admin')
 admin_site.register(User, UserAdmin)
 admin_site.register(Event, EventAdmin)
 admin_site.register(EventCategory)
-admin_site.register(Ticket, TicketAdmin)
+admin_site.register(TicketType, TicketAdmin)
 admin_site.register(Order, OrderAdmin)
 admin_site.register(OrderDetail, OrderDetailAdmin)
 admin_site.register(Review)
