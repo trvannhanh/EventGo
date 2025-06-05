@@ -39,23 +39,49 @@ def send_push_notification(user_ids, title, body, data=None):
         print(f"Lỗi khi gửi push notification: {str(e)}")
 
 
-def create_and_send_event_notification(event_id, is_update=False):
+
+def create_and_send_event_notification(event_id, is_update=False, is_cancel=False):
+    """
+    Tạo và gửi thông báo khi có sự kiện mới, cập nhật sự kiện hoặc hủy sự kiện.
+    
+    Args:
+        event_id: ID của sự kiện
+        is_update: True nếu là cập nhật sự kiện, False nếu là tạo mới
+        is_cancel: True nếu là hủy sự kiện, False nếu không phải
+    """
     try:
         event = Event.objects.get(id=event_id)
 
-        if is_update:
+        if is_cancel:
+            title = "Sự kiện bị hủy"
+            body = f"'{event.name}' đã bị hủy. Vui lòng liên hệ ban tổ chức để được hỗ trợ."
+        elif is_update:
             title = "Sự kiện đã được cập nhật"
             body = f"'{event.name}' đã được cập nhật. Xem ngay chi tiết mới nhất!"
         else:
             title = "Sự kiện mới"
             body = f"'{event.name}' đã được tạo. Khám phá ngay!"
-
-        data = {
-            "type": "EVENT_UPDATED" if is_update else "EVENT_CREATED",
-            "eventId": event_id
-        }
-
-        user_ids = User.objects.filter(role='attendee', is_active=True).values_list('id', flat=True)
+        
+        if is_cancel:
+            data = {
+                "type": "EVENT_CANCELED",
+                "eventId": event_id
+            }
+        else:
+            data = {
+                "type": "EVENT_UPDATED" if is_update else "EVENT_CREATED",
+                "eventId": event_id
+            }
+        
+        if is_cancel:
+            from .models import OrderDetail, Order
+            user_ids = OrderDetail.objects.filter(
+                ticket__event=event,
+                order__payment_status=Order.PaymentStatus.PAID
+            ).values_list('order__user_id', flat=True).distinct()
+        else:
+            user_ids = User.objects.filter(role='attendee', is_active=True).values_list('id', flat=True)
+        
 
         send_push_notification(user_ids, title, body, data)
 

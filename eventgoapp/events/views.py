@@ -249,7 +249,60 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         if not user.is_superuser and event.organizer != user:
             return Response({"error": "Bạn không có quyền xóa sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
         event.delete()
-        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)    
+    
+    @action(methods=['patch'], url_path='cancel', detail=True, permission_classes=[IsAuthenticated])
+    def cancel_event(self, request, pk=None):
+        """Hủy sự kiện - chỉ áp dụng cho sự kiện có trạng thái UPCOMING hoặc ONGOING"""
+        event = get_object_or_404(Event, id=pk)
+        user = request.user
+        
+        if not user.is_superuser and event.organizer != user:
+            return Response(
+                {"error": "Bạn không có quyền hủy sự kiện này."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if event.status not in [Event.EventStatus.UPCOMING, Event.EventStatus.ONGOING]:
+            return Response(
+                {"error": f"Không thể hủy sự kiện có trạng thái '{event.get_status_display()}'. Chỉ có thể hủy sự kiện 'Sắp diễn ra' hoặc 'Đang diễn ra'."}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        old_status = event.get_status_display()
+        event.status = Event.EventStatus.CANCELED
+        event.save()
+        
+        cancel_message = f"Sự kiện '{event.name}' đã bị hủy. Trạng thái thay đổi từ '{old_status}' thành 'Đã hủy'."
+        
+        try:
+            attendees = User.objects.filter(
+                orders__order_details__ticket__event=event,
+                orders__payment_status=Order.PaymentStatus.PAID
+            ).distinct()
+            
+            for attendee in attendees:
+                Notification.objects.create(
+                    user=attendee,
+                    message=f"Sự kiện '{event.name}' mà bạn đã đăng ký tham gia đã bị hủy. Vui lòng liên hệ ban tổ chức để được hỗ trợ về việc hoàn tiền.",
+                    event=event
+                )
+            
+            from events.tasks import send_event_cancellation_notifications
+            send_event_cancellation_notifications.delay(event.id, cancel_message)
+            
+            from events.notification_utils import create_and_send_event_notification
+            create_and_send_event_notification(event.id, is_cancel=True)
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi gửi thông báo hủy sự kiện {event.id}: {str(e)}")
+        
+        serializer = EventSerializer(event)
+        return Response({
+            "message": "Sự kiện đã được hủy thành công.",
+            "event": serializer.data,
+            "notifications_sent": f"Đã gửi thông báo hủy sự kiện đến {attendees.count() if 'attendees' in locals() else 0} người tham gia."
+        }, status=status.HTTP_200_OK)
 
     @action(methods=['post'], url_path='create', detail=False, permission_classes=[permissions.IsAuthenticated])
     def create_event(self, request):
@@ -290,6 +343,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     
     @action(methods=['post'], url_path='review', detail=True)
     def submit_review(self, request, pk=None):
+
         if not request.user.is_authenticated:
             return Response(
                 {"error": "Bạn cần đăng nhập để đánh giá sự kiện này."},
@@ -303,7 +357,16 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             return Response(
                 {"error": "Bạn không thể đánh giá sự kiện mà bạn không tham gia."},
                 status=status.HTTP_403_FORBIDDEN
-            )        
+            )
+        
+        
+        if event.status != Event.EventStatus.COMPLETED:
+            return Response(
+                {"error": "Chỉ có thể đánh giá sự kiện đã kết thúc."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        
         rating = request.data.get('rating')
         comment = request.data.get('comment')
 
@@ -344,7 +407,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     @action(methods=['get'], url_path='feedback', detail=True)
     def view_feedback(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
-        reviews = Review.objects.filter(event=event)
+        reviews = Review.objects.filter(event=event, active=True).order_by('-created_at')
         serializer = ReviewSerializer(reviews, many=True)
         avg_rating = reviews.aggregate(Avg('rating'))['rating__avg'] or 0
 
@@ -824,13 +887,24 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         }
         result.update(rating_percents)
         return Response(result, status=status.HTTP_200_OK)
-
     @action(methods=['get'], url_path='dashboard-analytics', detail=False, permission_classes=[permissions.IsAuthenticated])
     def dashboard_analytics(self, request):
         user = request.user
-
+        
         if user.role == User.Role.ORGANIZER:
+            event_filter = request.query_params.get('event_filter', 'all')  
             organizer_events = Event.objects.filter(organizer=user, active=True)
+            
+            if event_filter != 'all':
+                try:
+                    event_id = int(event_filter)
+                    organizer_events = organizer_events.filter(id=event_id)
+                except (ValueError, TypeError):
+                    return Response(
+                        {"error": "Invalid event_filter parameter"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
             analytics_data = []
             for event_instance in organizer_events:
                 response = self.get_event_analytics(request, pk=event_instance.pk)
@@ -839,10 +913,23 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             return Response(analytics_data, status=status.HTTP_200_OK)
 
         elif user.role == User.Role.ADMIN:
+            organizer_filter = request.query_params.get('organizer_filter', 'all')  
             organizers = User.objects.filter(role=User.Role.ORGANIZER, is_active=True)
+            
+            if organizer_filter != 'all':
+                try:
+                    organizer_id = int(organizer_filter)
+                    organizers = organizers.filter(id=organizer_id)
+                except (ValueError, TypeError):
+                    return Response(
+                        {"error": "Invalid organizer_filter parameter"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
             admin_analytics_data = []
             for organizer in organizers:
                 organizer_events = Event.objects.filter(organizer=organizer, active=True)
+                
                 org_total_revenue = 0
                 org_total_tickets_sold = 0
                 org_event_ratings = []
@@ -850,6 +937,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 org_total_views = 0
                 org_total_interest_score = 0
                 event_count = 0
+                event_details = [] 
 
                 for event_instance in organizer_events:
                     response = self.get_event_analytics(request, pk=event_instance.pk)
@@ -857,12 +945,22 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                         event_data = response.data
                         org_total_revenue += event_data.get("total_revenue", 0)
                         org_total_tickets_sold += event_data.get("tickets_sold", 0)
-                        if event_data.get("average_rating", 0) > 0: # Chỉ tính rating nếu có
+                        if event_data.get("average_rating", 0) > 0:
                             org_event_ratings.append(event_data.get("average_rating", 0))
                         org_cancellation_rates.append(event_data.get("cancellation_rate", 0))
                         org_total_views += event_data.get("event_views", 0)
                         org_total_interest_score += event_data.get("event_interest_score", 0)
                         event_count += 1
+                        
+                        event_details.append({
+                            "event_id": event_data.get("event_id"),
+                            "event_name": event_data.get("event_name"),
+                            "event_start_date": event_data.get("event_start_date"),
+                            "total_revenue": event_data.get("total_revenue", 0),
+                            "tickets_sold": event_data.get("tickets_sold", 0),
+                            "average_rating": event_data.get("average_rating", 0),
+                            "event_views": event_data.get("event_views", 0)
+                        })
                 
                 if event_count > 0:
                     avg_rating = sum(org_event_ratings) / len(org_event_ratings) if org_event_ratings else 0
@@ -877,7 +975,8 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                         "average_event_rating": round(avg_rating, 2),
                         "average_cancellation_rate": round(avg_cancellation_rate, 2),
                         "total_event_views": org_total_views,
-                        "total_event_interest_score": org_total_interest_score
+                        "total_event_interest_score": org_total_interest_score,
+                        "event_details": event_details  
                     })
             return Response(admin_analytics_data, status=status.HTTP_200_OK)
 
@@ -1096,6 +1195,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                 })
             queryset = queryset.filter(payment_status=payment_status)
             print(f"Filtered orders count: {queryset.count()}")
+       
         return queryset.order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
@@ -1253,12 +1353,13 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
                 return Response({
                     "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
-                    "qr_image_urls": qr_image_urls
+                    "order_id": order.id
                 }, status=status.HTTP_200_OK)
             else:
                 order.payment_status = Order.PaymentStatus.FAILED
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
+
 
     def update(self, request, *args, **kwargs):
         order = self.get_object()
@@ -1300,11 +1401,10 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
             return self.get_paginated_response(serializer.data)
         serializer = OrderDetailSerializer(order_details, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(methods=['post'], url_path='pay', detail=True, permission_classes=[permissions.IsAuthenticated])
-    def pay(self, request, id=None):
-        order = self.get_object()
-
+        order = Order.objects.filter(id=actual_order_id).first()
+        if not order:
+            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
+          
         if order.expiration_time and now() > order.expiration_time:
             with transaction.atomic():
                 ticket = order.ticket
@@ -1313,8 +1413,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                 order.active = False
                 order.payment_status = Order.PaymentStatus.FAILED
                 order.save()
-            return Response({"error": "Thời gian thanh toán đã hết hạn, vé đã được nhả"},
-                            status=status.HTTP_400_BAD_REQUEST)
 
         if order.payment_status != Order.PaymentStatus.PENDING:
             return Response({"error": "Đơn hàng không ở trạng thái PENDING"},
@@ -1350,35 +1448,40 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                     "momo_response": payment_response
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({
-                "order_id": order.id,
-                "qrCodeUrl": payment_response["qrCodeUrl"],
-                "payUrl": payment_response["payUrl"],
-                "message": "Vui lòng hoàn tất thanh toán trước khi hết hạn"
-            }, status=status.HTTP_200_OK)
+                try:
+                    extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
+                    ticket_id = extra_data_decoded['ticket_id']
+                    quantity = extra_data_decoded['quantity']
+                except (ValueError, KeyError):
+                    return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
-        elif payment_method == "VNPAY":
-            payment_response = self.create_vnpay_url(order, extra_data, request)
-            if "error" in payment_response or "payUrl" not in payment_response:
-                with transaction.atomic():
-                    ticket = order.ticket
-                    ticket.quantity += order.quantity
-                    ticket.save()
-                    order.active = False
+                ticket = get_object_or_404(Ticket, id=ticket_id)
+                if ticket.quantity < quantity:
                     order.payment_status = Order.PaymentStatus.FAILED
                     order.save()
-                return Response({
-                    "error": "Không thể tạo URL thanh toán VNPAY",
-                    "vnpay_response": payment_response
-                }, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({
-                "order_id": order.id,
-                "payUrl": payment_response["payUrl"],
-                "message": "Vui lòng hoàn tất thanh toán trước khi hết hạn"
-            }, status=status.HTTP_200_OK)
+                qr_image_urls = []
+                for i in range(quantity):
+                    qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
+                    order_detail = OrderDetail.objects.create(
+                        order=order,
+                        ticket=ticket,
+                        qr_code=qr_code
+                    )
 
-        return None
+                    qr_image = generate_qr_image(qr_code)
+                    qr_image.seek(0)
+                    upload_result = cloudinary.uploader.upload(
+                        qr_image,
+                        folder='tickets',
+                        public_id=f"QR_{order.id}_{ticket.id}_{i + 1}",
+                        resource_type='image',
+                        overwrite=True
+                    )
+                    order_detail.qr_image = upload_result['public_id']
+                    order_detail.save()
+                    qr_image_urls.append(upload_result['secure_url'])
 
     def create_momo_qr(self, order, extra_data):
 
@@ -1419,7 +1522,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
             return response.json()
         except requests.RequestException as e:
             return {"error": f"Lỗi khi gọi API MoMo: {str(e)}"}
-
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
@@ -1505,3 +1607,32 @@ class ReviewViewSet(viewsets.ModelViewSet):
             {"message": "Đánh giá đã được xóa thành công."}, 
             status=status.HTTP_204_NO_CONTENT
         )
+
+    @action(methods=['get'], url_path='analytics-filter-options', detail=False, permission_classes=[permissions.IsAuthenticated])
+    def get_analytics_filter_options(self, request):
+        """
+        Lấy danh sách tùy chọn lọc cho dashboard analytics
+        - Organizer: chỉ lọc theo events của mình
+        - Admin: chỉ lọc theo organizers
+        """
+        user = request.user
+        
+        if user.role == User.Role.ORGANIZER:
+            events = Event.objects.filter(organizer=user, active=True).values('id', 'name').order_by('-date')
+            return Response({
+                'events': list(events),
+                'user_role': 'organizer'
+            }, status=status.HTTP_200_OK)
+            
+        elif user.role == User.Role.ADMIN:
+            organizers = User.objects.filter(role=User.Role.ORGANIZER, is_active=True).values('id', 'username', 'email').order_by('username')
+            return Response({
+                'organizers': list(organizers),
+                'user_role': 'admin'
+            }, status=status.HTTP_200_OK)
+            
+        else:
+            return Response(
+                {"error": "Bạn không có quyền truy cập vào mục này."},
+                status=status.HTTP_403_FORBIDDEN
+            )

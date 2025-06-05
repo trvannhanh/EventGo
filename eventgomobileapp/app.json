@@ -30,12 +30,10 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/eventgo_icon.png",
-        "backgroundColor": "#000000"
-      },
+      "icon": "./assets/eventgo_icon.png",
       "useNextNotificationsApi": true,
       "package": "com.trieuvy.eventgo",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAh1zei22knWD5ddlB_fKKHvjcSYQcmO8s"
@@ -70,7 +68,24 @@
           "color": "#000000",
           "sounds": []
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "@react-native-firebase/app",
+        {
+          "android": {
+            "googleServicesFile": "./google-services.json"
+          }
+        }
+      ],
+      ["@react-native-firebase/messaging", {}]
     ]
   }
 }

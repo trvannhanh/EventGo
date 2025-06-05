@@ -1,23 +1,54 @@
-import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { ScrollView, ActivityIndicator, Image, Text, View, Alert, TouchableOpacity, Linking, StyleSheet, RefreshControl, Share } from 'react-native';
-import { Button, Avatar, Divider, Portal, Modal, TextInput, List, Surface, Chip, IconButton, FAB } from 'react-native-paper';
-import { MaterialCommunityIcons, AntDesign, Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import api, { endpoints, authApis } from '../../configs/Apis';
-import MyStyles, { COLORS } from '../styles/MyStyles';
+import React, { useEffect, useState, useContext, useCallback } from "react";
+import {
+  ScrollView,
+  ActivityIndicator,
+  Image,
+  Text,
+  View,
+  Alert,
+  TouchableOpacity,
+  Linking,
+  StyleSheet,
+  RefreshControl,
+  Share,
+} from "react-native";
+import {
+  Button,
+  Avatar,
+  Divider,
+  Portal,
+  Modal,
+  TextInput,
+  List,
+  Surface,
+  Chip,
+  IconButton,
+  FAB,
+} from "react-native-paper";
+import {
+  MaterialCommunityIcons,
+  AntDesign,
+  Ionicons,
+  FontAwesome5,
+  MaterialIcons,
+} from "@expo/vector-icons";
+import api, { endpoints, authApis } from "../../configs/Apis";
+import MyStyles, { COLORS } from "../styles/MyStyles";
 import { MyUserContext } from "../../configs/MyContexts";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import MapView, { Marker } from 'react-native-maps';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import MapView, { Marker } from "react-native-maps";
 
 const EventDetail = ({ route, navigation }) => {
   const { eventId } = route.params;
-  const [event, setEvent] = useState(null); const [loading, setLoading] = useState(true);
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState('');
+  const [comment, setComment] = useState("");
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -34,41 +65,41 @@ const EventDetail = ({ route, navigation }) => {
       flexGrow: 1,
     },
     imageContainer: {
-      position: 'relative',
+      position: "relative",
       height: 250,
     },
     eventImage: {
-      width: '100%',
-      height: '100%',
+      width: "100%",
+      height: "100%",
     },
     imageOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.3)',
-      justifyContent: 'flex-end',
+      backgroundColor: "rgba(0,0,0,0.3)",
+      justifyContent: "flex-end",
     },
     backButton: {
-      position: 'absolute',
+      position: "absolute",
       top: 16,
       left: 16,
       zIndex: 10,
-      backgroundColor: 'rgba(255,255,255,0.8)',
+      backgroundColor: "rgba(255,255,255,0.8)",
       borderRadius: 20,
       width: 40,
       height: 40,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     shareButton: {
-      position: 'absolute',
+      position: "absolute",
       top: 16,
       right: 16,
       zIndex: 10,
-      backgroundColor: 'rgba(255,255,255,0.8)',
+      backgroundColor: "rgba(255,255,255,0.8)",
       borderRadius: 20,
       width: 40,
       height: 40,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     contentContainer: {
       padding: 16,
@@ -79,7 +110,7 @@ const EventDetail = ({ route, navigation }) => {
     },
     eventTitle: {
       fontSize: 24,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: COLORS.text,
       marginBottom: 8,
     },
@@ -89,8 +120,8 @@ const EventDetail = ({ route, navigation }) => {
       marginBottom: 16,
     },
     chipContainer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       marginVertical: 8,
     },
     chip: {
@@ -103,19 +134,19 @@ const EventDetail = ({ route, navigation }) => {
     },
     sectionTitle: {
       fontSize: 18,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: COLORS.primary,
       marginVertical: 12,
     },
     infoRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginBottom: 12,
     },
     infoIcon: {
       marginRight: 12,
       width: 24,
-      alignItems: 'center',
+      alignItems: "center",
     },
     infoText: {
       flex: 1,
@@ -134,9 +165,9 @@ const EventDetail = ({ route, navigation }) => {
       marginVertical: 16,
     },
     ticketRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
       marginBottom: 8,
       padding: 12,
       backgroundColor: COLORS.background,
@@ -146,13 +177,13 @@ const EventDetail = ({ route, navigation }) => {
     },
     ticketType: {
       fontSize: 16,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: COLORS.text,
     },
     ticketPrice: {
       fontSize: 15,
       color: COLORS.primary,
-      fontWeight: 'bold',
+      fontWeight: "bold",
     },
     ticketDescription: {
       fontSize: 13,
@@ -167,8 +198,8 @@ const EventDetail = ({ route, navigation }) => {
       marginVertical: 16,
     },
     organizerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
     },
     organizerInfo: {
       marginLeft: 12,
@@ -176,7 +207,7 @@ const EventDetail = ({ route, navigation }) => {
     },
     organizerName: {
       fontSize: 16,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: COLORS.text,
     },
     reviewsSection: {
@@ -191,17 +222,17 @@ const EventDetail = ({ route, navigation }) => {
       borderColor: COLORS.border,
     },
     reviewHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginBottom: 8,
     },
     reviewUser: {
       fontSize: 15,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       marginLeft: 8,
     },
     starContainer: {
-      flexDirection: 'row',
+      flexDirection: "row",
       marginVertical: 8,
     },
     reviewContent: {
@@ -213,18 +244,18 @@ const EventDetail = ({ route, navigation }) => {
     replyContainer: {
       marginTop: 12,
       padding: 12,
-      backgroundColor: COLORS.primaryLight || '#f0f0ff',
+      backgroundColor: COLORS.primaryLight || "#f0f0ff",
       borderRadius: 8,
       borderLeftWidth: 3,
       borderLeftColor: COLORS.primary,
     },
     replyHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginBottom: 4,
     },
     replyAuthor: {
-      fontWeight: 'bold',
+      fontWeight: "bold",
       fontSize: 13,
       color: COLORS.primary,
       marginLeft: 6,
@@ -241,45 +272,45 @@ const EventDetail = ({ route, navigation }) => {
       lineHeight: 18,
     },
     replyButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       marginTop: 10,
       padding: 6,
       borderRadius: 6,
-      backgroundColor: COLORS.primaryLight || '#f0f0ff',
-      alignSelf: 'flex-start',
+      backgroundColor: COLORS.primaryLight || "#f0f0ff",
+      alignSelf: "flex-start",
     },
     replyButtonText: {
       color: COLORS.primary,
       marginLeft: 4,
-      fontWeight: '500',
+      fontWeight: "500",
       fontSize: 12,
     },
     modalContainer: {
-      backgroundColor: 'white',
+      backgroundColor: "white",
       padding: 20,
       margin: 20,
       borderRadius: 12,
     },
     modalTitle: {
       fontSize: 20,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       marginBottom: 16,
       color: COLORS.primary,
-      textAlign: 'center',
+      textAlign: "center",
     },
     starRatingContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
+      flexDirection: "row",
+      justifyContent: "center",
       marginVertical: 16,
     },
     modalActions: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      justifyContent: "space-between",
       marginTop: 16,
     },
     fab: {
-      position: 'absolute',
+      position: "absolute",
       margin: 16,
       right: 0,
       bottom: 0,
@@ -287,43 +318,70 @@ const EventDetail = ({ route, navigation }) => {
     },
     loadingContainer: {
       flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: "center",
+      alignItems: "center",
       padding: 20,
     },
     noReviewsText: {
-      textAlign: 'center',
+      textAlign: "center",
       color: COLORS.textSecondary,
       marginVertical: 16,
     },
     reviewDate: {
       fontSize: 12,
       color: COLORS.textSecondary,
-      marginLeft: 'auto',
+      marginLeft: "auto",
     },
     ratingText: {
       fontSize: 16,
-      fontWeight: 'bold',
+      fontWeight: "bold",
       color: COLORS.text,
-      textAlign: 'center',
+      textAlign: "center",
       marginVertical: 8,
     },
     modalInput: {
       marginVertical: 12,
       backgroundColor: COLORS.background,
     },
-  });  useEffect(() => {
+  });
+  useEffect(() => {
     fetchEventData();
-  }, [eventId, user]);
+  }, [eventId, user]); // Handle refresh when returning from ReplyToReview
+  useEffect(() => {
+    // Trigger refresh when timestamp changes (indicating return from reply)
+    if (route.params?.timestamp) {
+      console.log(
+        "Refreshing reviews after reply submission with timestamp:",
+        route.params.timestamp
+      );
+      fetchEventData(true);
+      // Clear the timestamp to avoid infinite refresh
+      navigation.setParams({ timestamp: undefined });
+    }
+  }, [route.params?.timestamp]);
 
-  // Handle review updates when navigating back from ReplyToReview
+  // Handle review updates when navigating back from ReplyToReview (legacy support)
+  useEffect(() => {
+    // Check if we're returning from ReplyToReview and need to refresh
+    if (route.params?.refreshOnReturn) {
+      console.log("Refreshing reviews after reply submission (legacy)");
+      fetchEventData(true);
+      // Reset the param to avoid re-updating on other navigation events
+      navigation.setParams({ refreshOnReturn: undefined });
+    }
+  }, [route.params?.refreshOnReturn]);
+
+  // Keep the old handler for backward compatibility
   useEffect(() => {
     // Check if we're returning from ReplyToReview with updated reviews
     if (route.params?.refreshReviews && route.params?.updatedReviews) {
-      console.log('Updating reviews with data from navigation params');
+      console.log("Updating reviews with data from navigation params");
       setReviews(route.params.updatedReviews);
       // Reset the param to avoid re-updating on other navigation events
-      navigation.setParams({ refreshReviews: undefined, updatedReviews: undefined });
+      navigation.setParams({
+        refreshReviews: undefined,
+        updatedReviews: undefined,
+      });
     }
   }, [route.params?.refreshReviews, route.params?.updatedReviews]);
 
@@ -345,53 +403,65 @@ const EventDetail = ({ route, navigation }) => {
       const reviewData = {
         rating: parseInt(rating, 10),
         comment: comment.trim(),
-        event_id: eventId
+        event_id: eventId,
       };
       console.log("Gửi đánh giá với dữ liệu:", reviewData);
       console.log("URL endpoint:", endpoints.submitReview(eventId));
-      console.log("Authentication status:", user ? "Logged in" : "Not logged in");
+      console.log(
+        "Authentication status:",
+        user ? "Logged in" : "Not logged in"
+      );
 
       // Sử dụng authApis thay vì api.post với headers
       const authApi = authApis(user.access_token);
-      const response = await authApi.post(endpoints.submitReview(eventId), reviewData);
+      const response = await authApi.post(
+        endpoints.submitReview(eventId),
+        reviewData
+      );
 
       console.log("Phản hồi từ server:", response.data);
-
       Alert.alert("Thành công", "Đánh giá của bạn đã được gửi");
       setModalVisible(false);
       setRating(5);
-      setComment('');
+      setComment("");
 
-      // Làm mới danh sách đánh giá
-      const res = await api.get(endpoints.eventReviews(eventId));
-      setReviews(res.data.reviews || []);
+      // Làm mới danh sách đánh giá ngay lập tức
+      await fetchEventData(true);
       setHasReviewed(true);
     } catch (err) {
       console.error("Lỗi khi gửi đánh giá:", err);
-      console.error("Chi tiết lỗi:", JSON.stringify(err.response?.data || err.message, null, 2));
+      console.error(
+        "Chi tiết lỗi:",
+        JSON.stringify(err.response?.data || err.message, null, 2)
+      );
       console.error("Status code:", err.response?.status);
-      console.error("Response headers:", JSON.stringify(err.response?.headers, null, 2));
+      console.error(
+        "Response headers:",
+        JSON.stringify(err.response?.headers, null, 2)
+      );
 
       // Xử lý khi token hết hạn hoặc chưa đăng nhập
       if (err.response && err.response.status === 401) {
         Alert.alert(
           "Cần đăng nhập",
           "Bạn cần đăng nhập để đánh giá sự kiện này.",
-          [{ text: "Đăng nhập", onPress: () => navigation.navigate('login') }]
+          [{ text: "Đăng nhập", onPress: () => navigation.navigate("login") }]
         );
       }
       // Xử lý lỗi không được phép (chưa tham gia sự kiện)
       else if (err.response && err.response.status === 403) {
         Alert.alert(
           "Không thể đánh giá",
-          err.response?.data?.error || "Bạn không thể đánh giá sự kiện mà bạn không tham gia."
+          err.response?.data?.error ||
+            "Bạn không thể đánh giá sự kiện mà bạn không tham gia."
         );
       }
       // Xử lý lỗi dữ liệu không hợp lệ
       else if (err.response && err.response.status === 400) {
         Alert.alert(
           "Dữ liệu không hợp lệ",
-          err.response?.data?.error || "Vui lòng kiểm tra lại thông tin đánh giá của bạn."
+          err.response?.data?.error ||
+            "Vui lòng kiểm tra lại thông tin đánh giá của bạn."
         );
       }
       // Xử lý lỗi server (500 Internal Server Error)
@@ -406,48 +476,77 @@ const EventDetail = ({ route, navigation }) => {
         // Hiển thị thông báo lỗi cụ thể từ server
         Alert.alert(
           "Không thể đánh giá",
-          err.response.data.non_field_errors[0] || "Bạn cần tham gia sự kiện trước khi đánh giá."
+          err.response.data.non_field_errors[0] ||
+            "Bạn cần tham gia sự kiện trước khi đánh giá."
         );
       }
       // Kiểm tra chi tiết lỗi từ API khác nhau
       else if (err.response?.data?.error) {
-        Alert.alert(
-          "Lỗi",
-          err.response.data.error
-        );
-      }      // Xử lý các lỗi khác
+        Alert.alert("Lỗi", err.response.data.error);
+      } // Xử lý các lỗi khác
       else {
         Alert.alert(
           "Lỗi",
           err.response?.data?.detail ||
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          "Không thể gửi đánh giá. Vui lòng thử lại sau."
+            err.response?.data?.message ||
+            err.response?.data?.error ||
+            "Không thể gửi đánh giá. Vui lòng thử lại sau."
         );
       }
     } finally {
       setReviewSubmitting(false);
     }
-  };  const fetchEventData = async (isRefreshing = false) => {
+  };
+  const fetchEventData = async (isRefreshing = false) => {
     if (isRefreshing) {
       setRefreshing(true);
-      console.log('Refreshing event data...');
+      console.log("Refreshing event data...");
     }
 
     try {
       // Fetch event details
       const eventRes = await api.get(endpoints.eventDetail(eventId));
       setEvent(eventRes.data);
-      console.log('Event data fetched successfully');
+      console.log("Event data fetched successfully"); // Fetch reviews - sử dụng authApis nếu user đã đăng nhập để có quyền truy cập
+      let reviewsRes;
+      if (user) {
+        const token = await AsyncStorage.getItem("token");
+        if (token) {
+          const authApi = authApis(token);
+          reviewsRes = await authApi.get(endpoints.eventReviews(eventId));
+        } else {
+          reviewsRes = await api.get(endpoints.eventReviews(eventId));
+        }
+      } else {
+        reviewsRes = await api.get(endpoints.eventReviews(eventId));
+      }
 
-      // Fetch reviews
-      const reviewsRes = await api.get(endpoints.eventReviews(eventId));
-      console.log('Reviews fetched successfully, count:', reviewsRes.data.reviews?.length || 0);
-      setReviews(reviewsRes.data.reviews || []);
+      console.log("Reviews API response:", reviewsRes.data);
+
+      // Xử lý response theo format mới từ backend
+      if (reviewsRes.data && reviewsRes.data.reviews) {
+        setReviews(reviewsRes.data.reviews);
+        console.log(
+          "Reviews fetched successfully, count:",
+          reviewsRes.data.reviews.length
+        );
+      } else if (Array.isArray(reviewsRes.data)) {
+        setReviews(reviewsRes.data);
+        console.log(
+          "Reviews fetched successfully, count:",
+          reviewsRes.data.length
+        );
+      } else {
+        setReviews([]);
+        console.log("No reviews found");
+      }
 
       // Check if user has reviewed
       if (user) {
-        const userReviewed = reviewsRes.data.reviews.some(review => review.user === user.username);
+        const allReviews = reviewsRes.data.reviews || reviewsRes.data || [];
+        const userReviewed = allReviews.some(
+          (review) => review.user === user.username
+        );
         setHasReviewed(userReviewed);
 
         // If user hasn't reviewed, default to allowing reviews
@@ -465,7 +564,7 @@ const EventDetail = ({ route, navigation }) => {
     }
   };
   const onRefresh = useCallback(() => {
-    console.log('Manual refresh triggered');
+    console.log("Manual refresh triggered");
     fetchEventData(true);
   }, [eventId, user]);
 
@@ -474,7 +573,7 @@ const EventDetail = ({ route, navigation }) => {
 
     try {
       await Share.share({
-        message: `Tham gia sự kiện "${event.name}" tại ${event.venue || 'EventGo'}! Ngày: ${event.event_date}, Giờ: ${event.event_time || 'Đang cập nhật'}. Xem chi tiết và đặt vé trên ứng dụng EventGo.`,
+        message: `Tham gia sự kiện "${event.name}" tại ${event.venue || "EventGo"}! Ngày: ${event.event_date}, Giờ: ${event.event_time || "Đang cập nhật"}. Xem chi tiết và đặt vé trên ứng dụng EventGo.`,
         title: `Sự kiện: ${event.name}`,
       });
     } catch (error) {
@@ -486,7 +585,10 @@ const EventDetail = ({ route, navigation }) => {
     if (event?.google_maps_link) {
       Linking.openURL(event.google_maps_link);
     } else {
-      Alert.alert("Thông báo", "Sự kiện này chưa cập nhật địa điểm trên bản đồ.");
+      Alert.alert(
+        "Thông báo",
+        "Sự kiện này chưa cập nhật địa điểm trên bản đồ."
+      );
     }
   };
 
@@ -499,22 +601,22 @@ const EventDetail = ({ route, navigation }) => {
   const confirmBooking = async () => {
     if (!user) {
       Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt vé");
-      navigation.navigate('login');
+      navigation.navigate("login");
       return;
     }
 
     try {
-      const token = await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem("token");
       if (!token) {
         Alert.alert("Phiên đăng nhập hết hạn", "Vui lòng đăng nhập lại");
-        navigation.navigate('login');
+        navigation.navigate("login");
         return;
       }
 
-      navigation.navigate('BookTicket', {
+      navigation.navigate("BookTicket", {
         eventId: event.id,
         ticketTypeId: selectedTicketType.id,
-        quantity: quantity
+        quantity: quantity,
       });
       setBookingModalVisible(false);
     } catch (error) {
@@ -524,15 +626,20 @@ const EventDetail = ({ route, navigation }) => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Đang cập nhật';
+    if (!dateString) return "Đang cập nhật";
 
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const options = {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    };
     const date = new Date(dateString);
-    return date.toLocaleDateString('vi-VN', options);
+    return date.toLocaleDateString("vi-VN", options);
   };
 
   const formatTime = (timeString) => {
-    return timeString ? timeString.substring(0, 5) : 'Đang cập nhật';
+    return timeString ? timeString.substring(0, 5) : "Đang cập nhật";
   };
 
   const renderStars = (rating) => {
@@ -541,9 +648,9 @@ const EventDetail = ({ route, navigation }) => {
         {[1, 2, 3, 4, 5].map((star) => (
           <AntDesign
             key={star}
-            name={star <= rating ? 'star' : 'staro'}
+            name={star <= rating ? "star" : "staro"}
             size={16}
-            color={star <= rating ? '#FFD700' : COLORS.border}
+            color={star <= rating ? "#FFD700" : COLORS.border}
             style={{ marginRight: 2 }}
           />
         ))}
@@ -554,7 +661,9 @@ const EventDetail = ({ route, navigation }) => {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={{ marginTop: 16, color: COLORS.textSecondary }}>Đang tải thông tin sự kiện...</Text>
+        <Text style={{ marginTop: 16, color: COLORS.textSecondary }}>
+          Đang tải thông tin sự kiện...
+        </Text>
       </View>
     );
   }
@@ -562,9 +671,16 @@ const EventDetail = ({ route, navigation }) => {
   if (!event) {
     return (
       <View style={styles.loadingContainer}>
-        <MaterialCommunityIcons name="calendar-remove" size={60} color={COLORS.error} />
-        <Text style={{ marginTop: 16, color: COLORS.error, textAlign: 'center' }}>
-          Không tìm thấy thông tin sự kiện. Sự kiện có thể đã bị xóa hoặc không tồn tại.
+        <MaterialCommunityIcons
+          name="calendar-remove"
+          size={60}
+          color={COLORS.error}
+        />
+        <Text
+          style={{ marginTop: 16, color: COLORS.error, textAlign: "center" }}
+        >
+          Không tìm thấy thông tin sự kiện. Sự kiện có thể đã bị xóa hoặc không
+          tồn tại.
         </Text>
         <Button
           mode="contained"
@@ -580,7 +696,7 @@ const EventDetail = ({ route, navigation }) => {
   const getEventImage = () => {
     if (!event.image) return null;
 
-    if (event.image.startsWith('http')) {
+    if (event.image.startsWith("http")) {
       return { uri: event.image };
     } else {
       return { uri: `https://res.cloudinary.com/dqpkxxzaf/${event.image}` };
@@ -608,8 +724,21 @@ const EventDetail = ({ route, navigation }) => {
               resizeMode="cover"
             />
           ) : (
-            <View style={[styles.eventImage, { backgroundColor: COLORS.primaryLight, justifyContent: 'center', alignItems: 'center' }]}>
-              <MaterialCommunityIcons name="calendar-blank" size={80} color={COLORS.primary} />
+            <View
+              style={[
+                styles.eventImage,
+                {
+                  backgroundColor: COLORS.primaryLight,
+                  justifyContent: "center",
+                  alignItems: "center",
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="calendar-blank"
+                size={80}
+                color={COLORS.primary}
+              />
             </View>
           )}
           <View style={styles.imageOverlay} />
@@ -619,19 +748,26 @@ const EventDetail = ({ route, navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <MaterialCommunityIcons name="arrow-left" size={24} color={COLORS.primary} />
+          <MaterialCommunityIcons
+            name="arrow-left"
+            size={24}
+            color={COLORS.primary}
+          />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={shareEvent}
-        >
-          <MaterialCommunityIcons name="share-variant" size={24} color={COLORS.primary} />
+        <TouchableOpacity style={styles.shareButton} onPress={shareEvent}>
+          <MaterialCommunityIcons
+            name="share-variant"
+            size={24}
+            color={COLORS.primary}
+          />
         </TouchableOpacity>
 
         <Surface style={styles.contentContainer} elevation={0}>
           <Text style={styles.eventTitle}>{event.name}</Text>
-          <Text style={styles.eventByline}>Được tổ chức bởi {event.organizer?.username || 'EventGo'}</Text>
+          <Text style={styles.eventByline}>
+            Được tổ chức bởi {event.organizer?.username || "EventGo"}
+          </Text>
 
           {event.categories && event.categories.length > 0 && (
             <View style={styles.chipContainer}>
@@ -651,34 +787,56 @@ const EventDetail = ({ route, navigation }) => {
 
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="calendar" size={24} color={COLORS.primary} />
+              <MaterialCommunityIcons
+                name="calendar"
+                size={24}
+                color={COLORS.primary}
+              />
             </View>
             <Text style={styles.infoText}>{formatDate(event.event_date)}</Text>
           </View>
 
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="clock-outline" size={24} color={COLORS.primary} />
+              <MaterialCommunityIcons
+                name="clock-outline"
+                size={24}
+                color={COLORS.primary}
+              />
             </View>
             <Text style={styles.infoText}>{formatTime(event.event_time)}</Text>
           </View>
 
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
-              <MaterialCommunityIcons name="map-marker" size={24} color={COLORS.primary} />
+              <MaterialCommunityIcons
+                name="map-marker"
+                size={24}
+                color={COLORS.primary}
+              />
             </View>
-            <Text style={styles.infoText}>{event.venue || 'Đang cập nhật địa điểm'}</Text>
+            <Text style={styles.infoText}>
+              {event.venue || "Đang cập nhật địa điểm"}
+            </Text>
           </View>
 
           {/* Bản đồ mini chỉ xem vị trí */}
           {event.google_maps_link && (
-            <View style={{ height: 180, borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+            <View
+              style={{
+                height: 180,
+                borderRadius: 10,
+                overflow: "hidden",
+                marginBottom: 12,
+              }}
+            >
               <MapView
                 style={{ flex: 1 }}
                 pointerEvents="none" // Không cho tương tác
                 initialRegion={(() => {
                   // Cố gắng lấy lat/lng từ link Google Maps
-                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  const match =
+                    event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
                   if (match) {
                     return {
                       latitude: parseFloat(match[1]),
@@ -698,7 +856,8 @@ const EventDetail = ({ route, navigation }) => {
               >
                 {/* Marker nếu parse được vị trí */}
                 {(() => {
-                  const match = event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
+                  const match =
+                    event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
                   if (match) {
                     return (
                       <Marker
@@ -737,18 +896,25 @@ const EventDetail = ({ route, navigation }) => {
               <Text style={styles.sectionTitle}>Đặt vé</Text>
 
               {event.tickets.map((ticket, index) => (
-                <Surface key={index} style={[styles.ticketRow, { elevation: 1 }]}>
+                <Surface
+                  key={index}
+                  style={[styles.ticketRow, { elevation: 1 }]}
+                >
                   <View>
                     <Text style={styles.ticketType}>{ticket.name}</Text>
-                    <Text style={styles.ticketDescription}>{ticket.description || 'Vé tham dự sự kiện'}</Text>
+                    <Text style={styles.ticketDescription}>
+                      {ticket.description || "Vé tham dự sự kiện"}
+                    </Text>
                     <Text style={styles.ticketsRemaining}>
                       {ticket.quantity > 0
                         ? `Còn ${ticket.quantity} vé`
-                        : 'Hết vé'}
+                        : "Hết vé"}
                     </Text>
                   </View>
                   <View>
-                    <Text style={styles.ticketPrice}>{ticket.price.toLocaleString('vi-VN')} VNĐ</Text>
+                    <Text style={styles.ticketPrice}>
+                      {ticket.price.toLocaleString("vi-VN")} VNĐ
+                    </Text>
                     <Button
                       mode="contained"
                       disabled={ticket.quantity <= 0}
@@ -768,39 +934,68 @@ const EventDetail = ({ route, navigation }) => {
           {event.organizer && (
             <View style={styles.organizerSection}>
               <Text style={styles.sectionTitle}>Thông tin nhà tổ chức</Text>
-              <Surface style={[styles.organizerRow, { padding: 12, borderRadius: 8, elevation: 1 }]}>
+              <Surface
+                style={[
+                  styles.organizerRow,
+                  { padding: 12, borderRadius: 8, elevation: 1 },
+                ]}
+              >
                 <Avatar.Icon
                   icon="account"
                   size={50}
                   style={{ backgroundColor: COLORS.primary }}
                 />
                 <View style={styles.organizerInfo}>
-                  <Text style={styles.organizerName}>{event.organizer.username}</Text>
-                  <Text style={{ color: COLORS.textSecondary }}>Đã tổ chức {event.organizer.event_count || 0} sự kiện</Text>
+                  <Text style={styles.organizerName}>
+                    {event.organizer.username}
+                  </Text>
+                  <Text style={{ color: COLORS.textSecondary }}>
+                    Đã tổ chức {event.organizer.event_count || 0} sự kiện
+                  </Text>
                 </View>
               </Surface>
             </View>
           )}
 
           <View style={styles.reviewsSection}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <Text style={styles.sectionTitle}>Đánh giá và nhận xét</Text>
               {reviews.length > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <AntDesign name="star" size={18} color="#FFD700" />
-                  <Text style={{ marginLeft: 4, fontWeight: 'bold' }}>
-                    {(reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)}
+                  <Text style={{ marginLeft: 4, fontWeight: "bold" }}>
+                    {(
+                      reviews.reduce((sum, r) => sum + r.rating, 0) /
+                      reviews.length
+                    ).toFixed(1)}
                   </Text>
-                  <Text style={{ marginLeft: 2, color: COLORS.textSecondary }}>({reviews.length})</Text>
+                  <Text style={{ marginLeft: 2, color: COLORS.textSecondary }}>
+                    ({reviews.length})
+                  </Text>
                 </View>
               )}
             </View>
 
             {reviewsLoading ? (
-              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 16 }} />
+              <ActivityIndicator
+                size="small"
+                color={COLORS.primary}
+                style={{ marginVertical: 16 }}
+              />
             ) : reviews.length > 0 ? (
-              <>                {reviews.slice(0, 3).map((review, index) => (
-                  <Surface key={index} style={[styles.reviewCard, { elevation: 1 }]}>
+              <>
+                {" "}
+                {reviews.slice(0, 3).map((review, index) => (
+                  <Surface
+                    key={index}
+                    style={[styles.reviewCard, { elevation: 1 }]}
+                  >
                     <View style={styles.reviewHeader}>
                       <Avatar.Icon
                         size={36}
@@ -814,14 +1009,19 @@ const EventDetail = ({ route, navigation }) => {
                     </View>
                     {renderStars(review.rating)}
                     <Text style={styles.reviewContent}>{review.comment}</Text>
-                    
+
                     {/* Hiển thị phần phản hồi của nhà tổ chức/admin nếu có */}
                     {review.reply && (
                       <View style={styles.replyContainer}>
                         <View style={styles.replyHeader}>
-                          <MaterialCommunityIcons name="reply" size={16} color={COLORS.primary} />
+                          <MaterialCommunityIcons
+                            name="reply"
+                            size={16}
+                            color={COLORS.primary}
+                          />
                           <Text style={styles.replyAuthor}>
-                            {review.replied_by_username || 'Ban tổ chức'} đã phản hồi:
+                            {review.replied_by_username || "Ban tổ chức"} đã
+                            phản hồi:
                           </Text>
                           {review.replied_at && (
                             <Text style={styles.replyDate}>
@@ -832,28 +1032,41 @@ const EventDetail = ({ route, navigation }) => {
                         <Text style={styles.replyText}>{review.reply}</Text>
                       </View>
                     )}
-                    
+
                     {/* Hiển thị nút phản hồi cho BTC/Admin */}
-                    {user && (user.id === event.organizer?.id || user.is_superuser) && !review.reply && (                      <TouchableOpacity 
-                        style={styles.replyButton}
-                        onPress={() => navigation.navigate('ReplyToReview', { 
-                          eventId: event.id, 
-                          reviewId: review.id,
-                          eventName: event.name,
-                          fromScreen: 'EventDetail'
-                        })}
-                      >
-                        <MaterialCommunityIcons name="reply" size={14} color={COLORS.primary} />
-                        <Text style={styles.replyButtonText}>Phản hồi</Text>
-                      </TouchableOpacity>
-                    )}
+                    {user &&
+                      (user.id === event.organizer?.id || user.is_superuser) &&
+                      !review.reply && (
+                        <TouchableOpacity
+                          style={styles.replyButton}
+                          onPress={() =>
+                            navigation.navigate("ReplyToReview", {
+                              eventId: event.id,
+                              reviewId: review.id,
+                              eventName: event.name,
+                              fromScreen: "EventDetail",
+                            })
+                          }
+                        >
+                          <MaterialCommunityIcons
+                            name="reply"
+                            size={14}
+                            color={COLORS.primary}
+                          />
+                          <Text style={styles.replyButtonText}>Phản hồi</Text>
+                        </TouchableOpacity>
+                      )}
                   </Surface>
                 ))}
-
                 {reviews.length > 3 && (
                   <Button
                     mode="outlined"
-                    onPress={() => navigation.navigate('ReviewList', { eventId: event.id, eventName: event.name })}
+                    onPress={() =>
+                      navigation.navigate("ReviewList", {
+                        eventId: event.id,
+                        eventName: event.name,
+                      })
+                    }
                     style={{ marginTop: 8, borderColor: COLORS.primary }}
                     labelStyle={{ color: COLORS.primary }}
                   >
@@ -879,7 +1092,14 @@ const EventDetail = ({ route, navigation }) => {
             )}
 
             {hasReviewed && (
-              <Text style={{ fontStyle: 'italic', textAlign: 'center', marginTop: 8, color: COLORS.textSecondary }}>
+              <Text
+                style={{
+                  fontStyle: "italic",
+                  textAlign: "center",
+                  marginTop: 8,
+                  color: COLORS.textSecondary,
+                }}
+              >
                 Bạn đã đánh giá sự kiện này
               </Text>
             )}
@@ -891,7 +1111,7 @@ const EventDetail = ({ route, navigation }) => {
         style={styles.fab}
         icon="ticket-percent"
         label="Đặt vé"
-        onPress={() => navigation.navigate('BookTicket', { eventId: event.id })}
+        onPress={() => navigation.navigate("BookTicket", { eventId: event.id })}
       />
 
       {/* Rating Modal */}
@@ -908,9 +1128,9 @@ const EventDetail = ({ route, navigation }) => {
             {[1, 2, 3, 4, 5].map((star) => (
               <TouchableOpacity key={star} onPress={() => setRating(star)}>
                 <AntDesign
-                  name={star <= rating ? 'star' : 'staro'}
+                  name={star <= rating ? "star" : "staro"}
                   size={36}
-                  color={star <= rating ? '#FFD700' : COLORS.border}
+                  color={star <= rating ? "#FFD700" : COLORS.border}
                   style={{ marginHorizontal: 4 }}
                 />
               </TouchableOpacity>
@@ -960,17 +1180,40 @@ const EventDetail = ({ route, navigation }) => {
         >
           {selectedTicketType && (
             <>
-              <Text style={styles.modalTitle}>Đặt vé {selectedTicketType.name}</Text>
-
-              <Text style={{ fontSize: 18, fontWeight: 'bold', textAlign: 'center', color: COLORS.primary }}>
-                {selectedTicketType.price.toLocaleString('vi-VN')} VNĐ / vé
+              <Text style={styles.modalTitle}>
+                Đặt vé {selectedTicketType.name}
               </Text>
 
-              <Text style={{ marginTop: 8, color: COLORS.textSecondary, marginBottom: 16, textAlign: 'center' }}>
-                {selectedTicketType.description || 'Vé tham dự sự kiện'}
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  textAlign: "center",
+                  color: COLORS.primary,
+                }}
+              >
+                {selectedTicketType.price.toLocaleString("vi-VN")} VNĐ / vé
               </Text>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 16 }}>
+              <Text
+                style={{
+                  marginTop: 8,
+                  color: COLORS.textSecondary,
+                  marginBottom: 16,
+                  textAlign: "center",
+                }}
+              >
+                {selectedTicketType.description || "Vé tham dự sự kiện"}
+              </Text>
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginVertical: 16,
+                }}
+              >
                 <IconButton
                   icon="minus"
                   size={24}
@@ -978,13 +1221,22 @@ const EventDetail = ({ route, navigation }) => {
                   disabled={quantity <= 1}
                   style={{ backgroundColor: COLORS.border }}
                 />
-                <Text style={{ marginHorizontal: 16, fontSize: 20, fontWeight: 'bold' }}>
+                <Text
+                  style={{
+                    marginHorizontal: 16,
+                    fontSize: 20,
+                    fontWeight: "bold",
+                  }}
+                >
                   {quantity}
                 </Text>
                 <IconButton
                   icon="plus"
                   size={24}
-                  onPress={() => quantity < selectedTicketType.quantity && setQuantity(quantity + 1)}
+                  onPress={() =>
+                    quantity < selectedTicketType.quantity &&
+                    setQuantity(quantity + 1)
+                  }
                   disabled={quantity >= selectedTicketType.quantity}
                   style={{ backgroundColor: COLORS.primary }}
                   color="white"
@@ -992,8 +1244,18 @@ const EventDetail = ({ route, navigation }) => {
               </View>
 
               <View style={{ marginVertical: 16 }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', textAlign: 'center' }}>
-                  Tổng tiền: {(selectedTicketType.price * quantity).toLocaleString('vi-VN')} VNĐ
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "bold",
+                    textAlign: "center",
+                  }}
+                >
+                  Tổng tiền:{" "}
+                  {(selectedTicketType.price * quantity).toLocaleString(
+                    "vi-VN"
+                  )}{" "}
+                  VNĐ
                 </Text>
               </View>
 
