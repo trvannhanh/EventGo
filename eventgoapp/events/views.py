@@ -1,58 +1,35 @@
 import base64
-from datetime import timezone, timedelta
+from datetime import timedelta
 from decimal import Decimal
-from io import BytesIO
-
-
-import openpyxl
 import cloudinary.uploader
-import logging
-from django.http import HttpResponse
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from django.conf import settings
+from django.contrib.auth import logout
 from django.shortcuts import get_object_or_404
-
 from django.db import transaction, models
 from django.utils.timezone import now
-from google_auth_oauthlib.flow import Flow
-from httplib2 import Credentials
-from openpyxl.styles import Alignment, Font
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from rest_framework import viewsets, permissions, generics, status, parsers
+from rest_framework import viewsets, permissions, status, parsers
 from rest_framework.decorators import action
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
-from django.utils.http import urlsafe_base64_decode
-from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from rest_framework.utils.mediatypes import order_by_precedence
-from unicodedata import category
 import json
 import requests
 import hashlib
 import hmac
-
 from django.db.models import F, Sum, Avg, ExpressionWrapper, DurationField, Q
-
 from . import paginators
 from .utils import generate_qr_image, logger
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from .recommendation_engine import RecommendationEngine
 from .utils import get_customer_rank
-
-from events.models import Review, User, Event, Ticket, Order, OrderDetail, EventCategory, Discount, EventTrend, Notification
+from events.models import Review, User, Event, TicketType, Order, OrderDetail, EventCategory, Discount, EventTrend, Notification
 from events.serializers import ReviewSerializer, UserSerializer, EventSerializer, TicketSerializer, OrderSerializer, \
-    EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer, OrderDetailSerializer
+    EventCategorySerializer, DiscountSerializer, ChangePasswordSerializer, OrderDetailSerializer, \
+    NotificationSerializer, DeleteEventSerializer
 
 
-# 29/3
 class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.UpdateAPIView):
     queryset = User.objects.filter(is_active=True)
     serializer_class = UserSerializer
@@ -64,12 +41,12 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         return [permissions.AllowAny()]
 
     def get_object(self):
-        # Dùng cho UpdateAPIView để lấy user hiện tại
         return self.request.user
 
     @action(methods=['get'], url_path='current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
-        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+        user = request.user
+        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
 
     @action(methods=['put', 'patch'], url_path='update-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def update_current_user(self, request):
@@ -84,18 +61,18 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
     def change_password(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-
         user = request.user
         user.set_password(serializer.validated_data['new_password'])
         user.save()
-
-        return Response({"message": "Đổi mật khẩu thành công."}, status=status.HTTP_200_OK)
+        logger.info(f"User {user.username} changed password successfully.")
+        logout(request)
+        return Response({"message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại."}, status=status.HTTP_200_OK)
 
 
     @action(methods=['delete'], url_path='delete-current-user', detail=False, permission_classes=[permissions.IsAuthenticated])
     def delete_current_user(self, request):
         user = request.user
-        user.is_active = False  # Soft delete
+        user.is_active = False
         user.save()
         return Response({"message": "Xóa tài khoản thành công."}, status=status.HTTP_204_NO_CONTENT)
 
@@ -107,18 +84,18 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
     @action(methods=['get'], url_path='my-tickets', detail=False, permission_classes=[IsAuthenticated])
     def my_tickets(self, request):
         user = request.user
-        order_details = OrderDetail.objects.filter(order__user=user)
-        from events.serializers import OrderDetailSerializer
-        serializer = OrderDetailSerializer(order_details, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-        
+        order_details = OrderDetail.objects.filter(order__user=user).select_related('ticket__event', 'order')
+        page = self.paginate_queryset(order_details)
+        serializer = OrderDetailSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
     @action(methods=['get'], url_path='my-notifications', detail=False, permission_classes=[IsAuthenticated])
     def my_notifications(self, request):
         user = request.user
-        notifications = Notification.objects.filter(user=user).order_by('-created_at')
-        from events.serializers import NotificationSerializer
-        serializer = NotificationSerializer(notifications, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        notifications = Notification.objects.filter(user=user).select_related('event').order_by('-created_at')
+        page = self.paginate_queryset(notifications)
+        serializer = NotificationSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
     
     @action(methods=['patch'], url_path='mark-notification-read/(?P<pk>[0-9]+)', detail=False, permission_classes=[IsAuthenticated])
     def mark_notification_read(self, request, pk=None):
@@ -130,6 +107,7 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
             return Response({"message": "Đánh dấu thông báo đã đọc thành công"}, status=status.HTTP_200_OK)
         except Notification.DoesNotExist:
             return Response({"error": "Không tìm thấy thông báo"}, status=status.HTTP_404_NOT_FOUND)
+
     @action(methods=['patch'], url_path='mark-all-notifications-read', detail=False, permission_classes=[IsAuthenticated])
     def mark_all_notifications_read(self, request):
         user = request.user
@@ -138,7 +116,6 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
         
     @action(methods=['post'], url_path='push-token', detail=False, permission_classes=[IsAuthenticated])
     def update_push_token(self, request):
-        """API endpoint để cập nhật Expo Push Token cho người dùng hiện tại."""
         user = request.user
         from events.serializers import PushTokenSerializer
         serializer = PushTokenSerializer(data=request.data)
@@ -153,10 +130,6 @@ class UserViewSet(viewsets.GenericViewSet, generics.CreateAPIView, generics.Upda
 
 
 class EventCategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
-    """
-    API để lấy danh sách tất cả các danh mục sự kiện (EventCategory).
-    Endpoint: GET /event-categories/
-    """
     queryset = EventCategory.objects.all()
     serializer_class = EventCategorySerializer
     pagination_class = PageNumberPagination
@@ -169,84 +142,43 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     serializer_class = EventSerializer
     pagination_class = paginators.ItemPaginator
 
-    def update_event_statuses(self, queryset):
-        """Cập nhật trạng thái cho tất cả sự kiện trong queryset."""
-        current_time = now()
-        # Logic cập nhật từ UPCOMING/ONGOING sang COMPLETED nếu đã qua ngày
-        queryset.filter(
-            Q(status=Event.EventStatus.UPCOMING) | Q(status=Event.EventStatus.ONGOING),
-            date__lt=current_time 
-        ).update(status=Event.EventStatus.COMPLETED)
-        
-        # Logic cập nhật từ COMPLETED sang UPCOMING nếu ngày sự kiện trong tương lai (có thể do chỉnh sửa)
-        queryset.filter(
-            status=Event.EventStatus.COMPLETED,
-            date__gte=current_time 
-        ).update(status=Event.EventStatus.UPCOMING)
-
-        # Logic cập nhật từ UPCOMING sang ONGOING nếu sự kiện đang diễn ra
-        # Giả sử một sự kiện diễn ra trong cả ngày, hoặc bạn có start_time và end_time để so sánh chính xác hơn
-        # Ví dụ đơn giản: nếu date là ngày hôm nay và status là upcoming -> ongoing
-        # Cần định nghĩa rõ hơn "ongoing" nghĩa là gì (ví dụ: trong khoảng start_time và end_time)
-        # Tạm thời giữ nguyên logic cũ cho ongoing nếu không có start/end time cụ thể
-        # queryset.filter(date__date=current_time.date(), status=Event.EventStatus.UPCOMING).update(status=Event.EventStatus.ONGOING)
-        return queryset
-
     def get_queryset(self):
-        # Start with the base queryset defined for the ViewSet
-        query = self.queryset # This is Event.objects.filter(active=True)
-
-        # Get query parameters
+        query = self.queryset.select_related('organizer', 'category').prefetch_related('tickets')
         q_param = self.request.query_params.get('q')
         cate_id_param = self.request.query_params.get('cateId')
         status_param = self.request.query_params.get('status')
         organizer_param = self.request.query_params.get('organizer')
 
-        # --- Stage 1: Apply general filters (search, category, organizer) ---
         general_filters = Q()
         if q_param:
             general_filters &= Q(name__icontains=q_param)
-
         if cate_id_param:
             try:
                 general_filters &= Q(category_id=int(cate_id_param))
             except ValueError:
                 raise ValidationError({"error": "cateId phải là số nguyên hợp lệ."})
-
         if organizer_param:
             if organizer_param == 'me':
                 if hasattr(self.request, 'user') and self.request.user.is_authenticated:
                     if self.request.user.role not in [User.Role.ORGANIZER, User.Role.ADMIN]:
-                        return Event.objects.none() 
+                        return Event.objects.none()
                     general_filters &= Q(organizer=self.request.user)
                 else:
                     return Event.objects.none()
-            else: 
+            else:
                 try:
                     general_filters &= Q(organizer_id=int(organizer_param))
                 except ValueError:
                     raise ValidationError({"error": "Tham số organizer ID không hợp lệ."})
-        
-        if general_filters: 
+        if general_filters:
             query = query.filter(general_filters)
-
-        # --- Stage 2: Update statuses for the current generally filtered set ---
-        # This ensures statuses are based on current time BEFORE specific status filtering.
-        query = self.update_event_statuses(query)
-
-        # --- Stage 3: Apply the specific status filter requested by the client ---
+        for event in query:
+            event.update_status()
         if status_param:
             valid_statuses = [choice[0] for choice in Event.EventStatus.choices]
             if status_param not in valid_statuses:
                 raise ValidationError({"error": f"Trạng thái không hợp lệ. Sử dụng {', '.join(valid_statuses)}."})
-            
-            # Filter by the specific status AFTER statuses have been updated
-            query = query.filter(status=status_param) 
-            print(f"Applied specific status filter: {status_param} AFTER status update logic.")
-        
-        # DEBUG: Log the filter conditions and result count
-        print(f"Event Query - Final - Requested Status: {status_param}, Organizer: {organizer_param}, Result count: {query.count()}")
-        
+            query = query.filter(status=status_param)
         return query
 
 
@@ -254,8 +186,8 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     def view_event(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
         trend, created = EventTrend.objects.get_or_create(event=event)
-        trend.increment_views()  # Tăng views
-        trend.increment_interest(points=1)  # Tăng interest_level khi xem chi tiết
+        trend.increment_views()
+        trend.increment_interest(points=1)
         serializer = EventSerializer(event)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -264,33 +196,28 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         event = get_object_or_404(Event, id=pk)
         user = request.user
 
-        # Check 1: Event status must be 'upcoming'
         if event.status != Event.EventStatus.UPCOMING:
             return Response({"error": "Chỉ có thể cập nhật sự kiện sắp diễn ra."}, 
                             status=status.HTTP_403_FORBIDDEN)
 
-        # Check 2: User must be the organizer or a superuser
         if not user.is_superuser and event.organizer != user:
             return Response({"error": "Bạn không có quyền cập nhật sự kiện này."}, 
                             status=status.HTTP_403_FORBIDDEN)
-        
-        # Lưu lại các giá trị cũ trực tiếp từ đối tượng event TRƯỚC KHI cập nhật
+
         old_name = event.name
-        old_date = event.date  # Đây là đối tượng date/datetime của Python
+        old_date = event.date
         old_location = event.location
         
         serializer = EventSerializer(event, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        updated_event = serializer.save() # Đối tượng 'event' được cập nhật (updated_event và event là cùng một instance)
+        updated_event = serializer.save()
         
         significant_updates = []
-        
-        # So sánh các giá trị mới từ updated_event với các giá trị cũ đã lưu
+
         if updated_event.name != old_name:
             significant_updates.append(f"Tên sự kiện đã được thay đổi thành: {updated_event.name}")
         
         if updated_event.date != old_date:
-            # Định dạng ngày tháng cho đẹp trong thông báo
             new_date_str = updated_event.date.strftime('%d/%m/%Y') if hasattr(updated_event.date, 'strftime') else str(updated_event.date)
             significant_updates.append(f"Ngày diễn ra sự kiện đã thay đổi thành: {new_date_str}")
         
@@ -298,19 +225,16 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             significant_updates.append(f"Địa điểm sự kiện đã thay đổi thành: {updated_event.location}")
             
         if significant_updates:
-            # Tạo thông điệp cập nhật, sử dụng updated_event.name là tên mới nhất
             update_message = f"Sự kiện {old_name} đã được cập nhật:\\n" + "\\n".join(significant_updates)
             print(update_message)
             print("Thông điệp cập nhật:")
             print(updated_event.id)
             print("Loai")
             print(type(updated_event.id))
-            print(type(update_message))              # Send notification asynchronously
+            print(type(update_message))
             from events.tasks import send_event_update_notifications
-            # Use delay instead of apply_async for simpler task execution
             send_event_update_notifications.delay(updated_event.id, update_message)
-            
-            # Gửi push notification
+
             from events.notification_utils import create_and_send_event_notification
             create_and_send_event_notification(updated_event.id, is_update=True)
 
@@ -318,14 +242,15 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['delete'], url_path='delete', detail=True, permission_classes=[IsAuthenticated])
     def delete_event(self, request, pk=None):
+        serializer = DeleteEventSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
         event = get_object_or_404(Event, id=pk)
         user = request.user
         if not user.is_superuser and event.organizer != user:
             return Response({"error": "Bạn không có quyền xóa sự kiện này."}, status=status.HTTP_403_FORBIDDEN)
         event.delete()
-        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)    
-    
-    
+        return Response({"message": "Đã xóa sự kiện thành công."}, status=status.HTTP_204_NO_CONTENT)
+
     @action(methods=['post'], url_path='create', detail=False, permission_classes=[permissions.IsAuthenticated])
     def create_event(self, request):
         print(request.user.role)
@@ -337,39 +262,27 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         data = request.data.copy()
         data['organizer_id'] = request.user.id
-        
-        
-        print("Dữ liệu gửi đến serializer:", data)
-
         serializer = EventSerializer(data=data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         event = serializer.save()
-
-        # Cập nhật trạng thái ngay sau khi tạo
-        event.update_status()  # Nếu vẫn giữ method trong model, hoặc dùng logic dưới
         current_time = now()
-        if event.date < current_time and event.status == Event.EventStatus.UPCOMING:  # 6/4
+        if event.date < current_time and event.status == Event.EventStatus.UPCOMING:
             event.status = Event.EventStatus.COMPLETED
-            event.save(update_fields=['status'])        # Tạo thông báo cho tất cả người dùng về sự kiện mới
+            event.save(update_fields=['status'])
         message = f"Sự kiện mới '{event.name}' đã được tạo and sẽ diễn ra vào {event.date.strftime('%d/%m/%Y')}"
-        
-        # Lấy tất cả người dùng có vai trò là người tham dự (attendee)
         from django.contrib.auth import get_user_model
         User = get_user_model()
         attendees = User.objects.filter(role='attendee', is_active=True)
-        
-        # Tạo thông báo trong ứng dụng cho mỗi người dùng
+
         for user in attendees:
             Notification.objects.create(
                 user=user,
                 message=message,
                 event=event
             )
-          # Gọi celery task để gửi email thông báo
         from events.tasks import send_new_event_notifications
         send_new_event_notifications.delay(event.id)
-        
-        # Gửi push notification
+
         from events.notification_utils import create_and_send_event_notification
         create_and_send_event_notification(event.id, is_update=False)
 
@@ -377,7 +290,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     
     @action(methods=['post'], url_path='review', detail=True)
     def submit_review(self, request, pk=None):
-        # Check if user is authenticated
         if not request.user.is_authenticated:
             return Response(
                 {"error": "Bạn cần đăng nhập để đánh giá sự kiện này."},
@@ -400,8 +312,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 {"error": "Vui lòng cung cấp cả đánh giá và nhận xét."},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Ensure rating is an integer
+
         try:
             rating = int(rating)
             if rating < 1 or rating > 5:
@@ -422,9 +333,8 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             comment=comment
         )
 
-        # Tăng interest_level khi đánh giá
         trend, created = EventTrend.objects.get_or_create(event=event)
-        trend.increment_interest(points=2)  # Đánh giá đáng giá +2
+        trend.increment_interest(points=2)
 
         return Response(
             {"message": "Đánh giá của bạn đã được gửi thành công."},
@@ -434,15 +344,10 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     @action(methods=['get'], url_path='feedback', detail=True)
     def view_feedback(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
-        
-        # Không cần kiểm tra quyền, cho phép mọi người dùng xem phản hồi
         reviews = Review.objects.filter(event=event)
         serializer = ReviewSerializer(reviews, many=True)
-        
-        # Tính điểm đánh giá trung bình để đồng bộ với frontend
         avg_rating = reviews.aggregate(Avg('rating'))['rating__avg'] or 0
-        
-        # Trả về dạng đối tượng có cấu trúc giống với ReviewViewSet.by_event
+
         response_data = {
             'reviews': serializer.data,
             'average_rating': round(avg_rating, 1),
@@ -468,7 +373,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         review.replied_by = user
         review.replied_at = now()
         review.save()
-
         serializer = ReviewSerializer(review)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -481,7 +385,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Cập nhật trạng thái trước khi đề xuất
         self.update_event_statuses(Event.objects.all())
         engine = RecommendationEngine()
         recommended_events = engine.ml_recommendation(user.id)
@@ -490,10 +393,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['get'], url_path='trending', detail=False)
     def get_trending_events(self, request):
-        """Lấy danh sách sự kiện hot dựa trên views và interest_level."""
         limit = int(request.query_params.get('limit', 5))
-
-        # Tính điểm tổng hợp: ví dụ 70% views + 30% interest_level
         trending_events = Event.objects.filter(
             active=True,
             status=Event.EventStatus.UPCOMING
@@ -513,7 +413,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 {"error": "Bạn không có quyền tạo mã giảm giá cho sự kiện này."},
                 status=status.HTTP_403_FORBIDDEN
             )
-
         data = request.data.copy()
         data['event'] = event.id
         if 'expiration_date' not in data:
@@ -525,175 +424,132 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
-    # @action(methods=['get'], url_path='search-events', detail=False)
-    # def search_events(self, request):
-    #     category = request.query_params.get('category')
-    #     if not category:
-    #         return Response({"error": "Vui lòng cung cấp category"}, status=status.HTTP_400_BAD_REQUEST)
-    #
-    #     events = Event.objects.filter(category__name__icontains=category,
-    #                                   status=Event.EventStatus.UPCOMING)  # Tìm category không phân biệt chữ hoa/ thường, chỉ lấy sự kiện sắp diễn ra
-    #     serializer = EventSerializer(events, many=True)
-    #     return Response(serializer.data, status=status.HTTP_200_OK)
-
     @action(methods=['get'], url_path='tickets', detail=True)
     def get_tickets(self, request, pk=None):
-        """Lấy danh sách vé của một sự kiện."""
         event = get_object_or_404(Event, id=pk)
-        tickets = Ticket.objects.filter(event=event)
+        tickets = TicketType.objects.filter(event=event)
         serializer = TicketSerializer(tickets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(methods=['post'], url_path='tickets/create', detail=True, permission_classes=[permissions.IsAuthenticated])
     def create_ticket(self, request, pk=None):
-        """
-        Create a ticket for an event.
-        POST /events/{event_id}/tickets/create/
-        """
         event = get_object_or_404(Event, id=pk)
-        
-        # Check if the user is the organizer or an admin
+
         if not request.user.is_superuser and event.organizer != request.user:
             return Response(
-                {"error": "You don't have permission to create tickets for this event."},
+                {"error": "Không có quyền tạo loại vé cho sự kiện này"},
                 status=status.HTTP_403_FORBIDDEN
             )
-            
-        # Get ticket data from request
+
         ticket_type = request.data.get('type')
         price = request.data.get('price')
         quantity = request.data.get('quantity')
-        
-        # Validate required fields
+
         if not all([ticket_type, price, quantity]):
             return Response(
-                {"error": "Missing required fields: type, price, or quantity"},
+                {"error": "Thiếu thông tin cần thiết: type, price, or quantity"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
         try:
-            # Convert price and quantity to appropriate types
             price = float(price)
             quantity = int(quantity)
-            
-            # Validate price and quantity
             if price < 0:
                 return Response(
-                    {"error": "Price cannot be negative"},
+                    {"error": "Price không được âm"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
             if quantity <= 0:
                 return Response(
-                    {"error": "Quantity must be positive"},
+                    {"error": "Số lượng không âm"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-                
-            # Create the ticket
-            ticket = Ticket.objects.create(
+
+            ticket = TicketType.objects.create(
                 event=event,
                 type=ticket_type,
                 price=price,
                 quantity=quantity
             )
-            
-            # Return the created ticket
+
             serializer = TicketSerializer(ticket)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
         except (ValueError, TypeError):
             return Response(
-                {"error": "Invalid price or quantity values"},
+                {"error": "Price hoặc quantity không hợp lệ"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(methods=['put'], url_path='tickets/(?P<ticket_id>[^/.]+)/update', detail=True, permission_classes=[permissions.IsAuthenticated])
     def update_ticket(self, request, pk=None, ticket_id=None):
-        """
-        Update a ticket for an event.
-        PUT /events/{event_id}/tickets/{ticket_id}/update/
-        """
         event = get_object_or_404(Event, id=pk)
-        ticket = get_object_or_404(Ticket, id=ticket_id, event=event)
-        
-        # Check if the user is the organizer or an admin
+        ticket = get_object_or_404(TicketType, id=ticket_id, event=event)
+
         if not request.user.is_superuser and event.organizer != request.user:
             return Response(
-                {"error": "You don't have permission to update tickets for this event."},
+                {"error": "Không có quyền cập nhật loại vé cho sự kiện này"},
                 status=status.HTTP_403_FORBIDDEN
             )
-            
-        # Get ticket data from request
+
         ticket_type = request.data.get('type')
         price = request.data.get('price')
         quantity = request.data.get('quantity')
-        
-        # Validate required fields
+
         if not all([ticket_type, price, quantity]):
             return Response(
-                {"error": "Missing required fields: type, price, or quantity"},
+                {"error": "Thiếu thông tin cần thiết: type, price, or quantity"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
         try:
-            # Convert price and quantity to appropriate types
             price = float(price)
             quantity = int(quantity)
-            
-            # Validate price and quantity
+
             if price < 0:
                 return Response(
-                    {"error": "Price cannot be negative"},
+                    {"error": "Price không âm"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
             if quantity <= 0:
                 return Response(
-                    {"error": "Quantity must be positive"},
+                    {"error": "Quantity không âm"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-                
-            # Update the ticket
+
             ticket.type = ticket_type
             ticket.price = price
             ticket.quantity = quantity
             ticket.save()
-            
-            # Return the updated ticket
+
             serializer = TicketSerializer(ticket)
             return Response(serializer.data, status=status.HTTP_200_OK)
             
         except (ValueError, TypeError):
             return Response(
-                {"error": "Invalid price or quantity values"},
+                {"error": "price hoặc quantity không hợp lệ"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
     @action(methods=['delete'], url_path='tickets/(?P<ticket_id>[^/.]+)/delete', detail=True, permission_classes=[permissions.IsAuthenticated])
     def delete_ticket(self, request, pk=None, ticket_id=None):
-        """
-        Delete a ticket for an event.
-        DELETE /events/{event_id}/tickets/{ticket_id}/delete/
-        """
         event = get_object_or_404(Event, id=pk)
-        ticket = get_object_or_404(Ticket, id=ticket_id, event=event)
-        
-        # Check if the user is the organizer or an admin
+        ticket = get_object_or_404(TicketType, id=ticket_id, event=event)
+
         if not request.user.is_superuser and event.organizer != request.user:
             return Response(
-                {"error": "You don't have permission to delete tickets for this event."},
+                {"error": "Không có quyền xóa loại vé cho sự kiện này"},
                 status=status.HTTP_403_FORBIDDEN
             )
-            
-        # Check if the ticket has been sold
+
         if OrderDetail.objects.filter(ticket=ticket).exists():
             return Response(
-                {"error": "Cannot delete ticket as it has already been sold."},
+                {"error": "Không thể xóa loại vé vì nó đã được bán"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-            
-        # Delete the ticket
+
         ticket.delete()
         
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -713,20 +569,17 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         if not all([ticket_id, quantity]):
             return Response({"error": "Thiếu thông tin đặt vé"}, status=status.HTTP_400_BAD_REQUEST)
 
-        ticket = get_object_or_404(Ticket, event=event, id=ticket_id)
+        ticket = get_object_or_404(TicketType, event=event, id=ticket_id)
 
         with transaction.atomic():
-            # Kiểm tra và tạm giữ vé
             if ticket.quantity < quantity:
                 return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Giảm số lượng vé ngay lập tức để tạm giữ
             ticket.quantity -= quantity
             ticket.save()
 
             total_price = ticket.price * quantity
 
-            # Kiểm tra và áp dụng mã giảm giá
             if discount_code:
                 discount = Discount.objects.filter(
                     code=discount_code,
@@ -743,8 +596,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                                     status=status.HTTP_403_FORBIDDEN)
 
                 total_price = total_price * Decimal(str(1 - discount.discount_percent / 100))
-
-            # Tạo Order
             order = Order.objects.create(
                 user=user,
                 ticket=ticket,
@@ -754,7 +605,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 quantity=quantity
             )
 
-            # Tăng interest_level
             trend, created = EventTrend.objects.get_or_create(event=event)
             trend.increment_interest(points=3)
 
@@ -765,8 +615,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             "expiration_time": order.expiration_time,
             "message": "Order đã được tạo, vui lòng gọi /orders/{id}/pay/ để thanh toán"
         }, status=status.HTTP_201_CREATED)
-
-
 
 
     @action(methods=['post'], url_path='checkin', detail=True, permission_classes=[permissions.IsAuthenticated])
@@ -799,23 +647,17 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
 
     @action(methods=['get'], url_path='discounts', detail=True, permission_classes=[permissions.IsAuthenticated])
     def get_discounts(self, request, pk=None):
-        """
-        Lấy tất cả mã giảm giá của một sự kiện và đánh dấu mã nào người dùng có thể sử dụng.
-        Endpoint: GET /events/{pk}/discounts/
-        """
+        """Lấy tất cả mã giảm giá của một sự kiện và đánh dấu mã nào người dùng có thể sử dụng."""
         event = get_object_or_404(Event, id=pk)
 
-        # Lấy rank của người dùng hiện tại
         user_rank = get_customer_rank(request.user)
 
-        # Lấy tất cả mã giảm giá còn hiệu lực của sự kiện
         current_time = now()
         discounts = Discount.objects.filter(
             event=event,
             expiration_date__gt=current_time
         ).order_by('expiration_date')
 
-        # Serialize dữ liệu và thêm trường is_usable
         serializer = DiscountSerializer(discounts, many=True)
         discount_data = serializer.data
 
@@ -858,14 +700,12 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
     def get_event_analytics(self, request, pk=None):
         event = get_object_or_404(Event, id=pk)
 
-        # Kiểm tra quyền truy cập
         if not request.user.is_superuser and request.user != event.organizer:
             return Response(
                 {"error": "Bạn không có quyền xem báo cáo phân tích cho sự kiện này."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Tính toán các chỉ số hiện có
         total_revenue = Order.objects.filter(
             order_details__ticket__event=event,
             payment_status=Order.PaymentStatus.PAID
@@ -878,7 +718,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         average_rating = Review.objects.filter(event=event).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
         average_rating = round(average_rating, 1)
 
-        # Tỷ lệ hủy đơn hàng
         total_orders = Order.objects.filter(order_details__ticket__event=event).count()
         canceled_orders = Order.objects.filter(
             order_details__ticket__event=event,
@@ -887,7 +726,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
         cancellation_rate = (canceled_orders / total_orders * 100) if total_orders > 0 else 0
         cancellation_rate = round(cancellation_rate, 2)
 
-        # Thời gian trung bình để mua vé (tính từ created_at đến updated_at khi thanh toán thành công)
         avg_purchase_time = Order.objects.filter(
             order_details__ticket__event=event,
             payment_status=Order.PaymentStatus.PAID
@@ -897,40 +735,31 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 output_field=DurationField()
             )
         ).aggregate(avg_time=Avg('purchase_duration'))['avg_time']
-        avg_purchase_time_seconds = avg_purchase_time.total_seconds() / 60 if avg_purchase_time else 0  # Đổi ra phút
+        avg_purchase_time_seconds = avg_purchase_time.total_seconds() / 60 if avg_purchase_time else 0
 
-        # Tỷ lệ người tham gia quay lại
         attendees = User.objects.filter(
             orders__order_details__ticket__event=event,
             orders__payment_status=Order.PaymentStatus.PAID
         ).distinct()
         total_attendees = attendees.count()
-        repeat_attendees = 0
-        for attendee in attendees:
-            other_events = Event.objects.filter(
-                organizer=event.organizer
-            ).exclude(id=event.id)
-            if Order.objects.filter(
-                    user=attendee,
-                    order_details__ticket__event__in=other_events,
-                    payment_status=Order.PaymentStatus.PAID
-            ).exists():
-                repeat_attendees += 1
+        other_events = Event.objects.filter(organizer=event.organizer).exclude(id=event.id)
+        repeat_attendees = Order.objects.filter(
+            user__in=attendees,
+            order_details__ticket__event__in=other_events,
+            payment_status=Order.PaymentStatus.PAID
+        ).values('user').distinct().count()
         repeat_attendee_rate = (repeat_attendees / total_attendees * 100) if total_attendees > 0 else 0
         repeat_attendee_rate = round(repeat_attendee_rate, 2)
 
-        # Lấy thông tin từ EventTrend
         event_trend = EventTrend.objects.filter(event=event).first()
         event_views = event_trend.views if event_trend else 0
         event_interest_score = event_trend.interest_level if event_trend else 0
-        
-        # Tỷ lệ chuyển đổi (views -> tickets)
+
         conversion_rate = (tickets_sold / event_views * 100) if event_views > 0 else 0
         conversion_rate = round(conversion_rate, 2)
-        
-        # Thông tin chi tiết về loại vé đã bán
+
         tickets_breakdown = []
-        tickets = Ticket.objects.filter(event=event)
+        tickets = TicketType.objects.filter(event=event)
         for ticket in tickets:
             sold_count = OrderDetail.objects.filter(
                 ticket=ticket,
@@ -944,23 +773,19 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 'quantity_sold': sold_count,
                 'revenue': ticket.price * sold_count
             })
-        
-        # Thông tin về lượt xem theo ngày (lấy 7 ngày gần nhất)
-        # Giả lập dữ liệu cho mẫu, trong thực tế cần lưu lượt xem theo ngày trong cơ sở dữ liệu
+
         from datetime import datetime, timedelta
         today = datetime.now().date()
         views_by_day = []
-        
-        # Giả lập dữ liệu xem theo ngày (trong thực tế có bảng lưu lượt xem theo ngày)
+
         for i in range(7):
             day = today - timedelta(days=i)
             views_by_day.append({
                 'date': day.strftime('%Y-%m-%d'),
-                'count': int(event_views / 7) + ((-1)**i) * (i*3) # Giả lập tăng giảm để tạo đồ thị
+                'count': int(event_views / 7) + ((-1)**i) * (i*3)
             })
-        views_by_day.reverse()  # Sắp xếp từ ngày xa nhất đến gần nhất
-        
-        # Phân tích đánh giá
+        views_by_day.reverse()
+
         reviews = Review.objects.filter(event=event)
         review_count = reviews.count()
         
@@ -979,12 +804,11 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             'rating_2_percent': (rating_counts['2'] / review_count * 100) if review_count > 0 else 0,
             'rating_1_percent': (rating_counts['1'] / review_count * 100) if review_count > 0 else 0,
         }
-
         result = {
             "event_id": event.id,
             "event_name": event.name,
             "event_start_date": event.date,
-            "event_end_date": event.date + timedelta(hours=3),  # Giả định sự kiện kéo dài 3 giờ
+            "event_end_date": event.date + timedelta(hours=3),
             "total_revenue": total_revenue,
             "tickets_sold": tickets_sold,
             "average_rating": average_rating,
@@ -998,10 +822,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             "views_by_day": views_by_day,
             "review_count": review_count,
         }
-        
-        # Thêm các chỉ số phần trăm đánh giá
         result.update(rating_percents)
-        
         return Response(result, status=status.HTTP_200_OK)
 
     @action(methods=['get'], url_path='dashboard-analytics', detail=False, permission_classes=[permissions.IsAuthenticated])
@@ -1012,8 +833,6 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             organizer_events = Event.objects.filter(organizer=user, active=True)
             analytics_data = []
             for event_instance in organizer_events:
-                # Gọi lại logic của get_event_analytics cho từng event
-                # Đây là một cách đơn giản, có thể tối ưu hóa nếu cần
                 response = self.get_event_analytics(request, pk=event_instance.pk)
                 if response.status_code == status.HTTP_200_OK:
                     analytics_data.append(response.data)
@@ -1068,102 +887,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-    # # Action mới: Xuất báo cáo
-    # @action(methods=['get'], url_path='analytics/export', detail=True,
-    #         permission_classes=[permissions.IsAuthenticated])
-    # def export_analytics(self, request, pk=None):
-    #     event = get_object_or_404(Event, id=pk)
-    #
-    #     # Kiểm tra quyền truy cập
-    #     if not request.user.is_superuser and request.user != event.organizer:
-    #         return Response(
-    #             {"error": "Bạn không có quyền xuất báo cáo cho sự kiện này."},
-    #             status=status.HTTP_403_FORBIDDEN
-    #         )
-    #
-    #     # Lấy dữ liệu từ API analytics
-    #     analytics_response = self.get_event_analytics(request, pk)
-    #     if analytics_response.status_code != 200:
-    #         return Response(analytics_response.data, status=analytics_response.status_code)
-    #     analytics_data = analytics_response.data
-    #
-    #     # Định dạng xuất (pdf hoặc excel)
-    #     export_format = request.query_params.get('format', 'pdf')
-    #
-    #     if export_format.lower() == 'pdf':
-    #         # Xuất PDF
-    #         buffer = BytesIO()
-    #         p = canvas.Canvas(buffer, pagesize=letter)
-    #         width, height = letter
-    #
-    #         # Tiêu đề
-    #         p.setFont("Helvetica-Bold", 16)
-    #         p.drawString(100, height - 50, f"Event Analytics Report - {event.name}")
-    #
-    #         # Dữ liệu analytics
-    #         p.setFont("Helvetica", 12)
-    #         y_position = height - 100
-    #         p.drawString(100, y_position, f"Total Revenue: {analytics_data['total_revenue']} VND")
-    #         p.drawString(100, y_position - 20, f"Tickets Sold: {analytics_data['tickets_sold']}")
-    #         p.drawString(100, y_position - 40, f"Average Rating: {analytics_data['average_rating']}")
-    #         p.drawString(100, y_position - 60, f"Cancellation Rate: {analytics_data['cancellation_rate']}%")
-    #         p.drawString(100, y_position - 80,
-    #                      f"Average Purchase Time: {analytics_data['avg_purchase_time_minutes']} minutes")
-    #         p.drawString(100, y_position - 100, f"Repeat Attendee Rate: {analytics_data['repeat_attendee_rate']}%")
-    #
-    #         p.showPage()
-    #         p.save()
-    #         buffer.seek(0)
-    #
-    #         response = HttpResponse(buffer, content_type='application/pdf')
-    #         response['Content-Disposition'] = f'attachment; filename="event_{event.id}_analytics.pdf"'
-    #         return response
-    #
-    #     elif export_format.lower() == 'excel':
-    #         # Xuất Excel
-    #         workbook = openpyxl.Workbook()
-    #         worksheet = workbook.active
-    #         worksheet.title = "Event Analytics"
-    #
-    #         # Tiêu đề
-    #         worksheet['A1'] = f"Event Analytics Report - {event.name}"
-    #         worksheet['A1'].font = Font(bold=True, size=16)
-    #         worksheet['A1'].alignment = Alignment(horizontal='center')
-    #         worksheet.merge_cells('A1:D1')
-    #
-    #         # Dữ liệu analytics
-    #         headers = ['Metric', 'Value', '', '']
-    #         worksheet.append(headers)
-    #         for cell in worksheet[2]:
-    #             cell.font = Font(bold=True)
-    #         analytics_rows = [
-    #             ['Total Revenue', f"{analytics_data['total_revenue']} VND", '', ''],
-    #             ['Tickets Sold', analytics_data['tickets_sold'], '', ''],
-    #             ['Average Rating', analytics_data['average_rating'], '', ''],
-    #             ['Cancellation Rate', f"{analytics_data['cancellation_rate']}%", '', ''],
-    #             ['Average Purchase Time', f"{analytics_data['avg_purchase_time_minutes']} minutes", '', ''],
-    #             ['Repeat Attendee Rate', f"{analytics_data['repeat_attendee_rate']}%", '', '']
-    #         ]
-    #         for row in analytics_rows:
-    #             worksheet.append(row)
-    #
-    #         buffer = BytesIO()
-    #         workbook.save(buffer)
-    #         buffer.seek(0)
-    #
-    #         response = HttpResponse(buffer,
-    #                                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    #         response['Content-Disposition'] = f'attachment; filename="event_{event.id}_analytics.xlsx"'
-    #         return response
-    #
-    #     else:
-    #         return Response({"error": "Định dạng không được hỗ trợ. Sử dụng 'pdf' hoặc 'excel'."},
-    #                         status=status.HTTP_400_BAD_REQUEST)
-
-
-
 class PaymentViewSet(viewsets.ViewSet):
-
     @action(detail=False, methods=['post'], url_path='momo-payment-notify')
     def momo_payment_notify(self, request):
         data = request.data
@@ -1187,7 +911,6 @@ class PaymentViewSet(viewsets.ViewSet):
         if not order:
             return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Kiểm tra thời gian hết hạn
         if order.expiration_time and now() > order.expiration_time:
             with transaction.atomic():
                 ticket = order.ticket
@@ -1216,7 +939,7 @@ class PaymentViewSet(viewsets.ViewSet):
                     )
 
                     try:
-                        qr_image = generate_qr_image(qr_code)  # Trả về BytesIO
+                        qr_image = generate_qr_image(qr_code)
                         upload_result = cloudinary.uploader.upload(
                             qr_image,
                             folder='tickets',
@@ -1246,49 +969,11 @@ class PaymentViewSet(viewsets.ViewSet):
                     fail_silently=True
                 )
 
-                user = order.user
-                credentials_dict = user.google_credentials
-                if credentials_dict:
-                    try:
-                        credentials = Credentials(**credentials_dict)
-                        service = build('calendar', 'v3', credentials=credentials)
-                        event = ticket.event
-                        calendar_event = {
-                            'summary': f"Event: {event.name}",
-                            'location': event.location,
-                            'description': f"Ticket: {ticket.type}",
-                            'start': {
-                                'dateTime': event.date.isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'end': {
-                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'reminders': {
-                                'useDefault': False,
-                                'overrides': [
-                                    {'method': 'email', 'minutes': 24 * 60},
-                                    {'method': 'popup', 'minutes': 30},
-                                ],
-                            },
-                        }
-                        calendar_event_response = service.events().insert(
-                            calendarId='primary',
-                            body=calendar_event
-                        ).execute()
-                        order_detail = OrderDetail.objects.filter(order=order).first()
-                        order_detail.google_calendar_event_id = calendar_event_response['id']
-                        order_detail.save()
-                    except Exception as e:
-                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
-
                 return Response({
                     "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
                     "order_id": order.id
                 }, status=status.HTTP_200_OK)
             else:
-                # Thanh toán thất bại, nhả vé
                 ticket = order.ticket
                 ticket.quantity += order.quantity
                 ticket.save()
@@ -1297,139 +982,9 @@ class PaymentViewSet(viewsets.ViewSet):
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['post'], url_path='vnpay-payment-notify')
-    def vnpay_payment_notify(self, request):
-        """Xử lý thông báo từ VNPAY."""
-        data = request.query_params
-        vnp_TxnRef = data.get("vnp_TxnRef")
-        vnp_ResponseCode = data.get("vnp_ResponseCode")
-        vnp_SecureHash = data.get("vnp_SecureHash")
-        vnp_Amount = int(data.get("vnp_Amount")) / 100  # Chia 100 để đổi về VND
-
-        # Xác minh chữ ký
-        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
-        input_data = {k: v for k, v in data.items() if k != "vnp_SecureHash"}
-        sorted_input = sorted(input_data.items(), key=lambda x: x[0])
-        query_string = "&".join([f"{k}={v}" for k, v in sorted_input])
-        hash_data = query_string.encode('utf-8')
-        calculated_hash = hmac.new(
-            vnpay_hash_secret.encode('utf-8'),
-            hash_data,
-            hashlib.sha512
-        ).hexdigest()
-
-        if calculated_hash != vnp_SecureHash:
-            return Response({"error": "Chữ ký không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            order_id_parts = vnp_TxnRef.split('_')
-            if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
-                raise ValueError("Định dạng order_id không hợp lệ")
-            actual_order_id = order_id_parts[2]
-        except (ValueError, IndexError):
-            return Response({"error": "Định dạng order_id không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-        order = Order.objects.filter(id=actual_order_id).first()
-        if not order:
-            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
-
-        # Kiểm tra số tiền
-        if vnp_Amount != order.total_amount:
-            return Response({"error": "Số tiền không khớp"}, status=status.HTTP_400_BAD_REQUEST)
-
-        with transaction.atomic():
-            if vnp_ResponseCode == "00":  # Thanh toán thành công
-                order.payment_status = Order.PaymentStatus.PAID
-                order.save()
-
-                ticket = order.ticket
-                quantity = order.quantity
-
-                qr_image_urls = []
-                for i in range(quantity):
-                    qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
-                    order_detail = OrderDetail.objects.create(
-                        order=order,
-                        ticket=ticket,
-                        qr_code=qr_code
-                    )
-
-                    qr_image = generate_qr_image(qr_code)
-                    qr_image.seek(0)
-                    upload_result = cloudinary.uploader.upload(
-                        qr_image,
-                        folder='tickets',
-                        public_id=f"QR_{order.id}_{ticket.id}_{i + 1}",
-                        resource_type='image',
-                        overwrite=True
-                    )
-                    order_detail.qr_image = upload_result['public_id']
-                    order_detail.save()
-                    qr_image_urls.append(upload_result['secure_url'])
-
-                ticket.quantity -= quantity
-                ticket.save()
-
-                send_mail(
-                    subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
-                    message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
-                            "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
-                            f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                    from_email="nhanhgon24@gmail.com",
-                    recipient_list=[order.user.email],
-                    fail_silently=True
-                )
-
-                user = order.user
-                credentials_dict = user.google_credentials
-                if credentials_dict:
-                    try:
-                        credentials = Credentials(**credentials_dict)
-                        service = build('calendar', 'v3', credentials=credentials)
-                        event = ticket.event
-                        calendar_event = {
-                            'summary': f"Event: {event.name}",
-                            'location': event.location,
-                            'description': f"Ticket: {ticket.type}",
-                            'start': {
-                                'dateTime': event.date.isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'end': {
-                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'reminders': {
-                                'useDefault': False,
-                                'overrides': [
-                                    {'method': 'email', 'minutes': 24 * 60},
-                                    {'method': 'popup', 'minutes': 30},
-                                ],
-                            },
-                        }
-                        calendar_event_response = service.events().insert(
-                            calendarId='primary',
-                            body=calendar_event
-                        ).execute()
-                        order_detail = OrderDetail.objects.filter(order=order).first()
-                        order_detail.google_calendar_event_id = calendar_event_response['id']
-                        order_detail.save()
-                    except Exception as e:
-                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
-
-                return Response({
-                    "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
-                    "order_id": order.id
-                }, status=status.HTTP_200_OK)
-            else:
-                order.payment_status = Order.PaymentStatus.FAILED
-                order.save()
-                return Response({"message": f"Thanh toán thất bại: {vnp_ResponseCode}"},
-                                status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'], url_path='momo-payment-success')
     def momo_payment_success(self, request):
-        """Xử lý chuyển hướng từ MoMo sau khi thanh toán thành công."""
         partner_code = request.query_params.get('partnerCode')
         order_id = request.query_params.get('orderId')
         request_id = request.query_params.get('requestId')
@@ -1455,7 +1010,6 @@ class PaymentViewSet(viewsets.ViewSet):
             if result_code == '0':
                 order.payment_status = Order.PaymentStatus.PAID
                 order.save()
-
                 ticket = order.ticket
                 quantity = order.quantity
 
@@ -1501,50 +1055,12 @@ class PaymentViewSet(viewsets.ViewSet):
                     fail_silently=True
                 )
 
-                user = order.user
-                credentials_dict = user.google_credentials
-                if credentials_dict:
-                    try:
-                        credentials = Credentials(**credentials_dict)
-                        service = build('calendar', 'v3', credentials=credentials)
-                        event = ticket.event
-                        calendar_event = {
-                            'summary': f"Event: {event.name}",
-                            'location': event.location,
-                            'description': f"Ticket: {ticket.type}",
-                            'start': {
-                                'dateTime': event.date.isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'end': {
-                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'reminders': {
-                                'useDefault': False,
-                                'overrides': [
-                                    {'method': 'email', 'minutes': 24 * 60},
-                                    {'method': 'popup', 'minutes': 30},
-                                ],
-                            },
-                        }
-                        calendar_event_response = service.events().insert(
-                            calendarId='primary',
-                            body=calendar_event
-                        ).execute()
-                        order_detail = OrderDetail.objects.filter(order=order).first()
-                        order_detail.google_calendar_event_id = calendar_event_response['id']
-                        order_detail.save()
-                    except Exception as e:
-                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
-
                 return Response({
                     "message": "Thanh toán thành công! Kiểm tra email của bạn để xem mã QR hoặc gọi GET /orders/{id}/",
                     "order_id": order.id,
                     "redirect_url": f"/payment-success?order_id={order.id}"
                 }, status=status.HTTP_200_OK)
             else:
-                # Nhả vé nếu thanh toán thất bại
                 ticket = order.ticket
                 ticket.quantity += order.quantity
                 ticket.save()
@@ -1554,150 +1070,9 @@ class PaymentViewSet(viewsets.ViewSet):
                 return Response({
                     "message": f"Thanh toán thất bại: {message}",
                     "order_id": order.id,
-                    "redirect_url": "/payment-failure"  # Chuyển hướng đến trang thất bại
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False, methods=['get'], url_path='vnpay-payment-success')
-    def vnpay_payment_success(self, request):
-        """Xử lý chuyển hướng từ VNPAY sau khi thanh toán thành công."""
-        vnp_TxnRef = request.query_params.get("vnp_TxnRef")
-        vnp_ResponseCode = request.query_params.get("vnp_ResponseCode")
-        vnp_SecureHash = request.query_params.get("vnp_SecureHash")
-
-        # Xác minh chữ ký
-        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
-        input_data = {k: v for k, v in request.query_params.items() if k != "vnp_SecureHash"}
-        sorted_input = sorted(input_data.items(), key=lambda x: x[0])
-        query_string = "&".join([f"{k}={v}" for k, v in sorted_input])
-        hash_data = query_string.encode('utf-8')
-        calculated_hash = hmac.new(
-            vnpay_hash_secret.encode('utf-8'),
-            hash_data,
-            hashlib.sha512
-        ).hexdigest()
-
-        if calculated_hash != vnp_SecureHash:
-            return Response({"error": "Chữ ký không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            order_id_parts = vnp_TxnRef.split('_')
-            if len(order_id_parts) != 3 or order_id_parts[0] != 'ORDER':
-                raise ValueError("Định dạng order_id không hợp lệ")
-            actual_order_id = order_id_parts[2]
-        except (ValueError, IndexError):
-            return Response({"error": "Định dạng order_id không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-        order = Order.objects.filter(id=actual_order_id).first()
-        if not order:
-            return Response({"error": "Không tìm thấy đơn hàng"}, status=status.HTTP_404_NOT_FOUND)
-
-        with transaction.atomic():
-            if vnp_ResponseCode == "00":
-                order.payment_status = Order.PaymentStatus.PAID
-                order.save()
-
-                # Lấy extra_data từ vnp_OrderInfo
-                order_info = request.query_params.get("vnp_OrderInfo", "")
-                extra_data = ""
-                if "|extraData:" in order_info:
-                    extra_data = order_info.split("|extraData:")[1]
-                if not extra_data:
-                    return Response({"error": "Thiếu thông tin vé trong extraData"}, status=status.HTTP_400_BAD_REQUEST)
-
-                try:
-                    extra_data_decoded = json.loads(base64.b64decode(extra_data).decode())
-                    ticket_id = extra_data_decoded['ticket_id']
-                    quantity = extra_data_decoded['quantity']
-                except (ValueError, KeyError):
-                    return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
-
-                ticket = get_object_or_404(Ticket, id=ticket_id)
-                if ticket.quantity < quantity:
-                    order.payment_status = Order.PaymentStatus.FAILED
-                    order.save()
-                    return Response({"error": "Số lượng vé không đủ"}, status=status.HTTP_400_BAD_REQUEST)
-
-                qr_image_urls = []
-                for i in range(quantity):
-                    qr_code = f"QR_{order.id}_{ticket.id}_{i + 1}"
-                    order_detail = OrderDetail.objects.create(
-                        order=order,
-                        ticket=ticket,
-                        qr_code=qr_code
-                    )
-
-                    qr_image = generate_qr_image(qr_code)
-                    qr_image.seek(0)
-                    upload_result = cloudinary.uploader.upload(
-                        qr_image,
-                        folder='tickets',
-                        public_id=f"QR_{order.id}_{ticket.id}_{i + 1}",
-                        resource_type='image',
-                        overwrite=True
-                    )
-                    order_detail.qr_image = upload_result['public_id']
-                    order_detail.save()
-                    qr_image_urls.append(upload_result['secure_url'])
-
-                ticket.quantity -= quantity
-                ticket.save()
-
-                send_mail(
-                    subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
-                    message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
-                            "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
-                            f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                    from_email="nhanhgon24@gmail.com",
-                    recipient_list=[order.user.email],
-                    fail_silently=True
-                )
-
-                user = order.user
-                credentials_dict = user.google_credentials
-                if credentials_dict:
-                    try:
-                        credentials = Credentials(**credentials_dict)
-                        service = build('calendar', 'v3', credentials=credentials)
-                        event = ticket.event
-                        calendar_event = {
-                            'summary': f"Event: {event.name}",
-                            'location': event.location,
-                            'description': f"Ticket: {ticket.type}",
-                            'start': {
-                                'overrides': [
-                                    {'method': 'email', 'minutes': 24 * 60},
-                                    {'method': 'popup', 'minutes': 30},
-                                ],
-                            },
-                        }
-                        calendar_event_response = service.events().insert(
-                            calendarId='primary',
-                            body=calendar_event
-                        ).execute()
-                        order_detail = OrderDetail.objects.filter(order=order).first()
-                        order_detail.google_calendar_event_id = calendar_event_response['id']
-                        order_detail.save()
-                    except Exception as e:
-                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
-
-                return Response({
-                    "message": "Thanh toán thành công! Kiểm tra email của bạn để xem mã QR hoặc gọi GET /orders/{id}/",
-                    "order_id": order.id,
-                    "redirect_url": f"/payment-success?order_id={order.id}"
-                }, status=status.HTTP_200_OK)
-            else:
-                # Nhả vé nếu thanh toán thất bại
-                ticket = order.ticket
-                ticket.quantity += order.quantity
-                ticket.save()
-                order.active = False
-                order.payment_status = Order.PaymentStatus.FAILED
-                order.save()
-                return Response({
-                    "message": f"Thanh toán thất bại: {vnp_ResponseCode}",
-                    "order_id": order.id,
                     "redirect_url": "/payment-failure"
                 }, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.UpdateAPIView, generics.DestroyAPIView):
@@ -1724,7 +1099,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         return queryset.order_by('-created_at')
 
     def list(self, request, *args, **kwargs):
-        """GET /orders/?payment_status=<status>: Lấy danh sách đơn hàng của người dùng, có thể lọc theo trạng thái."""
         queryset = self.get_queryset()
         page = self.paginate_queryset(queryset)
 
@@ -1739,10 +1113,9 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         return get_object_or_404(Order, id=self.kwargs['id'], user=self.request.user)
 
     def retrieve(self, request, *args, **kwargs):
-        """GET /orders/{id}/: Lấy chi tiết đơn hàng và mã QR."""
         order = self.get_object()
         serializer = self.get_serializer(order)
-        order_details = order.order_details.all()
+        order_details = order.order_details.select_related('ticket__event').all()
         qr_image_urls = [request.build_absolute_uri(detail.qr_image.url) for detail in order_details if detail.qr_image]
         return Response({
             "order": serializer.data,
@@ -1752,7 +1125,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
     @action(detail=True, methods=['post'], url_path='check-payment-status',
             permission_classes=[permissions.IsAuthenticated])
     def check_payment_status(self, request, id=None):
-        """Kiểm tra trạng thái thanh toán (MoMo hoặc VNPAY) thủ công."""
         order = self.get_object()
         if order.payment_status != Order.PaymentStatus.PENDING:
             return Response({
@@ -1841,7 +1213,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         except (ValueError, KeyError):
             return Response({"error": "Dữ liệu extraData không hợp lệ"}, status=status.HTTP_400_BAD_REQUEST)
 
-        ticket = get_object_or_404(Ticket, id=ticket_id)
+        ticket = get_object_or_404(TicketType, id=ticket_id)
         with transaction.atomic():
             if ticket.quantity < quantity:
                 order.payment_status = Order.PaymentStatus.FAILED
@@ -1869,8 +1241,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
                     qr_image_urls.append(request.build_absolute_uri(order_detail.qr_image.url))
 
-
-
                 send_mail(
                     subject=f"Xác nhận đặt vé thành công - Đơn hàng #{order.id}",
                     message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
@@ -1881,43 +1251,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                     fail_silently=True
                 )
 
-                user = order.user
-                credentials_dict = user.google_credentials
-                if credentials_dict:
-                    try:
-                        credentials = Credentials(**credentials_dict)
-                        service = build('calendar', 'v3', credentials=credentials)
-                        event = ticket.event
-                        calendar_event = {
-                            'summary': f"Event: {event.name}",
-                            'location': event.location,
-                            'description': f"Ticket: {ticket.type}",
-                            'start': {
-                                'dateTime': event.date.isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'end': {
-                                'dateTime': (event.date + timedelta(hours=2)).isoformat(),
-                                'timeZone': 'Asia/Ho_Chi_Minh',
-                            },
-                            'reminders': {
-                                'useDefault': False,
-                                'overrides': [
-                                    {'method': 'email', 'minutes': 24 * 60},
-                                    {'method': 'popup', 'minutes': 30},
-                                ],
-                            },
-                        }
-                        calendar_event_response = service.events().insert(
-                            calendarId='primary',
-                            body=calendar_event
-                        ).execute()
-                        order_detail = OrderDetail.objects.filter(order=order).first()
-                        order_detail.google_calendar_event_id = calendar_event_response['id']
-                        order_detail.save()
-                    except Exception as e:
-                        print(f"Error adding to Google Calendar for order {order.id}: {str(e)}")
-
                 return Response({
                     "message": "Thanh toán thành công, email chứa mã QR đã được gửi",
                     "qr_image_urls": qr_image_urls
@@ -1927,10 +1260,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                 order.save()
                 return Response({"message": f"Thanh toán thất bại: {message}"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-
     def update(self, request, *args, **kwargs):
-        """PUT /orders/{id}/: Cập nhật toàn bộ thông tin đơn hàng."""
         order = self.get_object()
         if order.payment_status != 'PENDING':
             return Response({"error": "Không thể cập nhật đơn hàng đã thanh toán hoặc thất bại"},
@@ -1942,7 +1272,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def partial_update(self, request, *args, **kwargs):
-        """PATCH /orders/{id}/: Cập nhật một phần thông tin đơn hàng."""
         order = self.get_object()
         if order.payment_status != 'PENDING':
             return Response({"error": "Không thể cập nhật đơn hàng đã thanh toán hoặc thất bại"},
@@ -1954,20 +1283,17 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
-        """DELETE /orders/{id}/: Hủy đơn hàng."""
         order = self.get_object()
         if order.payment_status != 'PENDING':
             return Response({"error": "Không thể hủy đơn hàng đã thanh toán hoặc thất bại"},
                            status=status.HTTP_400_BAD_REQUEST)
-
         order.delete()
         return Response({"message": "Hủy đơn hàng thành công"}, status=status.HTTP_204_NO_CONTENT)
 
     @action(methods=['get'], url_path='details', detail=True, permission_classes=[permissions.IsAuthenticated])
     def get_order_details(self, request, id=None):
-        """GET /orders/{id}/details/: Lấy danh sách OrderDetail của một Order."""
         order = self.get_object()
-        order_details = order.order_details.all()
+        order_details = order.order_details.select_related('ticket__event').all()
         page = self.paginate_queryset(order_details)
         if page is not None:
             serializer = OrderDetailSerializer(page, many=True, context={'request': request})
@@ -1979,11 +1305,10 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
     def pay(self, request, id=None):
         order = self.get_object()
 
-        # Kiểm tra thời gian hết hạn
         if order.expiration_time and now() > order.expiration_time:
             with transaction.atomic():
                 ticket = order.ticket
-                ticket.quantity += order.quantity  # Nhả vé
+                ticket.quantity += order.quantity
                 ticket.save()
                 order.active = False
                 order.payment_status = Order.PaymentStatus.FAILED
@@ -1995,7 +1320,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
             return Response({"error": "Đơn hàng không ở trạng thái PENDING"},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Lấy hoặc cập nhật payment_method
         new_payment_method = request.data.get('payment_method')
         if new_payment_method:
             if new_payment_method not in [method[0] for method in Order.PaymentMethod.choices]:
@@ -2006,8 +1330,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
         payment_method = order.payment_method
 
-
-        # Tạo yêu cầu thanh toán
         extra_data = base64.b64encode(json.dumps({
             'ticket_id': order.ticket.id,
             'quantity': order.quantity
@@ -2016,7 +1338,6 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         if payment_method == "MoMo":
             payment_response = self.create_momo_qr(order, extra_data)
             if "error" in payment_response or "qrCodeUrl" not in payment_response:
-                # Nhả vé nếu không tạo được QR
                 with transaction.atomic():
                     ticket = order.ticket
                     ticket.quantity += order.quantity
@@ -2060,7 +1381,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         return None
 
     def create_momo_qr(self, order, extra_data):
-        """Hàm gọi API tạo QR MoMo, truyền extraData."""
+
         order_id = f"ORDER_{order.user.id}_{order.id}"
         request_id = f"REQ_{order_id}"
         amount = int(order.total_amount)
@@ -2078,6 +1399,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
         data = {
             "partnerCode": partner_code,
+            "accessKey": access_key,
             "accessKey": access_key,
             "requestId": request_id,
             "amount": amount,
@@ -2098,166 +1420,17 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         except requests.RequestException as e:
             return {"error": f"Lỗi khi gọi API MoMo: {str(e)}"}
 
-    def create_vnpay_url(self, order, extra_data, request):
-        """Tạo URL thanh toán VNPAY."""
-        order_id = f"ORDER_{order.user.id}_{order.id}"
-        amount = int(order.total_amount * 100)  # VNPAY yêu cầu số tiền tính bằng VND, nhân 100
-        order_info = f"Thanh toan don hang {order_id}"
-        ip_addr = request.META.get('REMOTE_ADDR', '127.0.0.1')
-
-        # Thông tin VNPAY (cần thay bằng thông tin thật từ tài khoản VNPAY của bạn)
-        vnpay_tmn_code = "YOUR_VNPAY_TMN_CODE"  # Mã website do VNPAY cung cấp
-        vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"  # Secret key do VNPAY cung cấp
-        vnpay_url = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
-        return_url = "http://localhost:8000/payment/vnpay-payment-success"  # URL MoMo chuyển hướng sau thanh toán
-        notify_url = "http://localhost:8000/payment/vnpay-payment-notify"  # IPN URL
-
-        # Tạo các tham số cho URL thanh toán
-        vnpay_params = {"vnp_Version": "2.1.0", "vnp_Command": "pay", "vnp_TmnCode": vnpay_tmn_code,
-                        "vnp_Amount": amount, "vnp_CreateDate": now().strftime("%Y%m%d%H%M%S"), "vnp_CurrCode": "VND",
-                        "vnp_IpAddr": ip_addr, "vnp_Locale": "vn",
-                        "vnp_OrderInfo": f"{order_info}|extraData:{extra_data}", "vnp_OrderType": "billpayment",
-                        "vnp_ReturnUrl": return_url, "vnp_TxnRef": order_id, "vnp_NotifyUrl": notify_url}
-
-        # Thêm extra_data vào OrderInfo (nếu cần)
-
-        # Sắp xếp các tham số theo thứ tự alphabet để tạo chữ ký
-        sorted_params = sorted(vnpay_params.items(), key=lambda x: x[0])
-        query_string = "&".join([f"{k}={v}" for k, v in sorted_params])
-        hash_data = query_string.encode('utf-8')
-        vnpay_secure_hash = hmac.new(
-            vnpay_hash_secret.encode('utf-8'),
-            hash_data,
-            hashlib.sha512
-        ).hexdigest()
-        vnpay_params["vnp_SecureHash"] = vnpay_secure_hash
-
-        # Tạo URL thanh toán
-        pay_url = f"{vnpay_url}?{query_string}&vnp_SecureHash={vnpay_secure_hash}"
-        return {"payUrl": pay_url}
-
-
-
-class GoogleCalendarViewSet(viewsets.ViewSet):
-    @action(methods=['get'], url_path='auth-url', detail=False, permission_classes=[permissions.IsAuthenticated])
-    def get_auth_url(self, request):
-        # Tạo flow để lấy URL xác thực
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": settings.GOOGLE_CALENDAR_API['CLIENT_ID'],
-                    "client_secret": settings.GOOGLE_CALENDAR_API['CLIENT_SECRET'],
-                    "redirect_uris": [settings.GOOGLE_CALENDAR_API['REDIRECT_URI']],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-            },
-            scopes=settings.GOOGLE_CALENDAR_API['SCOPES']
-        )
-
-        flow.redirect_uri = settings.GOOGLE_CALENDAR_API['REDIRECT_URI']
-        auth_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'
-        )
-
-        request.session['google_auth_state'] = state
-        return Response({"auth_url": auth_url}, status=status.HTTP_200_OK)
-
-    @action(methods=['get'], url_path='callback', detail=False)
-    def google_callback(self, request):
-        state = request.query_params.get('state')
-        code = request.query_params.get('code')
-
-        if state != request.session.get('google_auth_state'):
-            return Response({"error": "State không khớp"}, status=status.HTTP_400_BAD_REQUEST)
-
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": settings.GOOGLE_CALENDAR_API['CLIENT_ID'],
-                    "client_secret": settings.GOOGLE_CALENDAR_API['CLIENT_SECRET'],
-                    "redirect_uris": [settings.GOOGLE_CALENDAR_API['REDIRECT_URI']],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-            },
-            scopes=settings.GOOGLE_CALENDAR_API['SCOPES'],
-            state=state
-        )
-
-        flow.redirect_uri = settings.GOOGLE_CALENDAR_API['REDIRECT_URI']
-        flow.fetch_token(code=code)
-
-        credentials = flow.credentials
-        request.user.google_credentials = {
-            'token': credentials.token,
-            'refresh_token': credentials.refresh_token,
-            'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
-            'scopes': credentials.scopes
-        }
-        request.user.save()
-
-        return Response({"message": "Xác thực Google thành công"}, status=status.HTTP_200_OK)
-
-    @action(methods=['post'], url_path='add-to-calendar/(?P<event_id>[^/.]+)', detail=False, permission_classes=[permissions.IsAuthenticated])
-    def add_to_calendar(self, request, event_id=None):
-        event = get_object_or_404(Event, id=event_id)
-        if not OrderDetail.objects.filter(order__user=request.user, ticket__event=event, order__payment_status='PAID').exists():
-            return Response({"error": "Bạn chưa đặt vé cho sự kiện này"}, status=status.HTTP_403_FORBIDDEN)
-
-        credentials_dict = request.session.get('google_credentials')
-        if not credentials_dict:
-            return Response({"error": "Chưa xác thực với Google"}, status=status.HTTP_400_BAD_REQUEST)
-
-        credentials = Credentials(**credentials_dict)
-        service = build('calendar', 'v3', credentials=credentials)
-
-        calendar_event = {
-            'summary': event.title,
-            'location': event.location,
-            'description': event.description,
-            'start': {
-                'dateTime': event.start_time.isoformat(),
-                'timeZone': 'Asia/Ho_Chi_Minh',
-            },
-            'end': {
-                'dateTime': event.end_time.isoformat(),
-                'timeZone': 'Asia/Ho_Chi_Minh',
-            },
-            'reminders': {
-                'useDefault': False,
-                'overrides': [
-                    {'method': 'email', 'minutes': 24 * 60},
-                    {'method': 'popup', 'minutes': 30},
-                ],
-            },
-        }
-
-        calendar_event = service.events().insert(calendarId='primary', body=calendar_event).execute()
-        return Response({
-            "message": "Sự kiện đã được thêm vào Google Calendar",
-            "calendar_event_id": calendar_event['id']
-        }, status=status.HTTP_200_OK)
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    
     serializer_class = ReviewSerializer
-    
     def get_permissions(self):
         if self.action in ['retrieve', 'list', 'by_event']:
-            # Cho phép tất cả người dùng xem đánh giá
             return [permissions.AllowAny()]
         else:
-            # Chỉ người dùng đã xác thực mới có thể tạo, sửa, xóa đánh giá
             return [permissions.IsAuthenticated()]
     
     def get_queryset(self):
-        # Mặc định chỉ lấy các đánh giá active
         return Review.objects.filter(active=True)
     
     def perform_create(self, serializer):
@@ -2268,11 +1441,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
         """Lấy tất cả đánh giá cho một sự kiện cụ thể"""
         event = get_object_or_404(Event, id=event_id)
         reviews = self.get_queryset().filter(event=event)
-        
-        # Tính điểm đánh giá trung bình
         avg_rating = reviews.aggregate(Avg('rating'))['rating__avg'] or 0
-        
-        # Phân trang
+
         page = self.paginate_queryset(reviews)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -2303,14 +1473,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         """Cập nhật đánh giá"""
         review = self.get_object()
-        # Chỉ user tạo review mới có quyền cập nhật
         if review.user != request.user:
             return Response(
                 {"error": "Bạn không có quyền cập nhật đánh giá này."}, 
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        # Chỉ cho phép sửa rating và comment
+
         data = request.data.copy()
         allowed_fields = ['rating', 'comment']
         for field in list(data.keys()):
@@ -2324,16 +1492,12 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     def destroy(self, request, *args, **kwargs):
-        """Xóa đánh giá (soft delete)"""
         review = self.get_object()
-        # Chỉ user tạo review hoặc admin mới có quyền xóa
         if review.user != request.user and not request.user.is_superuser:
             return Response(
                 {"error": "Bạn không có quyền xóa đánh giá này."}, 
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        # Soft delete bằng cách đặt active=False
         review.active = False
         review.save()
         

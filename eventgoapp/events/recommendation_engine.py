@@ -1,4 +1,3 @@
-# recommendation_engine.py
 import pandas as pd
 from django_pandas.io import read_frame
 from sklearn.neighbors import NearestNeighbors
@@ -14,19 +13,16 @@ class RecommendationEngine:
         self.load_data()
 
     def load_data(self):
-        # Load dữ liệu sự kiện
-        events = Event.objects.filter(status='upcoming')  # Chỉ lấy sự kiện sắp diễn ra
+        events = Event.objects.filter(status='upcoming')
         self.events_df = read_frame(events, fieldnames=['id', 'category__name', 'location', 'date'])
         self.events_df.columns = ['event_id', 'category', 'location', 'date']
 
-        # Load lịch sử người dùng
         orders = Order.objects.filter(payment_status='paid')
         order_details = OrderDetail.objects.filter(order__in=orders)
         self.user_history_df = read_frame(order_details, fieldnames=['order__user__id', 'ticket__event__id', 'quantity'])
         self.user_history_df.columns = ['user_id', 'event_id', 'quantity']
 
     def get_user_preferences(self, user_id):
-        # Lấy sở thích từ lịch sử tham gia
         user_events = self.user_history_df[self.user_history_df['user_id'] == user_id]
         if user_events.empty:
             return []
@@ -36,17 +32,14 @@ class RecommendationEngine:
         return list(categories)
 
     def simple_recommendation(self, user_id, max_results=5):
-        # Đề xuất đơn giản dựa trên sở thích và vị trí
         preferences = self.get_user_preferences(user_id)
         user = User.objects.get(id=user_id)
         user_location = user.address or ""
 
         if not preferences:
-            # Nếu không có lịch sử, đề xuất sự kiện phổ biến
-            trending_events = EventTrend.objects.order_by('-views')[:max_results]
+            trending_events = EventTrend.objects.order_by('-interest_level')[:max_results]
             return Event.objects.filter(id__in=[t.event_id for t in trending_events])
 
-        # Lọc sự kiện theo sở thích và vị trí gần
         recommended = Event.objects.filter(
             category__name__in=preferences,
             location__icontains=user_location,
@@ -55,11 +48,9 @@ class RecommendationEngine:
         return recommended
 
     def prepare_ml_data(self):
-        # Tạo ma trận đặc trưng cho sự kiện
         events = Event.objects.filter(status='upcoming')
         event_features = []
         for event in events:
-            # Đặc trưng: category (one-hot), views, interest_level
             category = event.category.name if event.category else "Unknown"
             views = EventTrend.objects.filter(event=event).first().views if EventTrend.objects.filter(
                 event=event).exists() else 0
@@ -73,7 +64,6 @@ class RecommendationEngine:
             })
 
         df = pd.DataFrame(event_features)
-        # One-hot encoding cho category
         df_encoded = pd.get_dummies(df[['category']], prefix='cat')
         df_final = pd.concat([df[['event_id', 'views', 'interest']], df_encoded], axis=1)
         return df_final
@@ -81,7 +71,7 @@ class RecommendationEngine:
     def ml_recommendation(self, user_id, max_results=5):
         preferences = self.get_user_preferences(user_id)
         if not preferences:
-            trending_events = EventTrend.objects.order_by('-interest_level')[:max_results]  # Fallback dùng interest_level
+            trending_events = EventTrend.objects.order_by('-interest_level')[:max_results]
             return Event.objects.filter(id__in=[t.event_id for t in trending_events])
 
         df = self.prepare_ml_data()
