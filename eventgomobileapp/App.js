@@ -39,15 +39,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import * as Constants from "expo-constants";
-// Import Firebase configuration to initialize Firebase
 import { app } from "./configs/firebase";
 
 import { authApis, endpoints } from "./configs/Apis";
-// Import the new notification handler
 import { initializeNotifications } from "./configs/notificationHandler";
 import Chat from "./components/Home/Chat";
+import CreateDiscount from "./components/Home/CreateDiscount";
 
-// Bỏ qua một số cảnh báo không cần thiết
 LogBox.ignoreLogs([
   "Asyncstorage has been extracted",
   "VirtualizedLists should never be nested",
@@ -59,7 +57,6 @@ const Stack = createNativeStackNavigator();
 const StackNavigator = ({ navigation, route }) => {
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
-      // Reset stack to Home screen when the tab is focused
       if (navigation.getState().index > 0) {
         navigation.reset({
           index: 0,
@@ -85,6 +82,8 @@ const StackNavigator = ({ navigation, route }) => {
       <Stack.Screen name="CreateEvent" component={CreateEvent} />
       <Stack.Screen name="CheckIn" component={CheckIn} />
       <Stack.Screen name="Chat" component={Chat} />
+      <Stack.Screen name="CreateDiscount" component={CreateDiscount} />
+      <Stack.Screen name="MyTickets" component={MyTickets} />
     </Stack.Navigator>
   );
 };
@@ -129,7 +128,6 @@ const TabNavigator = () => {
           } else if (route.name === "reviews") {
             label = "Đánh giá";
           } else if (route.name === "analytics") {
-            // Add label for Analytics
             label = "Thống kê";
           }
           return (
@@ -156,7 +154,6 @@ const TabNavigator = () => {
         }}
         listeners={({ navigation }) => ({
           tabPress: (e) => {
-            // Navigate to home tab and reset its stack
             navigation.navigate("home", {
               screen: "Home",
             });
@@ -269,28 +266,21 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const navigationRef = useRef();
-  // Create a ref for the notification system
   const notificationSystem = useRef(null);
 
-  // Make notification system globally accessible to be used in other components
   global.notificationSystem = notificationSystem;
 
-  // Effect để thiết lập push notifications
   useEffect(() => {
     let isMounted = true;
 
-    // Đợi đến khi navigation reference được khởi tạo
     const setupNotifications = async () => {
       try {
-        // Initialize the notification system with the current user token
         const authToken = user?.access_token || null;
 
-        // Chỉ khởi tạo khi navigation đã sẵn sàng
         if (navigationRef.current) {
           console.log(
             "Navigation ref is ready, initializing notification system"
           );
-          // Create notification system with current navigation reference
           const notificationHandler = await initializeNotifications(
             navigationRef.current,
             authToken
@@ -299,13 +289,11 @@ const App = () => {
           if (isMounted) {
             notificationSystem.current = notificationHandler;
 
-            // Make notification handler immediately available to other components
             global.notificationSystem = { current: notificationHandler };
 
             console.log("Notification system initialized globally");
           }
 
-          // Update token on server if logged in but token wasn't sent before
           if (user && user.access_token) {
             const tokenSent = await AsyncStorage.getItem(
               "pushTokenSentToServer"
@@ -315,16 +303,13 @@ const App = () => {
             }
           }
 
-          // Show a welcome notification on first launch to verify system is working
           const isFirstLaunch = await AsyncStorage.getItem(
             "firstLaunchNotificationShown"
           );
           if (!isFirstLaunch && notificationHandler) {
-            // Add a slight delay to ensure navigation is fully initialized
             setTimeout(async () => {
               if (isMounted && notificationHandler) {
                 try {
-                  // Use event notification format to show the welcome message
                   const welcomeData = {
                     name: "EventGo",
                     id: "welcome",
@@ -332,7 +317,6 @@ const App = () => {
                     location: "Ứng dụng EventGo",
                   };
 
-                  // Show welcome notification with event-style formatting
                   await notificationHandler.showEventNotification(
                     welcomeData,
                     false
@@ -355,7 +339,6 @@ const App = () => {
             "Navigation reference not ready when initializing notifications"
           );
 
-          // Retry after navigation reference is ready
           setTimeout(async () => {
             if (navigationRef.current && isMounted) {
               const notificationHandler = await initializeNotifications(
@@ -371,14 +354,12 @@ const App = () => {
       }
     };
 
-    // Đợi một chút để NavigationContainer khởi tạo hoàn toàn trước khi cài đặt thông báo
     const timer = setTimeout(() => {
       if (isMounted) {
         setupNotifications();
       }
     }, 1000);
 
-    // Cleanup
     return () => {
       clearTimeout(timer);
       isMounted = false;
@@ -386,13 +367,10 @@ const App = () => {
         notificationSystem.current.cleanup();
       }
     };
-  }, [user]); // Re-run when user changes to update server with token
+  }, [user]); 
 
-  // Effect để khởi tạo user
   useEffect(() => {
-    // Đây là effect cho việc khởi tạo user
-
-    // Check for cached user data and token
+ 
     const loadUserData = async () => {
       try {
         setIsLoading(true);
@@ -400,10 +378,8 @@ const App = () => {
         const token = await AsyncStorage.getItem("token");
 
         if (userData) {
-          // Parse the stored user data
           const parsedUserData = JSON.parse(userData);
 
-          // Ensure the token is included in the user data
           if (token && !parsedUserData.access_token) {
             parsedUserData.access_token = token;
           }
@@ -432,7 +408,6 @@ const App = () => {
             }
           } catch (userError) {
             console.error("Failed to fetch user data with token:", userError);
-            // Token might be expired, remove it
             AsyncStorage.removeItem("token");
           }
         }

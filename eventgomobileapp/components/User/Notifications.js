@@ -19,9 +19,7 @@ const NotificationItem = ({ notification, onRead, navigation }) => {
     });
   };
   const handlePress = () => {
-    // Mark notification as read
     onRead(notification.id);    
-    // If notification is related to an event, navigate to the event details
     if (notification.event) {
       navigation.navigate('Main', { 
         screen: 'home',
@@ -103,7 +101,6 @@ const Notifications = () => {
       const authApi = authApis(token);
       await authApi.patch(endpoints.markNotificationRead(id));
       
-      // Update local state
       setNotifications(prev => 
         prev.map(item => 
           item.id === id ? { ...item, is_read: true } : item
@@ -122,7 +119,6 @@ const Notifications = () => {
       const authApi = authApis(token);
       await authApi.patch(endpoints.markAllNotificationsRead);
       
-      // Update all notifications to read
       setNotifications(prev => 
         prev.map(item => ({ ...item, is_read: true }))
       );

@@ -60,7 +60,6 @@ const MyReviews = () => {
         token ? "Token exists" : "No token"
       );
 
-      // Use authApis with token
       const authApi = authApis(token);
       const res = await authApi.get(endpoints.myReviews);
       console.log("Reviews API response:", res.data);
@@ -69,7 +68,6 @@ const MyReviews = () => {
     } catch (err) {
       console.error("Error loading reviews:", err);
       if (err.response && err.response.status === 401) {
-        // Token expired, need to login again
         Alert.alert("Session expired", "Please login again to continue.", [
           {
             text: "Login",
@@ -88,7 +86,6 @@ const MyReviews = () => {
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     if (user) {
       fetchMyReviews();
@@ -97,7 +94,6 @@ const MyReviews = () => {
     }
   }, [user]);
 
-  // Pull-to-refresh functionality
   const onRefresh = useCallback(() => {
     if (user) {
       fetchMyReviews(true);
@@ -129,28 +125,23 @@ const MyReviews = () => {
 
               const authApi = authApis(token);
 
-              // Set a longer timeout to handle network issues
               const response = await authApi.delete(
                 endpoints.deleteReview(reviewId),
                 {
-                  timeout: 15000, // 15 seconds timeout
+                  timeout: 15000, 
                 }
               );
 
-              // Log the response status for debugging
               console.log("Delete review response status:", response.status);
-              // Refresh the reviews list to get updated data after deletion
               await fetchMyReviews();
               Alert.alert("Success", "Review deleted successfully");
             } catch (err) {
               console.error("Error deleting review:", err);
-              // Check for network error specifically
               if (
                 !err.response &&
                 err.message &&
                 err.message.includes("Network Error")
               ) {
-                // Refresh the reviews list even on network error as deletion might have succeeded
                 await fetchMyReviews();
 
                 Alert.alert(
@@ -171,7 +162,6 @@ const MyReviews = () => {
               }
 
               if (err.response && err.response.status === 401) {
-                // Token expired, need to login again
                 Alert.alert(
                   "Session expired",
                   "Please login again to continue.",
@@ -195,7 +185,6 @@ const MyReviews = () => {
     );
   };
 
-  // Render rating stars based on rating value
   const renderRatingStars = (rating) => {
     return (
       <View style={{ flexDirection: "row" }}>
@@ -212,7 +201,6 @@ const MyReviews = () => {
     );
   };
 
-  // Render item for each review
   const renderReviewItem = ({ item }) => {
     const reviewDate = new Date(item.created_date || item.created_at);
     const formattedDate = reviewDate.toLocaleDateString("vi-VN");
@@ -284,7 +272,6 @@ const MyReviews = () => {
     );
   };
 
-  // Loading state
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -340,7 +327,6 @@ const MyReviews = () => {
       </View>
     );
   }
-  // Background image for header
   const backgroundImage =
     "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
@@ -392,7 +378,7 @@ const MyReviews = () => {
             onRefresh={onRefresh}
             colors={[COLORS.primary]}
             tintColor={COLORS.primary}
-            title="Đang làm mới..." // Add a title for the refresh indicator
+            title="Đang làm mới..."
             titleColor={COLORS.primary}
           />
         }

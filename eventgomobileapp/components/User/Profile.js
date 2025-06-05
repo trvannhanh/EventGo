@@ -456,7 +456,6 @@ export default function Profile({ navigation }) {
     const [showStats, setShowStats] = useState(true);
     const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
-    // Lấy số lượng thông báo chưa đọc mỗi khi màn hình được focus
     useFocusEffect(
         useCallback(() => {
             const fetchNotificationsCount = async () => {
@@ -478,12 +477,10 @@ export default function Profile({ navigation }) {
             }
 
             return () => {
-                // Cleanup nếu cần
             };
         }, [user])
     );
 
-    // Thêm hàm lấy thông tin người dùng từ API
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -505,26 +502,21 @@ export default function Profile({ navigation }) {
         }
     }, [user]);
 
-    // Helper function để tạo URL chính xác cho avatar
     const getAvatarUri = (avatarPath) => {
         if (!avatarPath) return null;
 
-        // Nếu là URI cục bộ từ thư viện ảnh (file:// hoặc content://)
         if (avatarPath.startsWith('file://') || avatarPath.startsWith('content://')) {
             return avatarPath;
         }
 
-        // Nếu đã là URL đầy đủ
         if (avatarPath.startsWith('http')) {
             return avatarPath;
         }
 
-        // Nếu là đường dẫn relative trong Cloudinary
         if (avatarPath.includes('cloudinary') || avatarPath.includes('upload')) {
             return `https://res.cloudinary.com/dqpkxxzaf/${avatarPath}`;
         }
 
-        // Nếu chỉ là tên file (trường hợp từ media trong Django)
         return `http://192.168.1.41:8000/media/${avatarPath}`;
     }; const handleLogout = async () => {
         try {
@@ -540,17 +532,14 @@ export default function Profile({ navigation }) {
                         text: 'Đăng xuất',
                         onPress: async () => {
                             try {
-                                // Xóa token khỏi AsyncStorage
                                 await AsyncStorage.removeItem('token');
                                 await AsyncStorage.removeItem('refresh_token');
 
-                                // Cập nhật state global
                                 dispatch({ type: 'LOGOUT' });
 
                                 Alert.alert('Đăng xuất thành công', 'Hẹn gặp lại bạn!');
 
-                                // Điều hướng về màn hình Login
-                                // navigation.navigate('login');
+                              
                             } catch (error) {
                                 console.error("Lỗi khi đăng xuất:", error);
                                 Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
@@ -568,14 +557,12 @@ export default function Profile({ navigation }) {
 
     const pickImage = async () => {
         try {
-            // Xin quyền truy cập media
             const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!permissionResult.granted) {
                 Alert.alert('Cần quyền truy cập', 'Bạn cần cấp quyền truy cập thư viện ảnh để sử dụng tính năng này.');
                 return;
             }
 
-            // Hiển thị tùy chọn
             Alert.alert(
                 'Cập nhật ảnh đại diện',
                 'Chọn nguồn ảnh:',
@@ -593,7 +580,7 @@ export default function Profile({ navigation }) {
 
                             if (!result.canceled) {
                                 setAvatar(result.assets[0].uri);
-                                setAvatarKey(Date.now()); // Cập nhật key để force re-render Avatar
+                                setAvatarKey(Date.now()); 
                             }
                         }
                     },
@@ -644,7 +631,6 @@ export default function Profile({ navigation }) {
             let formData = new FormData();
             formData.append('phone', phone);
 
-            // Chỉ thêm avatar nếu đã thay đổi
             if (avatar && avatar !== user.avatar) {
                 const filename = avatar.split('/').pop();
                 const match = /\.([\w]+)$/.exec(filename);
@@ -652,14 +638,12 @@ export default function Profile({ navigation }) {
                 formData.append('avatar', { uri: avatar, name: filename, type });
             }
 
-            // Sử dụng authApis với token - không cần await vì authApis không phải async
             const authApi = authApis(token);
 
             const res = await authApi.patch(endpoints.updateUser, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            // Cập nhật thông tin người dùng trong context global
             dispatch({ type: 'LOGIN', payload: res.data });
 
             Alert.alert(
@@ -669,7 +653,6 @@ export default function Profile({ navigation }) {
                     {
                         text: 'OK',
                         onPress: () => {
-                            // Sau khi cập nhật thành công, làm mới dữ liệu
                             setUserData(res.data);
                         }
                     }
@@ -693,7 +676,7 @@ export default function Profile({ navigation }) {
         } finally {
             setUpdating(false);
         }
-    };// Sửa lại phần render để hiển thị dữ liệu từ userData hoặc user
+    };
     if (!user && !userData) {
         return (
             <View style={styles.notLoggedInContainer}>
@@ -729,7 +712,6 @@ export default function Profile({ navigation }) {
     }    // Ưu tiên dữ liệu từ userData (API), nếu không có thì dùng từ context
     const displayData = userData || user || {};
 
-    // Background image với gradient ấn tượng
     const backgroundImage = "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxleHBsb3JlLWZlZWR8MXx8fGVufDB8fHx8&w=1000&q=80";
 
     return (

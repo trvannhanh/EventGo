@@ -12,14 +12,13 @@ import { ref, onValue, push, set, off } from 'firebase/database';
 const Chat = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { eventId } = route.params; // Removed orderId
+  const { eventId } = route.params; 
   const user = useContext(MyUserContext);
   const [messages, setMessages] = useState([]);
   const [organizerId, setOrganizerId] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [localUser, setLocalUser] = useState(user);
 
-  // Fetch user data if not available in context
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -52,7 +51,6 @@ const Chat = () => {
     }
   }, [user]);
 
-  // Fetch organizer information
   useEffect(() => {
     const fetchOrganizer = async () => {
       try {
@@ -70,7 +68,6 @@ const Chat = () => {
     fetchOrganizer();
   }, [eventId]);
 
-  // Listen for messages in the event's chat room
   useEffect(() => {
     const chatRef = ref(db, `chat_rooms/event_${eventId}/messages`);
     const unsubscribe = onValue(chatRef, (snapshot) => {
@@ -90,10 +87,9 @@ const Chat = () => {
       }
     });
 
-    return () => off(chatRef); // Cleanup listener on unmount
+    return () => off(chatRef); 
   }, [eventId, organizerId]);
 
-  // Send a message
   const onSend = useCallback(async () => {
     if (!newMessage.trim()) return;
 
@@ -120,7 +116,6 @@ const Chat = () => {
     }
   }, [localUser, eventId, newMessage]);
 
-  // Render a message
   const renderMessage = ({ item }) => {
     const isCurrentUser = item.senderId === (localUser?.id?.toString() || '');
     return (
@@ -136,7 +131,7 @@ const Chat = () => {
             isCurrentUser
               ? { backgroundColor: COLORS.primary }
               : item.isOrganizer
-              ? { backgroundColor: COLORS.secondary } // Highlight organizer messages
+              ? { backgroundColor: COLORS.secondary }
               : { backgroundColor: COLORS.lightPrimary },
           ]}
         >

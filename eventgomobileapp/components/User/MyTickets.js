@@ -99,9 +99,9 @@ const MyTickets = () => {
 
   const renderTicketItem = useCallback(
     ({ item }) => {
-      const qrImage = item.qr_image ? `http://res.cloudinary.com/dqpkxxzaf/${item.qr_image}` : 'https://via.placeholder.com/300?text=No+QR+Image';
-      const eventName = item.ticket?.event?.name || 'Chưa xác định';
-      const ticketType = item.ticket?.type || 'Chưa xác định';
+      const qrImage = item.qr_image ? `http://res.cloudinary.com/dqpkxxzaf/${item.qr_image}` : 'https://via.placeholder.com/300?text=No+QR+Image';      
+      const eventName = item.order?.ticket?.event?.name || 'Chưa xác định';
+      const ticketType = item.order?.ticket?.type || 'Chưa xác định';
 
       return (
         <Surface style={[styles.ticketCard, { elevation: 2 }]}>

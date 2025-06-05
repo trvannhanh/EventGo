@@ -41,7 +41,6 @@ const MyEvents = () => {
   const [activeTab, setActiveTab] = useState("upcoming");
   const [loadError, setLoadError] = useState(null);
   const isMounted = useRef(true);
-  // Add pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMoreEvents, setHasMoreEvents] = useState(true);
 
@@ -80,7 +79,6 @@ const MyEvents = () => {
         setLoading(true);
         setLoadError(null);
 
-        // Chỉ reset events khi đây là trang đầu tiên hoặc refresh
         if (page === 1 || shouldRefresh) {
           setEvents([]);
         }
@@ -102,7 +100,6 @@ const MyEvents = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        // Chỉ tiếp tục nếu component vẫn mounted
         if (!isMounted.current) {
           console.log(
             "Component unmounted sau khi gọi API, không cập nhật state"
@@ -117,11 +114,9 @@ const MyEvents = () => {
           `✅ Nhận được ${newEvents.length} sự kiện cho trạng thái "${status}" trang ${page}`
         );
 
-        // Kiểm tra nếu đây là trang cuối cùng
         const hasNext = response.data.next !== null;
         setHasMoreEvents(hasNext);
 
-        // Kiểm tra nếu có sự kiện không khớp với trạng thái hiện tại
         const matchingEvents = newEvents.filter(
           (event) => event.status === status
         );
@@ -143,19 +138,16 @@ const MyEvents = () => {
           newEvents.map((e) => `${e.id}:${e.name}:${e.status}`)
         );
 
-        // Sắp xếp sự kiện theo ngày, mới nhất lên đầu
         const sortedEvents = [...matchingEvents].sort(
           (a, b) => new Date(b.date) - new Date(a.date)
         );
 
-        // Nối danh sách sự kiện mới vào danh sách cũ nếu đây không phải trang đầu tiên
         if (page === 1 || shouldRefresh) {
           setEvents(sortedEvents);
         } else {
           setEvents((prevEvents) => [...prevEvents, ...sortedEvents]);
         }
 
-        // Cập nhật currentPage
         setCurrentPage(page);
         setInitialLoading(false);
       } catch (error) {
@@ -177,18 +169,18 @@ const MyEvents = () => {
   const onRefresh = useCallback(() => {
     console.log(`🔄 onRefresh được gọi, activeTab=${activeTab}`);
     setRefreshing(true);
-    setCurrentPage(1); // Reset to first page
+    setCurrentPage(1);  
     fetchEvents(activeTab, 1, true);
   }, [activeTab, fetchEvents]);
 
-  // Sử dụng useFocusEffect để tải lại dữ liệu khi màn hình được focus
+ 
   useFocusEffect(
     useCallback(() => {
       console.log(
         "🔍 Screen focused, reloading data for activeTab:",
         activeTab
       );
-      setCurrentPage(1); // Reset to first page when screen gets focus
+      setCurrentPage(1);
       fetchEvents(activeTab, 1);
 
       return () => {
@@ -197,11 +189,10 @@ const MyEvents = () => {
     }, [activeTab, fetchEvents])
   );
 
-  // Cập nhật khi activeTab thay đổi
   useEffect(() => {
     console.log(`📑 Tab thay đổi: ${activeTab}`);
-    setCurrentPage(1); // Reset to first page when tab changes
-    setHasMoreEvents(true); // Reset hasMoreEvents flag
+    setCurrentPage(1); 
+    setHasMoreEvents(true); 
     fetchEvents(activeTab, 1);
   }, [activeTab, fetchEvents]);
 
@@ -255,17 +246,15 @@ const MyEvents = () => {
         `🎫 Render sự kiện ${item.id} - ${item.name}, status=${item.status}, activeTab=${activeTab}`
       );
 
-      // Only show check-in button for ongoing and upcoming events
       const canCheckIn = ["ongoing", "upcoming"].includes(item.status);
 
-      // For upcoming events, check if they're within 24 hours of start time to allow early check-in
       let isEarlyCheckIn = false;
       if (item.status === "upcoming" && item.date) {
         const eventDate = new Date(item.date);
         const now = new Date();
         const diffTime = eventDate - now;
         const diffHours = diffTime / (1000 * 60 * 60);
-        isEarlyCheckIn = diffHours <= 24; // Check-in available within 24 hours before event
+        isEarlyCheckIn = diffHours <= 24;
       }
 
       const canDiscount = ["ongoing", "upcoming"].includes(item.status);
@@ -364,7 +353,6 @@ const MyEvents = () => {
                   style={{ backgroundColor: COLORS.accent, marginVertical: 4 }} // Or another suitable color
                   onPress={() => {
                     navigation.navigate("Main", {
-                      // Assuming CreateEvent is within the 'Main' stack, then 'home' tab
                       screen: "home",
                       params: {
                         screen: "CreateEvent",

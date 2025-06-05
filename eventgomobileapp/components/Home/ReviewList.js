@@ -218,7 +218,6 @@ const ReviewList = ({ route, navigation }) => {
         setLoading(true);
       }
 
-      // Get token from AsyncStorage
       const token = await AsyncStorage.getItem("token");
       if (!token) {
         console.log("No token found, handling unauthenticated state");
@@ -228,7 +227,6 @@ const ReviewList = ({ route, navigation }) => {
         return;
       }
 
-      // Create authApi with token
       const authApi = authApis(token);
 
       const response = await authApi.get(endpoints.eventReviews(eventId));
@@ -237,16 +235,12 @@ const ReviewList = ({ route, navigation }) => {
         response.data.reviews?.length || 0
       );
 
-      // Parse response to be compatible with both formats
       if (response.data && response.data.reviews) {
-        // New format from backend: { reviews: [...], average_rating: X, total_reviews: Y }
         setReviews(response.data.reviews || []);
         setAverageRating(response.data.average_rating || 0);
         setTotalReviews(response.data.total_reviews || 0);
       } else if (Array.isArray(response.data)) {
-        // Old format: [...]
         setReviews(response.data);
-        // Calculate statistics from array
         setTotalReviews(response.data.length);
         if (response.data.length > 0) {
           const sum = response.data.reduce(
@@ -256,7 +250,6 @@ const ReviewList = ({ route, navigation }) => {
           setAverageRating(sum / response.data.length);
         }
       } else {
-        // No valid data
         setReviews([]);
         setAverageRating(0);
         setTotalReviews(0);
@@ -270,7 +263,6 @@ const ReviewList = ({ route, navigation }) => {
       );
 
       if (err.response && err.response.status === 401) {
-        // Better UX with clear login again message
         Alert.alert(
           "Phiên đăng nhập hết hạn",
           "Bạn cần đăng nhập lại để tiếp tục.",
@@ -282,7 +274,6 @@ const ReviewList = ({ route, navigation }) => {
             {
               text: "Đăng nhập",
               onPress: async () => {
-                // Clear current token as it's expired
                 await AsyncStorage.removeItem("token");
                 await AsyncStorage.removeItem("refresh_token");
                 navigation.navigate("login");
@@ -302,34 +293,29 @@ const ReviewList = ({ route, navigation }) => {
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     fetchReviews();
-  }, [eventId, user]); // Handle refresh when returning from ReplyToReview
+  }, [eventId, user]); 
   useEffect(() => {
-    // Trigger refresh when timestamp changes (indicating return from reply)
+    
     if (route.params?.timestamp) {
       console.log(
         "ReviewList: Refreshing after reply submission with timestamp:",
         route.params.timestamp
       );
       fetchReviews(true);
-      // Clear the timestamp to avoid infinite refresh
       navigation.setParams({ timestamp: undefined });
     }
   }, [route.params?.timestamp]);
 
-  // Add an effect to handle refresh when returning from ReplyToReview (legacy support)
   useEffect(() => {
     if (route.params?.refreshOnReturn) {
       console.log("ReviewList: Refreshing after reply submission (legacy)");
       fetchReviews(true);
-      // Clear the param to avoid re-updating on other navigation events
       navigation.setParams({ refreshOnReturn: undefined });
     }
   }, [route.params?.refreshOnReturn]);
 
-  // Add an effect to handle reviews refreshed via navigation params (backward compatibility)
   useEffect(() => {
     if (route.params?.refreshReviews && route.params?.updatedReviews) {
       console.log(
@@ -337,7 +323,6 @@ const ReviewList = ({ route, navigation }) => {
       );
       setReviews(route.params.updatedReviews);
 
-      // Recalculate average rating and total reviews
       if (route.params.updatedReviews.length > 0) {
         const sum = route.params.updatedReviews.reduce(
           (acc, review) => acc + (review.rating || 0),
@@ -347,7 +332,6 @@ const ReviewList = ({ route, navigation }) => {
       }
       setTotalReviews(route.params.updatedReviews.length);
 
-      // Clear the params to avoid re-updating on other navigation events
       navigation.setParams({
         refreshReviews: undefined,
         updatedReviews: undefined,
@@ -355,11 +339,9 @@ const ReviewList = ({ route, navigation }) => {
     }
   }, [route.params?.refreshReviews, route.params?.updatedReviews]);
 
-  // Pull-to-refresh functionality
   const onRefresh = useCallback(() => {
     fetchReviews(true);
   }, [eventId]);
-  // Header component with rating summary
   const ReviewHeader = () => (
     <Surface style={styles.header} elevation={2}>
       <Text style={styles.headerTitle}>Đánh giá sự kiện: {eventName}</Text>

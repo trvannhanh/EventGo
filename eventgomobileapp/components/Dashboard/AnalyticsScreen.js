@@ -1,4 +1,3 @@
-// eventgomobileapp/components/Dashboard/AnalyticsScreen.js
 import React, { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -23,7 +22,6 @@ import AnalyticsExport from "./AnalyticsExport";
 
 const screenWidth = Dimensions.get("window").width;
 
-// Array of colors for pie charts
 const chartColors = [
   "#007bff",
   "#28a745",
@@ -44,12 +42,11 @@ const chartColors = [
 
 const AnalyticsScreen = () => {
   const user = useContext(MyUserContext);
-  const [analyticsData, setAnalyticsData] = useState(null); // Dữ liệu đã lọc cho cards/stats
-  const [fullAnalyticsData, setFullAnalyticsData] = useState(null); // Dữ liệu đầy đủ cho biểu đồ
+  const [analyticsData, setAnalyticsData] = useState(null); 
+  const [fullAnalyticsData, setFullAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  // Filter states - simplified
   const [filterOptions, setFilterOptions] = useState(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedEventFilter, setSelectedEventFilter] = useState("all");
@@ -87,21 +84,16 @@ const AnalyticsScreen = () => {
 
       const api = authApis(token);
 
-      // Load full data for charts (no filters)
       const fullDataRes = await api.get(endpoints["dashboardAnalytics"]);
       setFullAnalyticsData(fullDataRes.data);
 
-      // Build query parameters for filtered data
       const params = new URLSearchParams();
       if (user.role === "organizer" && selectedEventFilter !== "all") {
-        // Organizer chỉ lọc theo event
         params.append("event_filter", selectedEventFilter);
       } else if (user.role === "admin" && selectedOrganizerFilter !== "all") {
-        // Admin chỉ lọc theo organizer
         params.append("organizer_filter", selectedOrganizerFilter);
       }
 
-      // Load filtered data for cards/stats
       const filteredUrl = params.toString()
         ? `${endpoints["dashboardAnalytics"]}?${params.toString()}`
         : endpoints["dashboardAnalytics"];
@@ -129,7 +121,6 @@ const AnalyticsScreen = () => {
     }
   }, [user]);
 
-  // Remove automatic API calls when filters change - only call API when Apply button is pressed
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -143,7 +134,6 @@ const AnalyticsScreen = () => {
   const clearFilters = () => {
     setSelectedEventFilter("all");
     setSelectedOrganizerFilter("all");
-    // Auto-apply after clearing filters
     setTimeout(() => {
       loadAnalytics();
     }, 100);
@@ -270,9 +260,8 @@ const AnalyticsScreen = () => {
 
 const OrganizerAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
   const navigation = useNavigation();
-  const [chartType, setChartType] = useState("line"); // 'line' or 'pie'
+  const [chartType, setChartType] = useState("line");  
 
-  // Use fullData for charts if available, otherwise fallback to data
   const chartData = fullData || data;
 
   if (!data || data.length === 0) {
@@ -303,7 +292,6 @@ const OrganizerAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
       </ScrollView>
     );
   }
-  // Chuẩn bị dữ liệu cho biểu đồ đường - sử dụng fullData để giữ nguyên biểu đồ
   const lineChartDataRevenue = {
     labels: chartData.map((event) => event.event_name.substring(0, 8) + "..."),
     datasets: [
@@ -338,7 +326,6 @@ const OrganizerAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
     ],
     legend: ["Lượt xem"],
   };
-  // Tạo dữ liệu cho biểu đồ tròn - tốt cho so sánh giữa các sự kiện
   const pieChartDataRevenue = {
     labels: chartData.map((event) => event.event_name.substring(0, 12) + "..."),
     data: chartData.map((event) => event.total_revenue || 0),
@@ -348,7 +335,6 @@ const OrganizerAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
     labels: chartData.map((event) => event.event_name.substring(0, 12) + "..."),
     data: chartData.map((event) => event.tickets_sold || 0),
   };
-  // Thêm mảng màu sắc để sử dụng cho biểu đồ tròn - removed duplicate definition
 
   const handleEventPress = (event) => {
     navigation.navigate("EventDetailAnalytics", {
@@ -648,9 +634,8 @@ const OrganizerAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
 };
 
 const AdminAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
-  const [chartType, setChartType] = useState("bar"); // 'bar' or 'line'
+  const [chartType, setChartType] = useState("bar");  
 
-  // Use fullData for charts if available, otherwise fallback to data
   const chartData = fullData || data;
 
   if (!data || data.length === 0) {
@@ -946,7 +931,6 @@ const AdminAnalytics = ({ data, fullData, onRefresh, refreshing }) => {
   );
 };
 
-// FilterModal Component
 const FilterModal = ({
   visible,
   onClose,
@@ -1052,14 +1036,14 @@ const chartConfig = {
   backgroundGradientTo: "#ffffff",
   backgroundGradientToOpacity: 1,
   decimalPlaces: 0,
-  color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`, // Blue color for charts
+  color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
   labelColor: (opacity = 1) => `rgba(50, 50, 50, ${opacity})`,
   style: {
     borderRadius: 16,
   },
   barPercentage: 0.7,
   propsForBackgroundLines: {
-    strokeDasharray: "", // solid lines
+    strokeDasharray: "",
     stroke: "#e3e3e3",
   },
   propsForLabels: {
@@ -1107,7 +1091,7 @@ const styles = StyleSheet.create({
   },
   eventName: {
     fontSize: 17,
-    fontWeight: "600", // Semibold
+    fontWeight: "600",
     marginBottom: 8,
     color: "#007bff",
   },
@@ -1251,7 +1235,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 5,
   },
-  // Filter styles
+  
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1270,7 +1254,6 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

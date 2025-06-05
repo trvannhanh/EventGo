@@ -1,6 +1,5 @@
 import * as Notifications from 'expo-notifications';
 
-// Cấu hình cách hiển thị thông báo khi ứng dụng đang mở
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -9,7 +8,6 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Hàm tiện ích để hiện thông báo cục bộ từ bất kỳ đâu trong ứng dụng
 export async function showNotification(title, body, data = {}) {
   await Notifications.scheduleNotificationAsync({
     content: {
@@ -18,7 +16,7 @@ export async function showNotification(title, body, data = {}) {
       data,
       sound: 'default',
     },
-    trigger: null, // Hiển thị ngay lập tức
+    trigger: null, 
   });
 }
 

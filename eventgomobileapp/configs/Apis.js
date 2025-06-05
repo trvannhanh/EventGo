@@ -1,7 +1,7 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const API_BASE = "http://192.168.1.41:8000/";
+export const API_BASE = "http://192.168.3.117:8000/";
 
 export const endpoints = {
   // Auth endpoints
@@ -42,10 +42,9 @@ export const endpoints = {
   markNotificationRead: (id) =>
     API_BASE + `users/mark-notification-read/${id}/`,
   markAllNotificationsRead: API_BASE + "users/mark-all-notifications-read/",
-  pushToken: API_BASE + "users/push-token/", // Endpoint để lưu Expo Push Token
+  pushToken: API_BASE + "users/push-token/",
 
   // Ticket endpoints
-  // Updated to match backend implementation (should be a ticket/order detail endpoint)
   checkIn: (orderDetailId) =>
     API_BASE + `orders/details/${orderDetailId}/checkin/`,
   // Review endpoints
@@ -63,11 +62,11 @@ export const authApis = (token) => {
     headers: {
       Authorization: `Bearer ${token}`,
     },
-    timeout: 10000, // Default 10 second timeout
+    timeout: 10000, 
   });
 };
 
 export default axios.create({
   baseURL: API_BASE,
-  timeout: 10000, // Default 10 second timeout
+  timeout: 10000, 
 });

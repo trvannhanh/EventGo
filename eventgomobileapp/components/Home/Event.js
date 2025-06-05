@@ -153,17 +153,14 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     }
   };
 
-  // Initial fetch
   useEffect(() => {
     fetchEvents();
   }, []);
 
-  // Pull-to-refresh functionality
   const onRefresh = useCallback(() => {
     fetchEvents(true);
   }, []);
 
-  // Filter events by search term and event type
   const filteredEvents = events.filter((event) => {
     const nameToCheck = event.title || event.name || "";
     const matchSearch = nameToCheck
@@ -175,7 +172,6 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     return matchSearch && matchType;
   });
 
-  // Get event image with fallback
   const getEventImage = (event) => {
     if (!event.image) return null;
 
@@ -186,7 +182,6 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     }
   };
 
-  // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return "Đang cập nhật";
 
@@ -203,7 +198,6 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     }
   };
 
-  // Render each event card
   const renderItem = ({ item }) => (
     <Card
       style={styles.card}
@@ -278,7 +272,6 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     </Card>
   );
 
-  // Loading state
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -290,7 +283,6 @@ const Event = ({ navigation, search = "", eventType = "" }) => {
     );
   }
 
-  // Error state
   if (error && !refreshing) {
     return (
       <View style={styles.errorContainer}>

@@ -144,7 +144,6 @@ async function registerTokenWithServer(token, authToken) {
   }
 }
 
-// Hàm khởi tạo hệ thống thông báo
 export async function initializeNotifications(navigationRef, authToken = null) {
   console.log("=== INITIALIZING NOTIFICATION SYSTEM ===");
   console.log("AuthToken present:", !!authToken);
@@ -167,12 +166,11 @@ export async function initializeNotifications(navigationRef, authToken = null) {
     console.log("Will skip server registration");
   }
 
-  // Xử lý khi nhận được thông báo khi ứng dụng đang chạy
   const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
     console.log("Notification received in foreground:", notification);
   });
 
-  // Xử lý khi người dùng nhấp vào thông báo
+  
   const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
     console.log("Notification response received:", response);
     
@@ -180,13 +178,13 @@ export async function initializeNotifications(navigationRef, authToken = null) {
     
     if (data && data.eventId && navigationRef) {
       if (data.type === 'EVENT_CREATED' || data.type === 'EVENT_UPDATED') {
-        // Chuyển hướng đến chi tiết sự kiện
+        
         navigationRef.navigate('EventDetail', { eventId: data.eventId });
       }
     }
   });
 
-  // Hàm hiển thị thông báo cục bộ
+  
   const showNotification = async (title, body, data = {}) => {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -195,11 +193,11 @@ export async function initializeNotifications(navigationRef, authToken = null) {
         data,
         sound: 'default',
       },
-      trigger: null, // Hiển thị ngay lập tức
+      trigger: null, 
     });
   };
 
-  // Hàm hiển thị thông báo sự kiện
+
   const showEventNotification = async (eventData, isUpdate = false) => {
     const title = isUpdate ? 'Sự kiện đã được cập nhật' : 'Sự kiện mới';
     const body = isUpdate 
@@ -211,7 +209,7 @@ export async function initializeNotifications(navigationRef, authToken = null) {
       eventId: eventData.id || eventData.eventId
     });
   };
-  // Cập nhật token máy chủ khi đã đăng nhập
+
   const updateServerToken = async (newAuthToken) => {
     console.log("=== UPDATE SERVER TOKEN ===");
     console.log("Push token available:", !!pushToken);
