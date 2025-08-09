@@ -19,11 +19,6 @@ Hệ thống quản lý sự kiện và đặt vé trực tuyến gồm:
 - OAuth2 (django-oauth-toolkit), allauth (Google/Facebook)
 - Expo RN 0.79, Firebase Realtime Database, expo-notifications, RN Vision Camera
 
----
-
-## Thiết lập môi trường (ENV)
-
-Tất cả thông tin nhạy cảm được cấu hình bằng biến môi trường.
 
 ### Backend (Django)
 1) Tạo file `eventgoapp/.env` dựa trên mẫu:
@@ -91,25 +86,10 @@ npm install
 npm start  # Development server
 ```
 
----
-
-## Cấu hình đã chỉnh sửa
-- Backend: `eventgoapp/eventgoapp/settings.py` đã đọc biến môi trường (dotenv). Bỏ toàn bộ secrets hardcode.
-- Backend: `events/views.py` dùng `settings` cho MoMo/VNPAY và email.
-- Thêm `eventgoapp/.env.example` và `eventgomobileapp/.env.example`.
-- Mobile: `configs/Apis.js` dùng `Constants.expoConfig.extra.API_BASE`.
-- Mobile: `configs/firebase.js` đọc cấu hình Firebase từ env.
-- Mobile: thêm `app.config.js` để inject env -> `extra`.
-- Mobile: `.gitignore` đã thêm ignore `.env`.
 
 ---
 
-## Bảo mật & best practices
-- Không commit `.env`, `google-services.json` chứa thông tin nhạy cảm khi public repo.
-- Dùng secrets cho CI/CD khi build.
-- Hạn chế ALLOWED_HOSTS linh hoạt theo môi trường.
-
----
 
 ## Liên hệ
 Trao đổi thêm: cập nhật biến môi trường thực tế (MoMo, VNPAY, Firebase, Cloudinary, Google APIs) trước khi chạy production.
+Tác giả: Trần Văn Nhanh + Nguyễn Hoàng Triệu Vỹ
