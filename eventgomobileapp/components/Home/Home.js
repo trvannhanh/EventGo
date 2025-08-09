@@ -52,7 +52,7 @@ const Home = ({ navigation }) => {
   const [eventStatus, setEventStatus] = useState("upcoming");
   const nav = useNavigation();
   const [location, setLocation] = useState("TP. Hồ Chí Minh");
-  const user = useContext(MyUserContext); // Ánh xạ tên danh mục sang icon
+  const user = useContext(MyUserContext); 
   const categoryIcons = {
     "Lễ Hội": "music-note",
     "Thể Thao": "soccer",
@@ -62,11 +62,9 @@ const Home = ({ navigation }) => {
     "Giáo Dục": "school",
     "Công Nghệ": "laptop",
     "Kinh Doanh": "chart-line",
-    // Mặc định
     default: "calendar-month",
   };
 
-  // Định nghĩa các trạng thái sự kiện
   const eventStatusOptions = [
     { value: "upcoming", label: "sắp diễn ra", icon: "calendar-clock" },
     { value: "ongoing", label: "đang diễn ra", icon: "calendar-check" },
@@ -98,7 +96,6 @@ const Home = ({ navigation }) => {
       setLoading(true);
       setLoadError(null);
 
-      // Sử dụng status được truyền vào thay vì eventStatus để tránh bất đồng bộ
       const currentStatus = status || eventStatus;
       console.log(
         `Đang tải sự kiện với: Trang=${pageToLoad}, Status=${currentStatus}, CateId=${cateId}, Search=${search}`
@@ -106,7 +103,6 @@ const Home = ({ navigation }) => {
 
       let url = `${endpoints["events"]}?page=${pageToLoad}`;
 
-      // Thêm trạng thái lọc - sử dụng tham số status được truyền vào
       if (currentStatus) {
         url = `${url}&status=${currentStatus}`;
       }
@@ -141,16 +137,14 @@ const Home = ({ navigation }) => {
     }
   };
 
-  // Load sự kiện trending
   const loadTrendingEvents = async () => {
     try {
       const res = await Apis.get(endpoints["trendingEvents"]);
       setTrendingEvents(res.data || []);
     } catch (error) {
       console.error("Error loading trending events:", error);
-      // Không hiển thị lỗi cho trending, chỉ log
     }
-  }; // Refresh tất cả dữ liệu
+  };
   const onRefresh = useCallback(() => {
     console.log(
       `Đang làm mới dữ liệu với Status=${eventStatus}, CateId=${cateId}, Search=${search}`
@@ -159,38 +153,36 @@ const Home = ({ navigation }) => {
     setPage(1);
     setHasMore(true);
     Promise.all([loadTrendingEvents(), loadEventCates()]).finally(() => {
-      // Đảm bảo trạng thái hiện tại được sử dụng khi tải lại dữ liệu
       loadEvents(1, true, eventStatus);
       setRefreshing(false);
     });
-  }, [search, cateId, eventStatus]); // Load dữ liệu ban đầu khi component mount
+  }, [search, cateId, eventStatus]); 
   useEffect(() => {
     console.log("Component Mount - Tải dữ liệu ban đầu");
     setInitialLoading(true);
     Promise.all([loadEventCates(), loadTrendingEvents()]).finally(() => {
-      loadEvents(1, true, eventStatus); // Truyền rõ eventStatus khi tải ban đầu
+      loadEvents(1, true, eventStatus); 
     });
   }, []);
 
-  // Load sự kiện khi search hoặc category thay đổi
   useEffect(() => {
-    if (initialLoading) return; // Tránh tải lại khi đang tải ban đầu
+    if (initialLoading) return; 
 
     console.log(
       `Search/Category thay đổi - Search: ${search}, CateId: ${cateId}`
     );
     const timer = setTimeout(() => {
       setPage(1);
-      loadEvents(1, true, eventStatus); // Truyền rõ eventStatus khi search/category thay đổi
+      loadEvents(1, true, eventStatus); 
     }, 500);
 
     return () => clearTimeout(timer);
   }, [search, cateId]);
 
-  // Đảm bảo refresh dữ liệu khi quay lại tab này
+  
   useFocusEffect(
     useCallback(() => {
-      // Chỉ refresh khi đã có dữ liệu trước đó
+      
       if (!initialLoading) {
         onRefresh();
       }
@@ -208,24 +200,20 @@ const Home = ({ navigation }) => {
     const newCategoryId = cateId === id ? null : id;
     setCateId(newCategoryId);
 
-    // Tải lại dữ liệu ngay lập tức khi chọn danh mục
     setPage(1);
-    // Sử dụng timeout ngắn để đảm bảo state đã được cập nhật
     setTimeout(() => {
       loadEvents(1, true);
     }, 50);
-  }; // Xử lý khi chọn trạng thái sự kiện
+  };
   const handleEventStatusPress = (status) => {
     console.log(`Chọn trạng thái: ${status}`);
     setEventStatus(status);
-    // Tải lại dữ liệu ngay lập tức khi chọn trạng thái
+ 
     setPage(1);
 
-    // Tải dữ liệu với trạng thái mới, bất kể danh mục hiện tại
     loadEvents(1, true, status);
   };
 
-  // Kiểm tra xem user có phải là đối tượng hợp lệ hay không
   const isValidUser =
     user &&
     typeof user === "object" &&
@@ -247,18 +235,15 @@ const Home = ({ navigation }) => {
     }
   };
 
-  // Hiển thị tất cả sự kiện và các lựa chọn
   const showAllEvents = () => {
-    // Đặt lại bộ lọc danh mục nếu đang có
     if (cateId !== null) {
       setCateId(null);
     }
 
-    // Hiển thị dialog để chọn trạng thái sự kiện
     setFilterVisible(true);
   };
 
-  const hideFilterDialog = () => setFilterVisible(false); // Render Event Status Chip
+  const hideFilterDialog = () => setFilterVisible(false);
   const renderEventStatusChip = useCallback(
     (status) => (
       <Chip
@@ -290,7 +275,6 @@ const Home = ({ navigation }) => {
     [eventStatus]
   );
 
-  // Render Category Chip
   const renderCategoryChip = useCallback(
     (category) => (
       <Chip
@@ -320,7 +304,6 @@ const Home = ({ navigation }) => {
     [cateId, categoryIcons]
   );
 
-  // Render Trending Event Card
   const renderTrendingEventCard = useCallback(
     (event) => {
       if (!event || !event.id) return null;

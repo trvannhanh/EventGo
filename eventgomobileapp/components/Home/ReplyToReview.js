@@ -36,23 +36,20 @@ const ReplyToReview = ({ route, navigation }) => {
       const response = await authApi.post(url, { reply });
       console.log("Response:", response.data);
 
-      // Show success message and navigate back with immediate refresh
       Alert.alert("Thành công", "Phản hồi của bạn đã được gửi", [
         {
           text: "OK",
           onPress: () => {
-            // Navigate back and trigger immediate refresh
             if (fromScreen === "ReviewList") {
               navigation.navigate("ReviewList", {
                 eventId: eventId,
                 eventName: eventName,
-                timestamp: Date.now(), // Để trigger refresh
+                timestamp: Date.now(), 
               });
             } else {
-              // Default to EventDetail screen with immediate refresh
               navigation.navigate("EventDetail", {
                 eventId: eventId,
-                timestamp: Date.now(), // Để trigger refresh
+                timestamp: Date.now(), 
               });
             }
           },

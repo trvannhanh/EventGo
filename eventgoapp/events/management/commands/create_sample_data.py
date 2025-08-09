@@ -5,12 +5,12 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.timezone import now
 from django.contrib.auth.hashers import make_password
+from decimal import Decimal
 from events.models import (
-    User, EventCategory, Event, Ticket, Order, OrderDetail, 
-    Review, Discount, Notification, ChatMessage, EventTrend
+    User, EventCategory, Event, TicketType, Order, OrderDetail, 
+    Review, Discount, Notification, EventTrend
 )
 from django.db import transaction
-from events.utils import generate_qr_image
 
 class Command(BaseCommand):
     help = 'Create sample data for EventGo application'
@@ -27,8 +27,7 @@ class Command(BaseCommand):
                 self.create_orders()
                 self.create_reviews()
                 self.create_discounts()
-                self.create_notifications()
-                self.create_chat_messages()
+                self.create_notifications()                
                 self.create_event_trends()
                 
             self.stdout.write(self.style.SUCCESS('✅ Sample data created successfully!'))

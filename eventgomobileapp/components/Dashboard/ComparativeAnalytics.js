@@ -1,4 +1,3 @@
-// eventgomobileapp/components/Dashboard/ComparativeAnalytics.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Card, Title, Chip, Button, Menu, Divider } from 'react-native-paper';
@@ -22,7 +21,6 @@ const ComparativeAnalytics = ({ navigation, route }) => {
     
     useEffect(() => {
         if (events && events.length > 0) {
-            // Pre-select the first 2 events if none selected
             if (selectedEvents.length === 0 && events.length >= 2) {
                 setSelectedEvents([events[0], events[1]]);
             }
@@ -47,7 +45,6 @@ const ComparativeAnalytics = ({ navigation, route }) => {
             
             const api = authApis(token);
             
-            // Process each event individually to better handle errors
             const analyticsResults = [];
             for (const event of selectedEvents) {
                 try {
@@ -56,7 +53,6 @@ const ComparativeAnalytics = ({ navigation, route }) => {
                     analyticsResults.push(response.data);
                 } catch (eventError) {
                     console.error(`Error loading analytics for event ${event.event_id}:`, eventError);
-                    // Create a placeholder with basic info to prevent complete failure
                     analyticsResults.push({
                         event_id: event.event_id,
                         event_name: event.event_name || 'Unknown Event',
@@ -85,10 +81,8 @@ const ComparativeAnalytics = ({ navigation, route }) => {
     
     const toggleEventSelection = (event) => {
         if (selectedEvents.some(e => e.event_id === event.event_id)) {
-            // Remove from selection
             setSelectedEvents(selectedEvents.filter(e => e.event_id !== event.event_id));
         } else {
-            // Add to selection (max 3)
             if (selectedEvents.length < 3) {
                 setSelectedEvents([...selectedEvents, event]);
             }

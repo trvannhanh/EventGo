@@ -13,12 +13,12 @@ const CreateDiscount = () => {
   const user = useContext(MyUserContext);
   const navigation = useNavigation();
   const route = useRoute();
-  const { eventId } = route.params; // Lấy eventId từ navigation params
+  const { eventId } = route.params;
 
   const [discountCode, setDiscountCode] = useState('');
   const [discountPercent, setDiscountPercent] = useState('');
-  const [expirationDate, setExpirationDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)); // Mặc định 7 ngày sau
-  const [targetRank, setTargetRank] = useState('none'); // Mặc định là 'none'
+  const [expirationDate, setExpirationDate] = useState(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+  const [targetRank, setTargetRank] = useState('none');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -133,7 +133,7 @@ const CreateDiscount = () => {
             mode="date"
             display="default"
             onChange={onChangeDate}
-            minimumDate={new Date()} // Không cho phép chọn ngày trong quá khứ
+            minimumDate={new Date()}
           />
         )}
 
@@ -218,10 +218,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     backgroundColor: 'white',
-    overflow: 'hidden', // Ngăn Picker tràn ra ngoài
+    overflow: 'hidden',
   },
   picker: {
-    height: Platform.OS === 'ios' ? 150 : 50, // Tăng chiều cao trên iOS để hiển thị tốt hơn
+    height: Platform.OS === 'ios' ? 150 : 50,
     color: COLORS.text,
   },
   dateContainer: {

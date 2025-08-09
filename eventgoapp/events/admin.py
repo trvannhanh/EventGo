@@ -57,8 +57,7 @@ class EventAdmin(admin.ModelAdmin):
         color = colors.get(obj.status, 'black')
         return mark_safe(f'<span style="color: {color};">{obj.get_status_display()}</span>')
 
-    colored_status.short_description = "Status"
-
+    colored_status.short_description = "Status"    
     def organizer_name(self, obj):
         """Hiển thị tên người tổ chức thay vì đối tượng User."""
         return obj.organizer.username if obj.organizer else "No Organizer"
@@ -69,7 +68,7 @@ class EventAdmin(admin.ModelAdmin):
         """Hiển thị số lượng vé còn lại của sự kiện."""
         total_tickets = sum(ticket.quantity for ticket in obj.tickets.all())
         sold_tickets = OrderDetail.objects.filter(
-            ticket__event=obj,
+            order__ticket__event=obj,
             order__payment_status=Order.PaymentStatus.PAID
         ).prefetch_related('order').count()
         remaining = total_tickets - sold_tickets if total_tickets else 0
@@ -168,13 +167,12 @@ class MyAdminSite(admin.AdminSite):
             path('stats/', self.stats_view, name='stats'),
         ] + super().get_urls()
 
-    def stats_view(self, request):
-        # Số lượng vé bán ra theo sự kiện
+    def stats_view(self, request):        # Số lượng vé bán ra theo sự kiện
         tickets_sold = OrderDetail.objects.filter(
             order__payment_status=Order.PaymentStatus.PAID
-        ).values('ticket__event__name').annotate(total=Count('id')).order_by('ticket__event__name')
+        ).values('order__ticket__event__name').annotate(total=Count('id')).order_by('order__ticket__event__name')
 
-        tickets_sold_labels = [item['ticket__event__name'] for item in tickets_sold]
+        tickets_sold_labels = [item['order__ticket__event__name'] for item in tickets_sold]
         tickets_sold_data = [item['total'] for item in tickets_sold]
 
         # Doanh thu theo tháng

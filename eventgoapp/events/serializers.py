@@ -186,11 +186,28 @@ class TicketSerializer(serializers.ModelSerializer):
         fields = ['id', 'event', 'event_id', 'type', 'price', 'quantity']
 
 class OrderDetailSerializer(serializers.ModelSerializer):
-    ticket = TicketSerializer(read_only=True)
+    order = serializers.SerializerMethodField()
+
+    def get_order(self, obj):
+        if obj.order and obj.order.ticket:
+            return {
+                'id': obj.order.id,
+                'ticket': {
+                    'id': obj.order.ticket.id,
+                    'type': obj.order.ticket.type,
+                    'price': obj.order.ticket.price,
+                    'event': {
+                        'id': obj.order.ticket.event.id,
+                        'name': obj.order.ticket.event.name,
+                        'image': obj.order.ticket.event.image.url if obj.order.ticket.event.image else None
+                    }
+                }
+            }
+        return None
 
     class Meta:
         model = OrderDetail
-        fields = ['id', 'ticket', 'qr_code', 'qr_image', 'checked_in', 'checkin_time']
+        fields = ['id', 'order', 'qr_code', 'qr_image', 'checked_in', 'checkin_time']
 
 class OrderSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
@@ -232,12 +249,12 @@ class ReviewSerializer(serializers.ModelSerializer):
             user_id = data.get('user_id', request.user.id if request else None)
             event_id = data.get('event_id')
             review_exists = Review.objects.select_related('user', 'event').filter(user_id=user_id,
-                                                                                  event_id=event_id).exists()
+                                                                                event_id=event_id).exists()
             if review_exists:
                 raise serializers.ValidationError("Bạn đã đánh giá sự kiện này rồi.")
-            order_details = OrderDetail.objects.select_related('order', 'ticket__event').filter(
+            order_details = OrderDetail.objects.select_related('order__ticket__event').filter(
                 order__user_id=user_id,
-                ticket__event_id=event_id,
+                order__ticket__event_id=event_id,
                 order__payment_status=Order.PaymentStatus.PAID,
             ).exists()
             if not order_details:

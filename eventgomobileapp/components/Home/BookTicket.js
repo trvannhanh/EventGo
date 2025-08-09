@@ -34,12 +34,11 @@ const BookTicket = ({ route }) => {
   const [discountApplied, setDiscountApplied] = useState(null);
   const [booking, setBooking] = useState(false);
   const [orderId, setOrderId] = useState(null);
-  const [paymentStatus, setPaymentStatus] = useState(null); // Trạng thái thanh toán
+  const [paymentStatus, setPaymentStatus] = useState(null); 
   const [paymentMethod, setPaymentMethod] = useState('MoMo');
   const user = useContext(MyUserContext);
   const navigation = useNavigation();
 
-  // Hàm tải thông tin sự kiện
   const loadEvent = useCallback(async () => {
     try {
       const res = await Apis.get(endpoints.eventDetail(eventId));
@@ -51,7 +50,6 @@ const BookTicket = ({ route }) => {
     }
   }, [eventId]);
 
-  // Hàm tải danh sách vé
   const loadTickets = useCallback(async () => {
     try {
       const res = await Apis.get(endpoints.ticketsOfEvent(eventId));
@@ -63,7 +61,6 @@ const BookTicket = ({ route }) => {
     }
   }, [eventId]);
 
-  // Hàm tải danh sách mã giảm giá
   const loadDiscounts = useCallback(async (token) => {
     try {
       const res = await authApis(token).get(endpoints.discounts(eventId));
@@ -74,7 +71,6 @@ const BookTicket = ({ route }) => {
     }
   }, [eventId]);
 
-  // Hàm áp dụng mã giảm giá
   const applyDiscount = useCallback(async (code) => {
     setDiscount(code);
     if (!code) {
@@ -103,7 +99,6 @@ const BookTicket = ({ route }) => {
     }
   }, [eventId, user]);
 
-  // Hàm kiểm tra trạng thái đơn hàng
   const checkOrderStatus = useCallback(async (token, orderId) => {
     try {
       const res = await authApis(token).get(`orders/${orderId}/`);
@@ -125,7 +120,6 @@ const BookTicket = ({ route }) => {
     }
   }, [navigation]);
 
-  // Hàm đặt vé (gọi createOrder và payOrder, sau đó mở payUrl)
   const handleBookTicket = useCallback(async () => {
     if (!selectedTicket) {
       Alert.alert('Lỗi', 'Vui lòng chọn loại vé!');
@@ -134,7 +128,6 @@ const BookTicket = ({ route }) => {
     setBooking(true);
     try {
       const token = user?.access_token || (await AsyncStorage.getItem('token'));
-      // Bước 1: Tạo đơn hàng
       const orderRes = await authApis(token).post(endpoints.createOrder(eventId), {
         ticket_id: selectedTicket,
         quantity: quantity,
@@ -144,7 +137,6 @@ const BookTicket = ({ route }) => {
       const newOrderId = orderRes.data.order_id;
       setOrderId(newOrderId);
 
-      // Bước 2: Thanh toán đơn hàng
       const payRes = await authApis(token).post(endpoints.payOrder(newOrderId));
       const payUrl = payRes.data.payUrl;
 
@@ -152,7 +144,6 @@ const BookTicket = ({ route }) => {
         throw new Error('Không nhận được payUrl từ server.');
       }
 
-      // Bước 3: Kiểm tra xem có thể mở MoMo không (nếu payUrl là deep link)
       const isMomoDeepLink = payUrl.startsWith('momo://');
       let canOpen = true;
 
@@ -161,19 +152,16 @@ const BookTicket = ({ route }) => {
       }
 
       if (canOpen) {
-        // Mở payUrl để chuyển hướng đến MoMo hoặc trang web thanh toán
         await Linking.openURL(payUrl);
         Alert.alert('Thông báo', 'Vui lòng hoàn tất thanh toán trên MoMo. Sau khi thanh toán, hệ thống sẽ kiểm tra trạng thái.');
         navigation.navigate('home', {
                       screen: 'MyOrders',
                     })
-        // Bước 4: Kiểm tra trạng thái đơn hàng sau khi người dùng thanh toán
         setTimeout(() => {
           checkOrderStatus(token, newOrderId);
 
-        }, 5000); // Chờ 5 giây để người dùng hoàn tất thanh toán
+        }, 15000); 
       } else {
-        // Fallback nếu không mở được MoMo
         Alert.alert(
           'Thông báo',
           'Ứng dụng MoMo chưa được cài đặt. Vui lòng cài đặt MoMo hoặc chọn phương thức thanh toán khác.',
@@ -200,7 +188,6 @@ const BookTicket = ({ route }) => {
     }
   }, [selectedTicket, quantity, paymentMethod, discount, eventId, user, checkOrderStatus]);
 
-  // Tải dữ liệu ban đầu
   useEffect(() => {
     const loadInitialData = async () => {
       setLoading(true);
@@ -216,7 +203,6 @@ const BookTicket = ({ route }) => {
     loadInitialData();
   }, [loadEvent, loadTickets, loadDiscounts, user]);
 
-  // Tính toán tổng tiền với kiểm tra lỗi
   const selectedTicketData = tickets.find((ticket) => ticket.id === selectedTicket);
   const ticketPrice = selectedTicketData && !isNaN(selectedTicketData.price) ? Number(selectedTicketData.price) : 0;
   const subtotal = ticketPrice * (quantity || 1);
@@ -245,7 +231,6 @@ const BookTicket = ({ route }) => {
 
         <Divider style={styles.divider} />
 
-        {/* Chọn loại vé */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialCommunityIcons name="ticket" size={24} color="#A49393" />
@@ -271,7 +256,6 @@ const BookTicket = ({ route }) => {
 
         <Divider style={styles.divider} />
 
-        {/* Chọn số lượng vé */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialCommunityIcons name="numeric" size={24} color="#A49393" />
@@ -297,7 +281,6 @@ const BookTicket = ({ route }) => {
 
         <Divider style={styles.divider} />
 
-        {/* Mã giảm giá với dropdown */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialCommunityIcons name="sale" size={24} color="#A49393" />
@@ -331,7 +314,6 @@ const BookTicket = ({ route }) => {
 
         <Divider style={styles.divider} />
 
-        {/* Phương thức thanh toán */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <MaterialCommunityIcons name="credit-card" size={24} color="#A49393" />
@@ -364,7 +346,6 @@ const BookTicket = ({ route }) => {
 
         <Divider style={styles.divider} />
 
-        {/* Tổng tiền */}
         <View style={styles.section}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tạm tính:</Text>
@@ -382,7 +363,6 @@ const BookTicket = ({ route }) => {
           </View>
         </View>
 
-        {/* Hiển thị trạng thái thanh toán (nếu có) */}
         {paymentStatus === 'pending' && (
           <View style={styles.section}>
             <Text style={styles.paymentStatusText}>Đang chờ thanh toán...</Text>
@@ -390,7 +370,6 @@ const BookTicket = ({ route }) => {
         )}
       </ScrollView>
 
-      {/* Nút đặt vé cố định */}
       <View style={styles.fixedButtonContainer}>
         <PaperButton
           mode="contained"
@@ -493,10 +472,10 @@ const styles = StyleSheet.create({
     borderColor: '#A49393',
     borderRadius: 4,
     backgroundColor: '#FFF',
-    overflow: 'hidden', // Ngăn Picker tràn ra ngoài
+    overflow: 'hidden', 
   },
   discountInput: {
-    height: Platform.OS === 'ios' ? 150 : 50, // Tăng chiều cao trên iOS để hiển thị tốt hơn
+    height: Platform.OS === 'ios' ? 150 : 50,
     color: '#333',
   },
   pickerItem: {

@@ -1,20 +1,28 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
-// Import React Native Firebase for native initialization
 import '@react-native-firebase/app';
-// Bỏ import messaging vì gây lỗi trên Android Expo Dev Client
-// import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+const {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID,
+  FIREBASE_MEASUREMENT_ID,
+  FIREBASE_DATABASE_URL,
+} = Constants.expoConfig?.extra || {};
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC4KemmGTSgAAJGeZi81vH4Qxws8NB4rK0",
-  authDomain: "eventchat-faf4d.firebaseapp.com",
-  projectId: "eventchat-faf4d",
-  storageBucket: "eventchat-faf4d.firebasestorage.app",
-  messagingSenderId: "578223076146",
-  appId: "1:578223076146:web:bd88142a666bbbdcd79d2b",
-  measurementId: "G-5PEV08B6LD",
-  databaseURL: "https://eventchat-faf4d-default-rtdb.firebaseio.com/"
+  apiKey: FIREBASE_API_KEY || "your-api-key",
+  authDomain: FIREBASE_AUTH_DOMAIN || "your-project.firebaseapp.com",
+  projectId: FIREBASE_PROJECT_ID || "your-project-id",
+  storageBucket: FIREBASE_STORAGE_BUCKET || "your-project.firebasestorage.app",
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID || "123456789",
+  appId: FIREBASE_APP_ID || "1:123456789:web:abcdef",
+  measurementId: FIREBASE_MEASUREMENT_ID || "G-ABCDEF",
+  databaseURL: FIREBASE_DATABASE_URL || "https://your-project.firebaseio.com/",
 };
 
 // Khởi tạo Firebase App nếu chưa được khởi tạo
@@ -28,7 +36,6 @@ if (getApps().length === 0) {
 // Khởi tạo Firebase services
 const db = getDatabase(app);
 
-// Initialize React Native Firebase (native side) automatically when imported
 console.log('📱 Firebase initialized successfully');
 
 export { db, app };

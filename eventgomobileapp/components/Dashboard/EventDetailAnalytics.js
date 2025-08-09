@@ -18,7 +18,6 @@ const EventDetailAnalytics = ({ route, navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
     
     useEffect(() => {
-        // Set the navigation header title
         navigation.setOptions({
             title: 'Phân tích: ' + (eventName?.substring(0, 20) + (eventName?.length > 20 ? '...' : '') || 'Sự kiện'),
             headerShown: true
@@ -93,10 +92,8 @@ const EventDetailAnalytics = ({ route, navigation }) => {
         );
     }
     
-    // For ticket sales breakdown
     const ticketTypes = analyticsData.tickets_breakdown || [];
     const pieChartData = ticketTypes.map((ticket, index) => {
-        // Array of vibrant colors for pie chart
         const colors = [
             '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
             '#FF9F40', '#8AC926', '#1982C4', '#6A4C93', '#F94144'
@@ -111,7 +108,6 @@ const EventDetailAnalytics = ({ route, navigation }) => {
         };
     });
 
-    // Generate daily view data for line chart
     const viewsData = analyticsData.views_by_day || [];
     const lineChartData = {
         labels: viewsData.map(item => format(new Date(item.date), 'dd/MM')),
@@ -122,7 +118,6 @@ const EventDetailAnalytics = ({ route, navigation }) => {
         }]
     };
     
-    // Progress chart data for conversion metrics
     const progressData = {
         labels: ["Chuyển đổi", "Đánh giá", "Quan tâm"],
         data: [
@@ -365,14 +360,14 @@ const chartConfig = {
     backgroundGradientTo: "#ffffff",
     backgroundGradientToOpacity: 1,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`, // Blue color for charts
+    color: (opacity = 1) => `rgba(0, 123, 255, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(50, 50, 50, ${opacity})`,
     style: {
         borderRadius: 16,
     },
     barPercentage: 0.7,
     propsForBackgroundLines: {
-        strokeDasharray: "", // solid lines
+        strokeDasharray: "", 
         stroke: "#e3e3e3",
     },
     propsForLabels: {

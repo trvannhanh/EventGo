@@ -48,7 +48,6 @@ const CheckIn = () => {
     })();
     
     return () => {
-      // Cleanup when component unmounts
       setScanned(true);
     };
   }, []);
@@ -81,7 +80,6 @@ const CheckIn = () => {
         return;
       }
       
-      // Show an alert that we're processing the check-in
       console.log(`Đang xử lý check-in với mã QR: ${qrCode} cho sự kiện ID: ${eventId}`);
       
       const res = await authApis(token).post(endpoints.checkInTicket(eventId), {
@@ -127,7 +125,6 @@ const CheckIn = () => {
       console.error('Lỗi khi check-in:', ex);
     } finally {
       setLoading(false);
-      // Allow scanning again after a short delay
       setTimeout(() => {
         if (isMounted.current) {
           setScanned(false);
@@ -244,7 +241,6 @@ const CheckIn = () => {
           icon="lightbulb-on"
           style={[styles.navButton, { backgroundColor: COLORS.warning }]}
           onPress={() => {
-            // This is a placeholder for flashlight functionality
             Alert.alert('Thông báo', 'Chức năng bật đèn flash đang được phát triển');
           }}
           disabled={loading}

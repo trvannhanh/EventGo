@@ -10,61 +10,41 @@ import api, { endpoints, authApis } from '../../configs/Apis';
 import MyStyles, { COLORS } from '../styles/MyStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker } from 'react-native-maps';
-// Import showNotification function as fallback
 import { showNotification } from '../../configs/NotificationConfig';
 
-
-// const EVENT_TYPES = [
-//   { label: 'Âm nhạc', value: 'music' },
-//   { label: 'Hội thảo', value: 'conference' },
-//   { label: 'Thể thao', value: 'sports' },
-//   { label: 'Workshop', value: 'workshop' },
-// ];
-
 const CreateEvent = ({ navigation, route }) => {
-  const user = useContext(MyUserContext);
-  const eventId = route.params?.eventId;
+  const user = useContext(MyUserContext);  const eventId = route.params?.eventId;
   const isUpdate = route.params?.isUpdate || false;
   
-  // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [googleMapsLink, setGoogleMapsLink] = useState('');
   const [eventDate, setEventDate] = useState(new Date());
-  // const [eventType, setEventType] = useState('music');
   const [image, setImage] = useState(null);
   const [categoryId, setCategoryId] = useState(null);
   
-  // Ticket states
   const [tickets, setTickets] = useState([
     { type: 'Vé thường', price: '', quantity: '' }
   ]);
   
-  // Date picker states
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   
-  // Loading and categories state
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [errors, setErrors] = useState({});
   
   const [marker, setMarker] = useState({
-    latitude: 10.762622, // Vị trí mặc định (TP.HCM)
+    latitude: 10.762622,
     longitude: 106.660172,
-  });
-  // State to track deleted ticket IDs
-  const [deletedTickets, setDeletedTickets] = useState([]);
+  });  const [deletedTickets, setDeletedTickets] = useState([]);
 
-  // Khi chọn vị trí trên bản đồ, cập nhật marker và googleMapsLink
   const handleMapPress = (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setMarker({ latitude, longitude });
-    setGoogleMapsLink(`https://www.google.com/maps?q=${latitude},${longitude}`);
-  };
+    setGoogleMapsLink(`https://www.google.com/maps?q=${latitude},${longitude}`);  };
 
-  // Fetch event categories on component mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -94,10 +74,8 @@ const CreateEvent = ({ navigation, route }) => {
             navigation.navigate('login');
             setLoading(false);
             return;
-          }          // Assuming you have an endpoint for event details like 'event-detail'
-          // You might need to create this endpoint in Apis.js:
-          // 'event-detail': (eventId) => `/events/${eventId}/`,
-          const res = await authApis(token).get(endpoints.eventDetail(eventId)); // Using the correct endpoint name 'eventDetail'
+          }          
+          const res = await authApis(token).get(endpoints.eventDetail(eventId)); 
           const eventData = res.data;
           
           setName(eventData.name);
@@ -105,19 +83,17 @@ const CreateEvent = ({ navigation, route }) => {
           setLocation(eventData.location);
           setGoogleMapsLink(eventData.google_maps_link || '');
           setEventDate(new Date(eventData.date));
-          setCategoryId(eventData.category.id); // Assuming category is an object with id
-          setImage(eventData.image); // This might be a URL, ensure pickImage can handle or display it
+          setCategoryId(eventData.category.id); 
+          setImage(eventData.image); 
           
-          // Assuming eventData.tickets is an array of ticket objects
           if (eventData.tickets && eventData.tickets.length > 0) {
             setTickets(eventData.tickets.map(t => ({
-              id: t.id, // Keep track of ticket ID for updates
+              id: t.id,
               type: t.type,
               price: t.price.toString(),
               quantity: t.quantity.toString(),
             })));
           } else {
-            // If no tickets from API, initialize with one empty ticket form
              setTickets([{ type: '', price: '', quantity: '' }]);
           }
 
@@ -135,7 +111,6 @@ const CreateEvent = ({ navigation, route }) => {
       fetchEventDetails();
     }
   }, [eventId, isUpdate, navigation]);
-    // Image picker function
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
@@ -157,7 +132,6 @@ const CreateEvent = ({ navigation, route }) => {
     }
   };
   
-  // Handle date change
   const onDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -168,7 +142,6 @@ const CreateEvent = ({ navigation, route }) => {
     }
   };
   
-  // Handle time change
   const onTimeChange = (event, selectedTime) => {
     setShowTimePicker(false);
     if (selectedTime) {
@@ -179,20 +152,18 @@ const CreateEvent = ({ navigation, route }) => {
     }
   };
   
-  // Handle adding new ticket type
   const addTicketType = () => {
     if (tickets.length < 3) {
       setTickets([...tickets, { type: '', price: '', quantity: '' }]);
     } else {
       Alert.alert('Thông báo', 'Bạn chỉ có thể tạo tối đa 3 loại vé cho một sự kiện.');
     }
-  };  // Handle removing ticket type
+  }; 
   const removeTicketType = async (index) => {
     if (tickets.length > 1) {
       const newTickets = [...tickets];
       const ticket = newTickets[index];
       
-      // If the ticket has an ID, it exists in the database, so delete it
       if (ticket.id) {
         try {
           const token = await AsyncStorage.getItem('token');
@@ -205,14 +176,11 @@ const CreateEvent = ({ navigation, route }) => {
           const authApi = authApis(token);
           console.log(`Deleting ticket with ID: ${ticket.id}`);
           
-          // Kiểm tra xem endpoint đúng không
           console.log(`Using endpoint: ${endpoints.deleteTicket(eventId, ticket.id)}`);
           
-          // Gọi API xóa vé
           const response = await authApi.delete(endpoints.deleteTicket(eventId, ticket.id));
           console.log(`Successfully deleted ticket with ID: ${ticket.id}`, response.status);
           
-          // Keep track of deleted tickets for backup (using functional update để đảm bảo có state mới nhất)
           setDeletedTickets(prevDeletedTickets => [...prevDeletedTickets, ticket.id]);
         } catch (error) {
           console.error("Error deleting ticket:", error);
@@ -230,7 +198,6 @@ const CreateEvent = ({ navigation, route }) => {
         }
       }
       
-      // Remove from UI
       newTickets.splice(index, 1);
       setTickets(newTickets);
     } else {
@@ -238,14 +205,12 @@ const CreateEvent = ({ navigation, route }) => {
     }
   };
   
-  // Update ticket information
   const updateTicket = (index, field, value) => {
     const newTickets = [...tickets];
     newTickets[index] = { ...newTickets[index], [field]: value };
     setTickets(newTickets);
   };
   
-  // Form validation
   const validateForm = () => {
     const newErrors = {};
     
@@ -255,7 +220,6 @@ const CreateEvent = ({ navigation, route }) => {
     if (eventDate <= new Date()) newErrors.date = 'Ngày tổ chức phải sau thời điểm hiện tại';
     if (!image) newErrors.image = 'Vui lòng chọn ảnh cho sự kiện';
     
-    // Validate tickets
     const ticketErrors = [];
     tickets.forEach((ticket, index) => {
       const ticketError = {};
@@ -276,14 +240,12 @@ const CreateEvent = ({ navigation, route }) => {
     return Object.keys(newErrors).length === 0;
   };
   
-  // Submit event creation
   const handleSubmit = async () => {
     if (!validateForm()) {
       Alert.alert('Lỗi', 'Vui lòng kiểm tra lại thông tin đã nhập');
       return;
     }
     
-    // Lấy token từ AsyncStorage thay vì user context
     const token = await AsyncStorage.getItem('token');
     if (!token) {
       Alert.alert('Lỗi', 'Bạn cần đăng nhập để thực hiện chức năng này');
@@ -293,26 +255,23 @@ const CreateEvent = ({ navigation, route }) => {
     
     try {
       setLoading(true);
-      const authApi = authApis(token);      // Prepare event data
+      const authApi = authApis(token);     
       const formData = new FormData();
       formData.append('name', name);
       formData.append('description', description);
       formData.append('date', eventDate.toISOString());
       formData.append('location', location);
-      formData.append('category_id', categoryId); // Sửa category -> category_id
-      formData.append('active', 'true'); // Đảm bảo event active
+      formData.append('category_id', categoryId);
+      formData.append('active', 'true');
       
       if (googleMapsLink) {
         formData.append('google_maps_link', googleMapsLink);
       }
       
-      // Calculate total tickets
       const totalTickets = tickets.reduce((sum, t) => sum + parseInt(t.quantity || 0), 0);
       formData.append('ticket_limit', totalTickets);
-        // Add image
       if (image) {        try {
           const filename = image.split('/').pop();
-          // Xử lý lỗi khi filename không có phần mở rộng
           const match = /\.(\w+)$/.exec(filename);
           const fileType = match ? `image/${match[1].toLowerCase()}` : 'image/jpeg';
           
@@ -322,7 +281,6 @@ const CreateEvent = ({ navigation, route }) => {
             type: fileType,
           });
           
-          // Đảm bảo đúng định dạng dữ liệu
           const imageData = {
             uri: Platform.OS === 'android' ? image : image.replace('file://', ''),
             name: filename || 'event_image.jpg',
@@ -331,7 +289,6 @@ const CreateEvent = ({ navigation, route }) => {
           
           formData.append('image', imageData);
           
-          // Kiểm tra xem formData có giá trị image chưa
           console.log("FormData after adding image:", formData);
           
         } catch (error) {
@@ -341,17 +298,14 @@ const CreateEvent = ({ navigation, route }) => {
             'Có vấn đề khi xử lý ảnh. Vui lòng thử lại với ảnh khác.',
             [{ text: 'OK' }]
           );
-          return; // Dừng việc tạo sự kiện
+          return; 
         }
       }
       
       console.log("Sending form data:", Object.fromEntries(formData._parts));
-        // Create the event - thêm timeout dài hơn và bổ sung xử lý lỗi
       console.log("Endpoint: ", isUpdate ? endpoints.updateEvent(eventId) : endpoints.createEvent);
       
-      // Thiết lập lại authApi với timeout dài hơn và xử lý multipart/form-data tốt hơn
       let eventResponse;      if (isUpdate) {
-        // Using the correct updateEvent endpoint
         eventResponse = await authApi.put(endpoints.updateEvent(eventId), formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
@@ -371,24 +325,14 @@ const CreateEvent = ({ navigation, route }) => {
         });
       }
         console.log(isUpdate ? "Event updated successfully:" : "Event created successfully:", eventResponse.data);
-      // Xử lý ID sự kiện, sử dụng cho cả tạo mới và cập nhật
       let currentEventId = eventResponse.data.id;
       
-      // Create or Update tickets for the event
-      // For updates, this logic might need to be more sophisticated:
-      // 1. Identify new tickets to create.
-      // 2. Identify existing tickets to update.
-      // 3. Identify tickets to delete (if a ticket type was removed).
-      // For simplicity, this example re-creates/updates all tickets.
-      // A more robust solution would involve sending ticket IDs for existing tickets.      // Delete existing tickets if in update mode and tickets are managed this way
+  
       if (isUpdate && deletedTickets.length > 0) {
         console.log(`Found ${deletedTickets.length} tickets to clean up`);
-        // Only attempt to delete tickets that might have failed in the immediate deletion
         for (const ticketId of deletedTickets) {
           try {
-            // Kiểm tra xem vé cụ thể có tồn tại không (thay vì chỉ kiểm tra danh sách vé)
             try {
-              // Tìm cách kiểm tra nếu vé vẫn tồn tại
               const ticketsResponse = await authApi.get(endpoints.ticketsOfEvent(currentEventId));
               const ticketExists = ticketsResponse.data.some(t => t.id === ticketId);
               
@@ -401,12 +345,10 @@ const CreateEvent = ({ navigation, route }) => {
               }
             } catch (checkError) {
               console.error("Error checking if ticket exists:", checkError.message);
-              // Nếu không thể kiểm tra, vẫn thử xóa
               console.log(`Attempting to delete ticket ${ticketId} anyway`);
               await authApi.delete(endpoints.deleteTicket(currentEventId, ticketId));
             }
           } catch (deleteError) {
-            // Just log errors, don't stop the flow
             console.error("Cleanup error for ticket:", deleteError);
             if (deleteError.response) {
               console.error("Cleanup error status:", deleteError.response.status);
@@ -423,7 +365,6 @@ const CreateEvent = ({ navigation, route }) => {
             price: parseInt(ticket.price),
             quantity: parseInt(ticket.quantity),
           };          if (isUpdate && ticket.id) {
-            // Use the updateTicket endpoint to update existing tickets
             await authApi.put(endpoints.updateTicket(currentEventId, ticket.id), ticketData);
           } else {
             await authApi.post(endpoints.createTicket(currentEventId), ticketData);
@@ -431,34 +372,28 @@ const CreateEvent = ({ navigation, route }) => {
         } catch (ticketError) {
           console.error("Error processing ticket:", ticketError.response ? ticketError.response.data : ticketError.message);
         }
-      }      // Hiển thị thông báo cục bộ sau khi tạo/cập nhật sự kiện thành công
+      }     
       console.log('Sự kiện đã được tạo thành công. Hiển thị thông báo...');
       
-      // Sử dụng hệ thống thông báo nâng cao để hiển thị thông báo sự kiện
       try {
-        // Truy cập hệ thống thông báo từ App.js
         const { notificationSystem } = global;
         
-        // Chuẩn bị dữ liệu sự kiện
         const eventData = {
           id: currentEventId,
           name: name,
           date: eventDate.toISOString(),
           location: location,
           createdAt: new Date().toISOString()
-        };          // Hiển thị thông báo cục bộ cho người dùng hiện tại
-        // Try multiple ways to access the notification system
+        };          
         const notifSystem = 
-          (notificationSystem && notificationSystem.current) || // From React ref
-          (global.notificationSystem && global.notificationSystem.current) || // From global ref
-          null; // Fallback
+          (notificationSystem && notificationSystem.current) || 
+          (global.notificationSystem && global.notificationSystem.current) || 
+          null; 
         
         if (notifSystem) {
-          // Found notification system
           await notifSystem.showEventNotification(eventData, isUpdate);
           console.log(`Notification system found and event notification shown (isUpdate=${isUpdate})`);
         } else {
-          // Fallback to direct use of showNotification
           console.log('No notification system instance found, using direct method');
           const notificationTitle = isUpdate ? 'Sự kiện đã được cập nhật' : 'Sự kiện mới đã được tạo';
           const notificationBody = isUpdate 
@@ -479,13 +414,9 @@ const CreateEvent = ({ navigation, route }) => {
           );
         }
         
-        // Thông báo đẩy sẽ được xử lý bởi backend và gửi đến tất cả người dùng khác
-        // thông qua notification_utils.py và tasks.py đã được cài đặt
         
-        // Thời gian trì hoãn trước khi hiện Alert thành công
         await new Promise(resolve => setTimeout(resolve, 300));
       } catch (notificationError) {
-        // Bỏ qua lỗi thông báo, vì sự kiện vẫn được tạo thành công
         console.error("Không thể hiển thị thông báo:", notificationError);
       }
       Alert.alert(
@@ -496,16 +427,13 @@ const CreateEvent = ({ navigation, route }) => {
     } catch (error) {
       console.error('Error creating event:', error instanceof Error ? error.toString() : error);
       
-      // Xử lý các loại lỗi khác nhau
       let errorMessage = 'Không thể tạo sự kiện. Vui lòng thử lại sau.';
       
       if (error.response) {
-        // Lỗi từ server (có response)
         console.error('Server error data:', error.response.data);
         console.error('Server error status:', error.response.status);
         
         if (error.response.data && typeof error.response.data === 'object') {
-          // Lấy thông báo lỗi từ server nếu có
           const serverErrors = Object.entries(error.response.data)
             .map(([key, value]) => `${key}: ${value}`)
             .join('\n');
@@ -517,15 +445,12 @@ const CreateEvent = ({ navigation, route }) => {
         
         if (error.response.status === 401) {
           errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
-          // Chuyển người dùng đến trang đăng nhập nếu cần
           setTimeout(() => navigation.navigate('login'), 1000);
         }
       } else if (error.request) {
-        // Lỗi không nhận được response từ server
         console.error('No response received:', error.request);
         errorMessage = 'Không nhận được phản hồi từ máy chủ. Vui lòng kiểm tra kết nối mạng.';
       } else if (error.message && error.message.includes('timeout')) {
-        // Lỗi timeout
         errorMessage = 'Quá thời gian kết nối. Vui lòng thử lại sau.';
       }
       
@@ -539,7 +464,7 @@ const CreateEvent = ({ navigation, route }) => {
     }
   };
   
-  if (loading && !isUpdate) { // Show loading only for initial create or if not fetching update data
+  if (loading && !isUpdate) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#7FC8C2" />
@@ -548,7 +473,7 @@ const CreateEvent = ({ navigation, route }) => {
     );
   }
 
-  if (loading && isUpdate) { // Specific loading for fetching event data
+  if (loading && isUpdate) { 
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#7FC8C2" />
@@ -785,12 +710,11 @@ const CreateEvent = ({ navigation, route }) => {
             ))}
           </View>
           
-          {/* Submit Button */}
           <Button 
             mode="contained" 
             onPress={handleSubmit} 
             style={styles.submitButton}
-            disabled={loading} // Disable button while loading
+            disabled={loading} 
           >
             {loading ? (isUpdate ? 'Đang cập nhật...' : 'Đang tạo...') : (isUpdate ? 'Cập nhật' : 'Tạo sự kiện')}
           </Button>

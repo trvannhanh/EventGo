@@ -52,7 +52,7 @@ const EventDetail = ({ route, navigation }) => {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [selectedTicketType, setSelectedTicketType] = useState(null);
   const [quantity, setQuantity] = useState(1);
-  const user = useContext(MyUserContext); // Sửa lại để không sử dụng destructuring
+  const user = useContext(MyUserContext);
   const [canReview, setCanReview] = useState(false);
   const [hasReviewed, setHasReviewed] = useState(false);
 
@@ -240,7 +240,6 @@ const EventDetail = ({ route, navigation }) => {
       color: COLORS.text,
       marginTop: 4,
     },
-    // Styles for reply section
     replyContainer: {
       marginTop: 12,
       padding: 12,
@@ -346,38 +345,31 @@ const EventDetail = ({ route, navigation }) => {
   });
   useEffect(() => {
     fetchEventData();
-  }, [eventId, user]); // Handle refresh when returning from ReplyToReview
+  }, [eventId, user]); 
   useEffect(() => {
-    // Trigger refresh when timestamp changes (indicating return from reply)
+  
     if (route.params?.timestamp) {
       console.log(
         "Refreshing reviews after reply submission with timestamp:",
         route.params.timestamp
       );
       fetchEventData(true);
-      // Clear the timestamp to avoid infinite refresh
       navigation.setParams({ timestamp: undefined });
     }
   }, [route.params?.timestamp]);
 
-  // Handle review updates when navigating back from ReplyToReview (legacy support)
   useEffect(() => {
-    // Check if we're returning from ReplyToReview and need to refresh
     if (route.params?.refreshOnReturn) {
       console.log("Refreshing reviews after reply submission (legacy)");
       fetchEventData(true);
-      // Reset the param to avoid re-updating on other navigation events
       navigation.setParams({ refreshOnReturn: undefined });
     }
   }, [route.params?.refreshOnReturn]);
 
-  // Keep the old handler for backward compatibility
   useEffect(() => {
-    // Check if we're returning from ReplyToReview with updated reviews
     if (route.params?.refreshReviews && route.params?.updatedReviews) {
       console.log("Updating reviews with data from navigation params");
       setReviews(route.params.updatedReviews);
-      // Reset the param to avoid re-updating on other navigation events
       navigation.setParams({
         refreshReviews: undefined,
         updatedReviews: undefined,
@@ -399,7 +391,6 @@ const EventDetail = ({ route, navigation }) => {
     setReviewSubmitting(true);
 
     try {
-      // Đảm bảo rating là số nguyên
       const reviewData = {
         rating: parseInt(rating, 10),
         comment: comment.trim(),
@@ -412,7 +403,6 @@ const EventDetail = ({ route, navigation }) => {
         user ? "Logged in" : "Not logged in"
       );
 
-      // Sử dụng authApis thay vì api.post với headers
       const authApi = authApis(user.access_token);
       const response = await authApi.post(
         endpoints.submitReview(eventId),
@@ -425,7 +415,6 @@ const EventDetail = ({ route, navigation }) => {
       setRating(5);
       setComment("");
 
-      // Làm mới danh sách đánh giá ngay lập tức
       await fetchEventData(true);
       setHasReviewed(true);
     } catch (err) {
@@ -440,7 +429,6 @@ const EventDetail = ({ route, navigation }) => {
         JSON.stringify(err.response?.headers, null, 2)
       );
 
-      // Xử lý khi token hết hạn hoặc chưa đăng nhập
       if (err.response && err.response.status === 401) {
         Alert.alert(
           "Cần đăng nhập",
@@ -448,7 +436,6 @@ const EventDetail = ({ route, navigation }) => {
           [{ text: "Đăng nhập", onPress: () => navigation.navigate("login") }]
         );
       }
-      // Xử lý lỗi không được phép (chưa tham gia sự kiện)
       else if (err.response && err.response.status === 403) {
         Alert.alert(
           "Không thể đánh giá",
@@ -456,7 +443,6 @@ const EventDetail = ({ route, navigation }) => {
             "Bạn không thể đánh giá sự kiện mà bạn không tham gia."
         );
       }
-      // Xử lý lỗi dữ liệu không hợp lệ
       else if (err.response && err.response.status === 400) {
         Alert.alert(
           "Dữ liệu không hợp lệ",
@@ -464,7 +450,6 @@ const EventDetail = ({ route, navigation }) => {
             "Vui lòng kiểm tra lại thông tin đánh giá của bạn."
         );
       }
-      // Xử lý lỗi server (500 Internal Server Error)
       else if (err.response && err.response.status === 500) {
         Alert.alert(
           "Lỗi máy chủ",
@@ -845,7 +830,6 @@ const EventDetail = ({ route, navigation }) => {
                       longitudeDelta: 0.005,
                     };
                   }
-                  // Nếu không parse được thì trả về vị trí mặc định (TP.HCM)
                   return {
                     latitude: 10.762622,
                     longitude: 106.660172,
@@ -854,7 +838,6 @@ const EventDetail = ({ route, navigation }) => {
                   };
                 })()}
               >
-                {/* Marker nếu parse được vị trí */}
                 {(() => {
                   const match =
                     event.google_maps_link.match(/q=([\d.]+),([\d.]+)/);
@@ -1010,7 +993,6 @@ const EventDetail = ({ route, navigation }) => {
                     {renderStars(review.rating)}
                     <Text style={styles.reviewContent}>{review.comment}</Text>
 
-                    {/* Hiển thị phần phản hồi của nhà tổ chức/admin nếu có */}
                     {review.reply && (
                       <View style={styles.replyContainer}>
                         <View style={styles.replyHeader}>
@@ -1033,7 +1015,6 @@ const EventDetail = ({ route, navigation }) => {
                       </View>
                     )}
 
-                    {/* Hiển thị nút phản hồi cho BTC/Admin */}
                     {user &&
                       (user.id === event.organizer?.id || user.is_superuser) &&
                       !review.reply && (
@@ -1114,7 +1095,6 @@ const EventDetail = ({ route, navigation }) => {
         onPress={() => navigation.navigate("BookTicket", { eventId: event.id })}
       />
 
-      {/* Rating Modal */}
       <Portal>
         <Modal
           visible={modalVisible}
