@@ -135,6 +135,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+eventgoapp/.env
+eventgomobileapp/.env
 
 # Spyder project settings
 .spyderproject

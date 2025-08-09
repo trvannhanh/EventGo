@@ -1,7 +1,8 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
-export const API_BASE = "http://192.168.3.117:8000/";
+const API_BASE = Constants.expoConfig?.extra?.API_BASE || "http://127.0.0.1:8000/";
 
 export const endpoints = {
   // Auth endpoints
@@ -62,11 +63,14 @@ export const authApis = (token) => {
     headers: {
       Authorization: `Bearer ${token}`,
     },
-    timeout: 10000, 
+    timeout: 10000,
   });
 };
 
-export default axios.create({
+const api = axios.create({
   baseURL: API_BASE,
-  timeout: 10000, 
+  timeout: 10000,
 });
+
+export { API_BASE };
+export default api;

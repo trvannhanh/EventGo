@@ -13,6 +13,7 @@ from rest_framework.generics import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from django.core.mail import send_mail
+from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import json
@@ -780,7 +781,7 @@ class EventViewSet(viewsets.ViewSet, generics.ListAPIView):
             order__ticket__event=event,
             order__payment_status=Order.PaymentStatus.PAID
         ).count() or 0
-        
+
         average_rating = Review.objects.filter(event=event).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
         average_rating = round(average_rating, 1)
         
@@ -1052,10 +1053,10 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
         request_id = f"REQ_{order_id}"
 
         if order.payment_method == "MoMo":
-            endpoint = "https://test-payment.momo.vn/v2/gateway/api/query"
-            partner_code = "MOMO"
-            access_key = "F8BBA842ECF85"
-            secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
+            endpoint = getattr(settings, 'MOMO_QUERY_ENDPOINT', '')
+            partner_code = settings.MOMO_PARTNER_CODE
+            access_key = settings.MOMO_ACCESS_KEY
+            secret_key = settings.MOMO_SECRET_KEY
 
             raw_data = f"accessKey={access_key}&orderId={order_id}&partnerCode={partner_code}&requestId={request_id}"
             signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
@@ -1081,9 +1082,9 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                                 status=status.HTTP_400_BAD_REQUEST)
 
         elif order.payment_method == "VNPAY":
-            endpoint = "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction"
-            vnpay_tmn_code = "YOUR_VNPAY_TMN_CODE"
-            vnpay_hash_secret = "YOUR_VNPAY_HASH_SECRET"
+            endpoint = getattr(settings, 'VNPAY_QUERY_ENDPOINT', '')
+            vnpay_tmn_code = getattr(settings, 'VNPAY_TMN_CODE', '')
+            vnpay_hash_secret = getattr(settings, 'VNPAY_HASH_SECRET', '')
 
             vnpay_params = {
                 "vnp_Version": "2.1.0",
@@ -1168,7 +1169,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
                     message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
                             "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
                             f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                    from_email="nhanhgon24@gmail.com",
+                    from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
                     recipient_list=[order.user.email],
                     fail_silently=True
                 )
@@ -1304,21 +1305,27 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
 
         return None
 
-    def create_momo_qr(self, order, extra_data):        
+    def create_momo_qr(self, order, extra_data):
         order_id = f"ORDER_{order.user.id}_{order.id}"
         request_id = f"REQ_{order_id}"
-        amount = int(order.total_amount)        
+        amount = int(order.total_amount)
         order_info = f"Thanh toán đơn hàng {order_id}"
-        endpoint = "https://test-payment.momo.vn/v2/gateway/api/create"
-        partner_code = "MOMO"
-        access_key = "F8BBA842ECF85"        
-        secret_key = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
-        redirect_url = "https://fcd0-2405-4802-9104-a630-8010-12d3-3286-65c.ngrok-free.app/payment/momo-payment-success/"
-        ipn_url = "https://fcd0-2405-4802-9104-a630-8010-12d3-3286-65c.ngrok-free.app/payment/momo-payment-notify/"
 
-        raw_data = f"accessKey={access_key}&amount={amount}&extraData={extra_data}&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}&partnerCode={partner_code}&redirectUrl={redirect_url}&requestId={request_id}&requestType=captureWallet"
+        endpoint = getattr(settings, 'MOMO_CREATE_ENDPOINT', '')
+        partner_code = getattr(settings, 'MOMO_PARTNER_CODE', '')
+        access_key = getattr(settings, 'MOMO_ACCESS_KEY', '')
+        secret_key = getattr(settings, 'MOMO_SECRET_KEY', '')
+        redirect_url = getattr(settings, 'MOMO_REDIRECT_URL', '')
+        ipn_url = getattr(settings, 'MOMO_IPN_URL', '')
+
+        raw_data = (
+            f"accessKey={access_key}&amount={amount}&extraData={extra_data}"
+            f"&ipnUrl={ipn_url}&orderId={order_id}&orderInfo={order_info}"
+            f"&partnerCode={partner_code}&redirectUrl={redirect_url}"
+            f"&requestId={request_id}&requestType=captureWallet"
+        )
         signature = hmac.new(secret_key.encode(), raw_data.encode(), hashlib.sha256).hexdigest()
-        
+
         data = {
             "partnerCode": partner_code,
             "accessKey": access_key,
@@ -1331,7 +1338,7 @@ class OrderViewSet(viewsets.GenericViewSet, generics.ListAPIView, generics.Updat
             "lang": "vi",
             "extraData": extra_data,
             "requestType": "captureWallet",
-            "signature": signature
+            "signature": signature,
         }
 
         try:
@@ -1417,7 +1424,7 @@ class PaymentViewSet(viewsets.ViewSet):
                     message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
                             "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
                             f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                    from_email="nhanhgon24@gmail.com",
+                    from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
                     recipient_list=[order.user.email],
                     fail_silently=True
                 )
@@ -1504,7 +1511,7 @@ class PaymentViewSet(viewsets.ViewSet):
                     message=f"Chào {order.user.username},\n\nĐơn hàng của bạn đã được thanh toán thành công. Dưới đây là các mã QR cho vé của bạn:\n" +
                             "\n".join([f"Vé {i + 1}: {url}" for i, url in enumerate(qr_image_urls)]) +
                             f"\n\nBạn cũng có thể xem mã QR tại: /orders/{order.id}/",
-                    from_email="nhanhgon24@gmail.com",
+                    from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
                     recipient_list=[order.user.email],
                     fail_silently=True
                 )
